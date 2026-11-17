@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  verify:
+    name: Lint, type check, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm turbo run build typecheck test
+
+  database:
+    name: Migrations, API and worker against PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tempora
+          POSTGRES_PASSWORD: ci_owner
+          POSTGRES_DB: tempora
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tempora -d tempora"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPASSWORD: ci_owner
+      POSTGRES_USER: tempora
+      POSTGRES_DB: tempora
+      TEMPORA_APP_PASSWORD: ci_app
+      TEMPORA_JOBS_PASSWORD: ci_jobs
+      DATABASE_MIGRATION_URL: postgresql://tempora:ci_owner@localhost:5432/tempora
+      DATABASE_URL: postgresql://tempora_app:ci_app@localhost:5432/tempora
+      JOBS_DATABASE_URL: postgresql://tempora_jobs:ci_jobs@localhost:5432/tempora
+      PORTAL_URL: http://localhost:3000
+      CONSOLE_URL: http://localhost:3001
+      ADMIN_URL: http://localhost:3002
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@tempora/api... --filter=@tempora/worker...
+
+      - name: Create database roles
+        run: sh Backend/booking-api/docker/postgres/init/01-roles.sh
+
+      - name: Apply migrations (owner role)
+        run: pnpm --filter=@tempora/db migrate:deploy
+
+      - name: API is ready with the application role
+        run: |
+          node Backend/booking-api/apps/api/dist/server.js &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4000/health/ready; then exit 0; fi
+            sleep 1
+          done
+          echo "API never became ready" && exit 1
+
+      - name: Application role cannot change the schema or the migration history
+        run: |
+          export PGUSER=tempora_app PGPASSWORD=ci_app
+          ! psql -v ON_ERROR_STOP=1 -c "CREATE TABLE should_fail (id int)"
+          ! psql -v ON_ERROR_STOP=1 -c "DELETE FROM _prisma_migrations"
+
+      - name: Worker starts and installs the job queue
+        run: |
+          node Backend/booking-api/apps/worker/dist/main.js > worker.log 2>&1 &
+          for i in $(seq 1 30); do
+            if grep -q "Worker started" worker.log; then cat worker.log; exit 0; fi
+            sleep 1
+          done
+          cat worker.log && echo "Worker never started" && exit 1
+
+  docker:
+    name: Docker image (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, file: Backend/booking-api/Dockerfile, target: api, app: '' }
+          - { name: worker, file: Backend/booking-api/Dockerfile, target: worker, app: '' }
+          - { name: migrate, file: Backend/booking-api/Dockerfile, target: migrate, app: '' }
+          - { name: portal, file: Frontend/booking-saas/Dockerfile, target: runtime, app: portal }
+          - { name: console, file: Frontend/booking-saas/Dockerfile, target: runtime, app: console }
+          - {
+              name: platform-admin,
+              file: Frontend/booking-saas/Dockerfile,
+              target: runtime,
+              app: platform-admin,
+            }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          build-args: |
+            APP=${{ matrix.app }}
+            NEXT_PUBLIC_API_URL=http://localhost:4000
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

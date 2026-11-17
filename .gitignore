@@ -1,10 +1,28 @@
+# Dependencies
 node_modules/
-.next/
+
+# Build output
 dist/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.turbo/
+coverage/
+
+# Generated code
+**/src/generated/
+
+# Environment files (only .env.example is committed)
 .env
 .env.*
 !.env.example
+
+# Python (project 3)
 __pycache__/
 .venv/
 *.pyc
+
+# OS / editor
 .DS_Store
+Thumbs.db

@@ -1,0 +1,15 @@
+packages:
+  - Frontend/booking-saas/apps/*
+  - Frontend/booking-saas/packages/*
+  - Backend/booking-api/apps/*
+  - Backend/booking-api/packages/*
+
+# Copy workspace packages into node_modules on `pnpm deploy`,
+# so the API and worker Docker images contain only what they need.
+injectWorkspacePackages: true
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - esbuild
+  - prisma
+  - sharp
