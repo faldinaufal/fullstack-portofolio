@@ -1,0 +1,116 @@
+# Tempora: the whole stack on one machine.
+#   docker compose up --build
+# Portal http://localhost:3000 · Console http://localhost:3001 · Platform Admin http://localhost:3002
+# API http://localhost:4000 (docs: /v1/docs) · Mailpit http://localhost:8025
+#
+# Database passwords come from a local, git-ignored .env file next to this one:
+#   cp .env.example .env   (then choose your own passwords)
+# Production secrets live only in the hosting platforms.
+
+name: tempora
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tempora
+      POSTGRES_DB: tempora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+      # Used by docker/postgres/init/01-roles.sh on the first start.
+      TEMPORA_APP_PASSWORD: ${TEMPORA_APP_PASSWORD:?Set TEMPORA_APP_PASSWORD in .env}
+      TEMPORA_JOBS_PASSWORD: ${TEMPORA_JOBS_PASSWORD:?Set TEMPORA_JOBS_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./Backend/booking-api/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tempora -d tempora']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.33
+    ports:
+      - '8025:8025' # web inbox
+      - '1025:1025' # SMTP
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Backend/booking-api/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tempora:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}@postgres:5432/tempora
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Backend/booking-api/Dockerfile
+      target: api
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      PORT: 4000
+      APP_VERSION: local
+      DATABASE_URL: postgresql://tempora_app:${TEMPORA_APP_PASSWORD:?Set TEMPORA_APP_PASSWORD in .env}@postgres:5432/tempora
+      PORTAL_URL: http://localhost:3000
+      CONSOLE_URL: http://localhost:3001
+      ADMIN_URL: http://localhost:3002
+    ports:
+      - '4000:4000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: Backend/booking-api/Dockerfile
+      target: worker
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      JOBS_DATABASE_URL: postgresql://tempora_jobs:${TEMPORA_JOBS_PASSWORD:?Set TEMPORA_JOBS_PASSWORD in .env}@postgres:5432/tempora
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  portal:
+    build: &frontend-build
+      context: .
+      dockerfile: Frontend/booking-saas/Dockerfile
+      args:
+        APP: portal
+        # The browser calls the API directly, so this is the host-facing URL.
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - '3000:3000'
+    depends_on: [api]
+
+  console:
+    build:
+      <<: *frontend-build
+      args:
+        APP: console
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - '3001:3000'
+    depends_on: [api]
+
+  platform-admin:
+    build:
+      <<: *frontend-build
+      args:
+        APP: platform-admin
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - '3002:3000'
+    depends_on: [api]
+
+volumes:
+  postgres-data:

@@ -1,0 +1,18 @@
+# Build context is the repository root (the workspace). Keep it small and secret-free.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+**/src/generated
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+docs
+Frontend/ai-chat
+Frontend/company-website
+Backend/ai-chat-api
+Backend/company-website-supabase
