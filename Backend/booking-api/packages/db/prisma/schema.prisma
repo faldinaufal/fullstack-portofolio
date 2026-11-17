@@ -1,0 +1,36 @@
+// Tempora database schema (FSD section 4).
+// Prisma models describe tables and relations. Features Prisma cannot express
+// (row-level security policies, exclusion constraints, grants) live in raw SQL
+// inside the migration files.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  active
+  suspended
+
+  @@map("tenant_status")
+}
+
+/// A business using Tempora. Only the columns needed by the foundation exist so far;
+/// the rest of FSD 4.3 is added together with the features that use it.
+model Tenant {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  slug       String       @unique @db.VarChar(40)
+  name       String       @db.VarChar(100)
+  status     TenantStatus @default(active)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt DateTime?    @map("archived_at") @db.Timestamptz(3)
+
+  @@map("tenants")
+}
