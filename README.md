@@ -11,8 +11,9 @@ Three independent full-stack projects, each built from scratch with fictional da
 ## Repository layout
 
 ```
+docs/       # PRD + FSD per project
 Frontend/   # one Next.js app per project
 Backend/    # one backend per project
 ```
 
-Each project folder has its own README with features, setup and screenshots.
+Each project folder has its own README with features, setup and screenshots. Product and technical specs live in [`docs/`](docs).

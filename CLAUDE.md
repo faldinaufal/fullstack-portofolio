@@ -6,7 +6,8 @@ Repo portfolio publis milik freelancer Upwork (frontend developer React/Next.js 
 - Jawab user dalam **Bahasa Indonesia**. Kode, komentar, commit, dan README ditulis dalam **bahasa Inggris** (untuk klien).
 - Semua proyek dibangun **dari nol dengan data fiktif**. Jangan pernah memasukkan kode, screenshot, nama, atau data dari tempat kerja user atau klien-kliennya.
 - User sedang **belajar backend**: jelaskan keputusan backend secara singkat saat menulis kode (kenapa struktur/library ini), dan jangan klaim kemampuan yang belum dibuktikan di README.
-- Folder utama hanya `Frontend/` dan `Backend/` (+ file di root seperti README). Satu subfolder per proyek di masing-masing.
+- Folder utama hanya `docs/`, `Frontend/`, dan `Backend/` (+ file di root seperti README). Satu subfolder per proyek di masing-masing.
+- **Dokumentasi dulu**: tiap proyek punya `docs/<proyek>/PRD.md` (apa & kenapa) dan `FSD.md` (role, layar, alur, skema data, API, aturan bisnis). Tulis/setujui PRD → FSD sebelum coding. Jika implementasi mengubah keputusan, perbarui FSD di commit yang sama.
 - Jangan commit secret. Pakai `.env.example`.
 
 ## Proyek
