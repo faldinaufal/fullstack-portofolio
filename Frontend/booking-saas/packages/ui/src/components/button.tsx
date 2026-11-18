@@ -2,20 +2,29 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '../lib/cn.js';
 
+/**
+ * Pill buttons from the design. Use `buttonVariants()` on a Next.js <Link> for links that
+ * look like buttons, and <Button> for real actions.
+ */
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
         secondary: 'border border-border bg-surface text-foreground hover:bg-surface-muted',
         ghost: 'text-foreground hover:bg-surface-muted',
-        danger: 'bg-danger text-primary-foreground hover:bg-danger/90',
+        danger: 'bg-danger text-surface hover:bg-danger/90',
+        /** On brand-coloured bands: white pill with dark text. */
+        inverse: 'bg-white text-ink hover:bg-white/90',
+        /** On brand-coloured bands: outlined white pill. */
+        'inverse-outline': 'border border-white/60 text-on-brand hover:bg-white/10',
       },
       size: {
-        sm: 'h-8 px-3',
-        md: 'h-10 px-4',
-        icon: 'size-10',
+        sm: 'h-9 px-4 text-sm',
+        md: 'h-11 px-5 text-sm',
+        lg: 'h-12 px-6 text-[15px]',
+        icon: 'size-11',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

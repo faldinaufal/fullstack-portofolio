@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createApiClient } from '@tempora/api-client';
 import { ThemeProvider } from '@tempora/ui';
 import { useState, type ReactNode } from 'react';
+import { createDemoBusinessRepository } from '@/core/directory/data/demo-business-repository';
+import { createListFeaturedBusinesses } from '@/core/directory/domain/list-featured-businesses';
 import { createHttpApiStatusRepository } from '@/core/health/data/http-api-status-repository';
 import { createGetApiStatus } from '@/core/health/domain/get-api-status';
 import { DependenciesContext, type Dependencies } from '@/core/shared/presentation/dependencies';
@@ -19,6 +21,7 @@ function createDependencies(): Dependencies {
   });
   return {
     getApiStatus: createGetApiStatus(createHttpApiStatusRepository(apiClient)),
+    listFeaturedBusinesses: createListFeaturedBusinesses(createDemoBusinessRepository()),
   };
 }
 
