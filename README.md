@@ -28,9 +28,16 @@ Requirements: Node.js 24+, pnpm 10, Docker.
 ```bash
 pnpm install
 pnpm lint                              # ESLint, including architecture rules
+pnpm headers:check                     # every source file carries the license header
 pnpm turbo run build typecheck test    # every package, in dependency order, cached
 cp .env.example .env                   # local database passwords
 docker compose up --build              # Tempora: database, API, worker and the three apps
 ```
 
 CI runs the same checks on every pull request, plus migrations and a smoke test against a real PostgreSQL, and builds every Docker image.
+
+## License
+
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): you may read, run and learn from this code for noncommercial purposes. Commercial use requires written permission. Copyright (c) 2026 Farhan Aldi Naufal.
+
+Every source file starts with an SPDX license header. `pnpm install` enables a pre-commit hook that adds it to new files, and CI fails if one is missing.

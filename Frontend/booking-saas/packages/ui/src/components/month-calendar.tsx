@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { monthGrid } from '../lib/calendar.js';
 import { cn } from '../lib/cn.js';
 import { Icon } from './icon.js';

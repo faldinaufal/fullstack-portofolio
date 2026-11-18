@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { HealthResponseSchema, ReadinessResponseSchema } from '@tempora/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { HealthService } from './service.js';

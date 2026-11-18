@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 /** Whether the app can talk to the Tempora API right now. */
 export type ApiState = 'online' | 'offline';
 

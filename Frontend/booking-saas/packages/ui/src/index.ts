@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 export { Badge, badgeVariants, type BadgeProps, type BadgeTone } from './components/badge.js';
 export { BarChart, type BarChartProps, type BarSeries } from './components/bar-chart.js';
 export { Button, buttonVariants, type ButtonProps } from './components/button.js';

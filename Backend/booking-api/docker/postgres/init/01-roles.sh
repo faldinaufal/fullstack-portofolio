@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Farhan Aldi Naufal
+
 # Creates the database roles Tempora needs (FSD 0.2, 4.4). Runs once, as the database owner:
 # - automatically by the postgres container on its first start (docker-entrypoint-initdb.d);
 # - manually against a hosted database before the first deploy:

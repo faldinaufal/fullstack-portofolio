@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { describe, expect, it } from 'vitest';
 import type { ApiStatusRepository } from './api-status';
 import { createGetApiStatus } from './get-api-status';

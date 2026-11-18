@@ -2,6 +2,7 @@
   "name": "fullstack-portfolio",
   "private": true,
   "description": "Workspace root for the portfolio projects. Currently hosts Tempora (booking SaaS): Frontend/booking-saas and Backend/booking-api.",
+  "license": "SEE LICENSE IN LICENSE.md",
   "packageManager": "pnpm@10.34.9",
   "engines": {
     "node": ">=24"
@@ -13,7 +14,13 @@
     "test": "turbo run test",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "headers:check": "node license-headers.mjs",
+    "headers:fix": "node license-headers.mjs --fix",
+    "prepare": "git config core.hooksPath .githooks || exit 0"
+  },
+  "lint-staged": {
+    "*": "node license-headers.mjs --fix"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -24,6 +31,7 @@
     "eslint-plugin-boundaries": "7.4.4",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.14.0",
+    "lint-staged": "17.6.1",
     "prettier": "3.10.1",
     "turbo": "2.11.11",
     "typescript": "6.0.3",

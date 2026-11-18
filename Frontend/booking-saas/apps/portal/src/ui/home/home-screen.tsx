@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { buttonVariants, Icon, type IconName } from '@tempora/ui';
 import Link from 'next/link';
 import { FeaturedBusinesses } from './featured-businesses';

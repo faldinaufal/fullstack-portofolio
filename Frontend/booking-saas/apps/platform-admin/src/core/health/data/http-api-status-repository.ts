@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import type { ApiClient } from '@tempora/api-client';
 import { HealthResponseSchema } from '@tempora/contracts';
 import type { ApiStatusRepository } from '../domain/api-status';

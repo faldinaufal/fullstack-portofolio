@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 // @ts-check
 import js from '@eslint/js';
 import nextPlugin from '@next/eslint-plugin-next';

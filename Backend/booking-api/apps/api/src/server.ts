@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { createPrismaClient } from '@tempora/db';
 import closeWithGrace from 'close-with-grace';
 import { buildApp } from './app.js';

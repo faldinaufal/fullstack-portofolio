@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { HealthResponseSchema } from '@tempora/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from './api-client.js';

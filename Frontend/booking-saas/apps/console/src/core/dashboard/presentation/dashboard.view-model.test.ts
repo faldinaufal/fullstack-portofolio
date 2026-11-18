@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { describe, expect, it } from 'vitest';
 import { createDemoDashboardRepository, DEMO_NOW } from '../data/demo-dashboard-repository';
 import { createGetDashboard } from '../domain/get-dashboard';

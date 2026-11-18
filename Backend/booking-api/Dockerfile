@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Farhan Aldi Naufal
+
 # Tempora API, worker and migration images. Build from the repository root:
 #   docker build -f Backend/booking-api/Dockerfile --target api .
 #   docker build -f Backend/booking-api/Dockerfile --target worker .

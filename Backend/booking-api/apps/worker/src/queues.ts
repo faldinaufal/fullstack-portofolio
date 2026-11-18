@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 /**
  * Every queue the worker knows about. Names are `<area>.<action>` so logs and the
  * pg-boss tables group naturally. Feature queues (emails, hold expiry, reminders)
