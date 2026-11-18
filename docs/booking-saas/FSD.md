@@ -783,6 +783,7 @@ stateDiagram-v2
 ### 7.5 Membership and tenant
 - Membership: `active` ⇄ `deactivated` (reactivation allowed; sessions are revoked on deactivation).
 - Tenant: `active` ⇄ `suspended` by the platform admin; archived tenants are hidden from the directory.
+- Platform Admin shows **Onboarding** for an `active` tenant whose setup is not complete (no branch, service or therapist with working hours yet, FSD 3.4). It is derived for display only, never stored.
 - Support grant: `active` → `expired` (time) or `revoked` (owner).
 
 ## 8. Non-functional requirements

@@ -2,7 +2,7 @@
 
 Frontends of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Backend: [`Backend/booking-api`](../../Backend/booking-api).
 
-**Status:** foundation in place (no business screens yet; UI designs pending).
+**Status:** design system and app layouts in place; home screens use fictional demo data until their API endpoints exist.
 
 | App | Users | Local URL |
 |---|---|---|
@@ -36,13 +36,22 @@ Dependency direction: `ui → presentation → domain ← data`. It is **enforce
 - `domain` importing React, Next.js, TanStack Query or API types
 - JSX inside `presentation`
 
-The `health` feature is the reference implementation of all layers: domain use case → HTTP repository → view-model hook → status card.
+Reference implementations:
+
+| App | Feature | Data source today |
+|---|---|---|
+| all | `health`: API connection badge | HTTP (`GET /health`) |
+| Portal | `directory`: featured businesses on the home page | demo repository |
+| Console | `dashboard`: KPIs, bookings chart, calendar, today's bookings | demo repository |
+| Platform Admin | `overview`: platform KPIs, system health, tenants | demo repository |
+
+Demo repositories (`core/<feature>/data/demo-*-repository.ts`) implement the same domain interface as the HTTP ones will. When an endpoint ships, only that file is replaced; domain rules, view-models and screens stay as they are.
 
 ## Shared packages
 
 | Package | Purpose |
 |---|---|
-| `packages/ui` | Design system: theme tokens (light/dark), base components (Button, Card, Badge, theme toggle) |
+| `packages/ui` | Design system: steel-blue theme tokens (light/dark), Button, Card, Badge, KPI card, bar chart and month calendar (no chart library), search field, icons, a mobile navigation drawer (native modal `<dialog>`), and the dashboard shell shared by Console and Platform Admin |
 | `packages/api-client` | `fetch` wrapper: sends cookies, validates every response against the API contract, converts failures into `ApiError` with a stable code |
 | `Backend/booking-api/packages/contracts` | API contract (Zod schemas and types), owned by the API |
 
