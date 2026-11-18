@@ -34,7 +34,7 @@ jobs:
       - run: pnpm turbo run build typecheck test
 
   database:
-    name: Migrations, API and worker against PostgreSQL
+    name: Migrations, integration tests, API and worker against PostgreSQL
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -61,6 +61,13 @@ jobs:
       CONSOLE_URL: http://localhost:3001
       ADMIN_URL: http://localhost:3002
       LOG_LEVEL: warn
+      # CI-only values; real secrets live in the hosting platforms.
+      TOKEN_HASH_SECRET: ci-only-token-hash-secret-0123456789abcdef
+      SMTP_URL: smtp://localhost:1025
+      EMAIL_FROM: Tempora CI <ci@tempora.local>
+      TEST_DATABASE_URL: postgresql://tempora_app:ci_app@localhost:5432/tempora
+      TEST_JOBS_DATABASE_URL: postgresql://tempora_jobs:ci_jobs@localhost:5432/tempora
+      TEST_DATABASE_OWNER_URL: postgresql://tempora:ci_owner@localhost:5432/tempora
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -76,6 +83,14 @@ jobs:
 
       - name: Apply migrations (owner role)
         run: pnpm --filter=@tempora/db migrate:deploy
+
+      - name: Migrations match the Prisma schema (no drift)
+        run: pnpm --filter=@tempora/db exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Integration tests (API as tempora_app, worker as tempora_jobs)
+        run: |
+          pnpm --filter=@tempora/api test:integration
+          pnpm --filter=@tempora/worker test:integration
 
       - name: API is ready with the application role
         run: |

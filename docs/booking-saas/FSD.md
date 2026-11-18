@@ -54,11 +54,11 @@ All apps live under one purchased domain, so session cookies are first-party and
 | Tenant isolation | Shared schema with `tenant_id` on every tenant-owned table. Layer 1: the API scopes every query to the current tenant (Prisma client extension). Layer 2: PostgreSQL Row-Level Security policies based on a per-transaction `app.tenant_id` setting | Standard SaaS pattern. RLS means a missing filter in API code still cannot leak another tenant's rows; tests prove this by querying without the API filter. |
 | Branch scoping | Enforced in the API authorization layer from the manager's assigned branch; covered by tests | Branch is a permission boundary inside a tenant rather than a data-isolation boundary, so it lives in the authorization code. |
 | Double-booking prevention | Layer 1: API checks opening hours, working hours, time off and overlaps and returns specific errors. Layer 2: a PostgreSQL `EXCLUSION` constraint (with `btree_gist`) on the therapist and the time range including the buffer, for active bookings only (`pending_payment`, `confirmed`) | The database rejects the second of two overlapping bookings atomically, so two simultaneous requests can never both succeed, even if both passed the API checks. The API translates the rejection into a "slot no longer available" error. |
-| Background jobs | pg-boss (job queue stored in PostgreSQL, in its own `pgboss` schema), run by a separate worker process | Jobs are created in the same transaction as the booking or payment that caused them: if the booking is not saved, no email is queued, and if it is saved, the email is guaranteed to be queued. Supports retries, delayed jobs (hold expiry, reminders) and cron. No extra infrastructure. |
+| Background jobs | pg-boss (job queue stored in PostgreSQL, in its own `pgboss` schema), run by a separate worker process, for delayed and scheduled jobs (hold expiry, reminders, cron). Emails use a **transactional outbox**: the API inserts a row into `email_messages` in the same transaction as the change that caused it, and the worker polls the table (`FOR UPDATE SKIP LOCKED`), sends and records the result | Jobs and emails are created in the same transaction as the booking or payment that caused them: if the booking is not saved, no email is queued, and if it is saved, the email is guaranteed to be sent (with retries). The outbox table doubles as the email delivery log, and the worker's role needs no rights outside it. No extra infrastructure. |
 | Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. |
 | File storage | S3-compatible object storage: Cloudflare R2 in production and an S3-compatible server in Docker Compose locally (added with the first upload feature). Uploads use short-lived presigned URLs; the API validates type and size and stores only the object key | Files never pass through the API process, storage scales independently of the database, and the same code works against R2 and MinIO because both speak the S3 API. |
 | Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema. Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
-| Email | Mailpit (local fake inbox) in development; a transactional email provider on the purchased domain in production (chosen during implementation) | Emails can be tested end to end locally without sending anything real. |
+| Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the purchased domain in production (chosen during implementation) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS; shared UI package with the design system (light/dark) | One framework for all three apps; server rendering for the public Portal pages, rich client interactions for the Console. |
 | Frontend code organization | Each app separates `core` from `ui`. `core/<feature>/` has three layers: **domain** (entities, pure rules, repository interfaces, use cases; plain TypeScript), **data** (repository implementations calling the API, DTOs from `contracts`, DTO ⇄ entity mappers), **presentation** (hooks and view-models, no JSX). `ui` holds routes and components and only talks to `presentation`. Each app has its own `core`; shared code lives in packages (`ui`, `api-client`, `contracts`) | Business rules on the client can be unit-tested without rendering, the UI can change (e.g. after the Figma designs) without touching logic, and each app only contains the use cases it actually needs. |
 | Backend code organization | Feature modules: `modules/<feature>/{routes, service, repository}` plus shared plugins (auth, tenancy, errors). Routes validate and map HTTP, services hold business rules and transactions, repositories hold Prisma queries | A simple, common Node.js layout; business rules stay in services so they can be tested without HTTP. |
@@ -247,7 +247,7 @@ Alternative paths:
 3. API re-checks every rule under the therapist lock(s); on success the booking time changes, the reminder is rescheduled and an email is sent.
 
 ### 3.4 Business sign-up and onboarding
-1. Console `/signup`: name, email, password, business name, slug → creates team account, tenant and owner membership; sends verification email.
+1. Console `/signup`: name, email, password, business name, slug → creates team account, tenant and owner membership in one transaction, then emails a 6-digit code exactly like a login. Entering the code proves the address (`email_verified_at` is set) and starts the session; no separate verification link is needed for team accounts.
 2. Onboarding wizard: business profile and logo → first branch with opening hours → services (duration, buffer, price) → invite team (optional, can skip).
 3. The tenant appears in the Portal directory once it has at least one branch, one service and one therapist with working hours.
 
@@ -331,7 +331,7 @@ erDiagram
 | Table | Key columns | Notes |
 |---|---|---|
 | `platform_admins` | `id`, `email` (unique), `password_hash`, `name`, `disabled_at` | Created only by a server-side command. |
-| `team_accounts` | `id`, `email` (unique), `password_hash`, `name`, `email_verified_at` | One login for the Console; access comes from memberships. |
+| `team_accounts` | `id`, `email` (unique, lowercased), `password_hash`, `name`, `email_verified_at`, `password_changed_at` | One login for the Console; access comes from memberships. Trusted devices created before `password_changed_at` are ignored. |
 | `customer_accounts` | `id`, `email` (unique), `password_hash`, `name`, `phone`, `email_verified_at` | Platform-wide customer login for the Portal. |
 | `sessions` | `id`, `token_hash` (unique), `app` (`portal`/`console`/`admin`), `customer_account_id` \| `team_account_id` \| `platform_admin_id`, `membership_id` (Console only), `expires_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` | Exactly one subject column is set (check constraint). Revoking = setting `revoked_at`. |
 | `auth_tokens` | `id`, `purpose` (`password_reset`/`email_verify`), subject columns as in `sessions`, `token_hash`, `expires_at`, `used_at` | Single-use tokens sent by email. |
@@ -391,7 +391,8 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | Table | Key columns | Notes |
 |---|---|---|
 | `audit_logs` | `id`, `tenant_id` (null for platform events), `branch_id`, `actor_type`, `actor_id`, `actor_label`, `action` (e.g. `booking.cancelled`), `entity_type`, `entity_id`, `before`, `after` (jsonb), `reason`, `request_id`, `ip`, `created_at` | Append-only: the API's database role has no `UPDATE` or `DELETE` permission on this table. |
-| `email_messages` | `id`, `tenant_id`, `booking_id`, `to_email`, `template`, `status` (`queued`/`sent`/`failed`), `attempts`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Delivery log shown to owners and managers. |
+| `email_messages` | `id`, `tenant_id` (null for account emails), `booking_id`, `to_email`, `template`, `payload` (jsonb), `status` (`queued`/`sent`/`failed`), `attempts`, `next_attempt_at`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Outbox and delivery log in one table (0.2), shown to owners and managers. `payload` holds the template data (it can contain a code or a link) and is erased as soon as the message is sent or finally fails. The API cannot delete rows. |
+| `rate_limit_hits` | `id`, `bucket`, `key_hash`, `created_at` | One row per counted event (8.2). The key (email, IP, account) is HMAC-hashed, so it is never stored in clear. |
 | `idempotency_keys` | `key`, `subject`, `request_hash`, `response_status`, `response_body`, `created_at`, `expires_at` | Replaying a request with the same key returns the stored response; the same key with a different body returns `422`. Kept for 24 h. |
 | `pgboss.*` | managed by pg-boss | Job queue tables. |
 
@@ -400,11 +401,14 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - Every request runs its queries in a transaction that first sets context with `set_config(..., true)` (local to that transaction):
   - `app.tenant_id`: the tenant of the Console session, or the tenant whose public page the Portal request targets.
   - `app.customer_account_id`: set for Portal "my bookings" requests across tenants.
+  - `app.team_account_id`: the signed-in team account, so it can read **its own** memberships in every tenant (login, tenant switcher).
   - `app.support_grant`: set for read-only platform admin access.
 - Policies on every tenant-owned table:
   - **tenant policy:** `tenant_id = current_setting('app.tenant_id')::uuid`
   - **customer policy** (`tenant_customers`, `bookings`, `invoices`, `payments`, read only): the row belongs to a `tenant_customer` whose `customer_account_id = current_setting('app.customer_account_id')::uuid`.
   - **support policy** (read only): the row's tenant has an active, unexpired support grant matching `app.support_grant`.
+- **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
+- **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
 - If no context is set, policies match nothing, so a forgotten context fails closed (no rows) instead of leaking.
 - Tests run queries with a deliberately wrong or missing context and assert that zero rows of other tenants are returned.
 
@@ -427,7 +431,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - **CSV export:** `GET <list endpoint>?format=csv` with the same filters, streamed.
 - **Idempotency:** `POST` endpoints that create bookings or start payments require an `Idempotency-Key` header (UUID); other `POST`s accept it.
 - **Optimistic locking:** `PATCH` on versioned resources requires `If-Match: <version>`; a stale version returns `409 VERSION_CONFLICT`.
-- **CSRF:** cookies are `SameSite=Lax`; every state-changing request must also send the `X-CSRF-Token` header (double-submit token from `GET .../auth/csrf`).
+- **CSRF:** cookies are `SameSite=Lax`; every state-changing request must also send the `X-CSRF-Token` header (double-submit token from `GET .../auth/csrf`). The token is stored in an httpOnly cookie and returned in the response body; a missing or different header returns `403 CSRF_INVALID`.
 - **Tracing:** every response carries `X-Request-Id`; the same ID appears in logs, error tracking and audit entries.
 - **Docs:** OpenAPI 3.1 generated from the route schemas, served at `/v1/docs` (Swagger UI) and `/v1/openapi.json`.
 
@@ -479,7 +483,7 @@ All routes below act on the tenant of the session's active membership; scope rul
 | POST | `/auth/resend-otp` | New code for the same challenge (rate limited) | none (challenge) |
 | GET / DELETE | `/me/trusted-devices[/:id]` | List or revoke trusted devices | team |
 | POST | `/auth/logout`, `/auth/logout-all` | End sessions | team |
-| POST | `/auth/forgot-password`, `/auth/reset-password`, `/auth/verify-email` | Account recovery | none (token) |
+| POST | `/auth/forgot-password`, `/auth/reset-password` | Account recovery (the email code proves the address, so team accounts need no `/auth/verify-email`) | none (token) |
 | GET | `/me` | Account, memberships, active membership, permissions | team |
 | POST | `/me/active-membership` | Switch tenant (new session bound to that membership) | team |
 | PATCH | `/me`, POST `/me/password`, GET/DELETE `/me/sessions[/:id]` | Profile and sessions | team |
@@ -712,6 +716,11 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | Body or query does not match the schema (field errors included) |
 | `UNAUTHENTICATED` | 401 | No or invalid session |
+| `INVALID_CREDENTIALS` | 401 | Wrong email or password (same answer for both, 6.11) |
+| `CODE_INVALID` | 401 | Wrong email code; the detail says how many attempts are left |
+| `CODE_EXPIRED` | 410 | Code expired, already used or out of attempts: log in again |
+| `TOKEN_INVALID` | 410 | Password-reset link invalid, used or expired |
+| `CSRF_INVALID` | 403 | Missing or wrong `X-CSRF-Token` (5.1) |
 | `FORBIDDEN` | 403 | Authenticated but the role may not do this |
 | `NOT_FOUND` | 404 | Record does not exist **or is outside the caller's scope** |
 | `SLOT_TAKEN` | 409 | Slot overlaps another active booking |
@@ -723,6 +732,7 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `HOLD_EXPIRED` | 409 | Paying for or changing an expired booking |
 | `HAS_ACTIVE_BOOKINGS` | 409 | Rule 6.8 (list of bookings included) |
 | `VERSION_CONFLICT` | 409 | Optimistic lock: the record changed since it was loaded |
+| `EMAIL_TAKEN` / `SLUG_TAKEN` | 409 | Sign-up with an email or business address already in use |
 | `INVITATION_EXPIRED` | 410 | Rule 6.8 |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
 | `TENANT_SUSPENDED` | 423 | Rule 6.9 |
@@ -930,8 +940,9 @@ Every service has a `.env.example` with these names and no values.
 | `COOKIE_DOMAIN` | Parent domain for cookies |
 | `TOKEN_HASH_SECRET` | Secret key used to hash session, OTP, invitation and guest tokens (HMAC) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe test mode |
-| `EMAIL_PROVIDER_API_KEY`, `EMAIL_FROM` | Transactional email |
-| `SMTP_URL` | Local only: Mailpit |
+| `SMTP_URL`, `EMAIL_FROM` | Worker: SMTP endpoint (Mailpit locally, the email provider in production) and sender |
+| `EMAIL_POLL_INTERVAL_MS` | Worker: how often the email outbox is checked when empty (default 2000) |
+| `TRUST_PROXY` | API: trust the hosting proxy's `X-Forwarded-For`, so rate limits see the client IP |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL` | Object storage (R2 / MinIO) |
 | `SENTRY_DSN` | Error tracking |
 | `METRICS_TOKEN` | Bearer token for `/metrics` |

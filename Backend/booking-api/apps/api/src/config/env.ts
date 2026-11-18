@@ -13,6 +13,12 @@ const EnvSchema = z.object({
   PORTAL_URL: z.url(),
   CONSOLE_URL: z.url(),
   ADMIN_URL: z.url(),
+  /** Secret for HMAC-hashing session, code and link tokens (FSD 10.4). At least 32 characters. */
+  TOKEN_HASH_SECRET: z.string().min(32),
+  /** Parent domain for cookies in production (e.g. `.example.com`); unset for localhost. */
+  COOKIE_DOMAIN: z.string().min(1).optional(),
+  /** Trust X-Forwarded-For from the hosting proxy, so rate limits see the real client IP. */
+  TRUST_PROXY: z.stringbool().default(false),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

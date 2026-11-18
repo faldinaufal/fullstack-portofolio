@@ -8,6 +8,12 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Connection for the `tempora_jobs` role, which owns only the `pgboss` schema. */
   JOBS_DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** SMTP endpoint: Mailpit locally (smtp://localhost:1025), the email provider in production. */
+  SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+  /** Sender, e.g. `Tempora <no-reply@example.com>`. */
+  EMAIL_FROM: z.string().min(3),
+  /** How often the email outbox is checked when it is empty. */
+  EMAIL_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(2_000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

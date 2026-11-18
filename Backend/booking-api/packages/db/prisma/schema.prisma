@@ -3,8 +3,11 @@
 
 // Tempora database schema (FSD section 4).
 // Prisma models describe tables and relations. Features Prisma cannot express
-// (row-level security policies, exclusion constraints, grants) live in raw SQL
-// inside the migration files.
+// (row-level security policies, partial unique indexes, check constraints, grants)
+// live in raw SQL inside the migration files.
+//
+// Columns are added together with the features that use them (expand-only migrations,
+// FSD 10.2), so some tables are still a subset of FSD 4.3.
 
 generator client {
   provider     = "prisma-client"
@@ -17,6 +20,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
 enum TenantStatus {
   active
   suspended
@@ -24,8 +31,7 @@ enum TenantStatus {
   @@map("tenant_status")
 }
 
-/// A business using Tempora. Only the columns needed by the foundation exist so far;
-/// the rest of FSD 4.3 is added together with the features that use it.
+/// A business using Tempora. Not RLS-scoped: the Portal directory lists tenants publicly.
 model Tenant {
   id         String       @id @default(uuid(7)) @db.Uuid
   slug       String       @unique @db.VarChar(40)
@@ -35,5 +41,239 @@ model Tenant {
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   archivedAt DateTime?    @map("archived_at") @db.Timestamptz(3)
 
+  branches      Branch[]
+  memberships   Membership[]
+  emailMessages EmailMessage[]
+
   @@map("tenants")
+}
+
+/// A location of a tenant. RLS: tenant policy.
+model Branch {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  name       String    @db.VarChar(100)
+  address    String?   @db.VarChar(300)
+  phone      String?   @db.VarChar(16)
+  version    Int       @default(1)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  memberships Membership[]
+
+  @@index([tenantId])
+  @@map("branches")
+}
+
+// ---------------------------------------------------------------------------
+// Team identity and sessions (Console)
+// ---------------------------------------------------------------------------
+
+/// One Console login. Access to businesses comes from memberships. Not tenant-owned.
+model TeamAccount {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  /// Stored lowercased (FSD 6.12).
+  email             String    @unique @db.VarChar(254)
+  passwordHash      String    @map("password_hash")
+  name              String    @db.VarChar(100)
+  /// Set by the first successful email code: the code proves the address.
+  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  /// Trusted devices created before this moment are ignored (FSD 6.11).
+  passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  memberships    Membership[]
+  sessions       Session[]
+  otpChallenges  OtpChallenge[]
+  trustedDevices TrustedDevice[]
+  authTokens     AuthToken[]
+
+  @@map("team_accounts")
+}
+
+enum MembershipRole {
+  owner
+  manager
+  staff
+
+  @@map("membership_role")
+}
+
+enum MembershipStatus {
+  active
+  deactivated
+
+  @@map("membership_status")
+}
+
+/// A team account's role in one tenant. RLS: tenant policy + self policy (own memberships).
+model Membership {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  teamAccountId String           @map("team_account_id") @db.Uuid
+  role          MembershipRole
+  /// Null for owners; required for managers and staff (check constraint in SQL).
+  branchId      String?          @map("branch_id") @db.Uuid
+  status        MembershipStatus @default(active)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  teamAccount TeamAccount @relation(fields: [teamAccountId], references: [id])
+  branch      Branch?     @relation(fields: [branchId], references: [id])
+  sessions    Session[]
+
+  @@unique([teamAccountId, tenantId])
+  @@index([tenantId])
+  @@index([branchId])
+  @@map("memberships")
+}
+
+enum SessionApp {
+  portal
+  console
+  admin
+
+  @@map("session_app")
+}
+
+/// Server-side session; the cookie holds a random token, only its HMAC is stored.
+model Session {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tokenHash     String     @unique @map("token_hash") @db.Char(64)
+  app           SessionApp
+  teamAccountId String?    @map("team_account_id") @db.Uuid
+  /// Console sessions are bound to one active membership.
+  membershipId  String?    @map("membership_id") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt    DateTime   @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt     DateTime   @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime?  @map("revoked_at") @db.Timestamptz(3)
+  ip            String?    @db.VarChar(45)
+  userAgent     String?    @map("user_agent") @db.VarChar(300)
+
+  teamAccount TeamAccount? @relation(fields: [teamAccountId], references: [id])
+  membership  Membership?  @relation(fields: [membershipId], references: [id])
+
+  @@index([teamAccountId])
+  @@index([membershipId])
+  @@map("sessions")
+}
+
+enum OtpPurpose {
+  login
+  step_up
+
+  @@map("otp_purpose")
+}
+
+/// Created after a correct password. The 6-digit code is never stored, only its HMAC.
+model OtpChallenge {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  purpose       OtpPurpose
+  teamAccountId String?    @map("team_account_id") @db.Uuid
+  codeHash      String     @map("code_hash") @db.Char(64)
+  attempts      Int        @default(0)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSentAt    DateTime   @default(now()) @map("last_sent_at") @db.Timestamptz(3)
+  expiresAt     DateTime   @map("expires_at") @db.Timestamptz(3)
+  consumedAt    DateTime?  @map("consumed_at") @db.Timestamptz(3)
+  ip            String?    @db.VarChar(45)
+
+  teamAccount TeamAccount? @relation(fields: [teamAccountId], references: [id])
+
+  @@index([teamAccountId])
+  @@map("otp_challenges")
+}
+
+/// "Trust this device for 30 days" (Console only). The token lives in its own cookie.
+model TrustedDevice {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  teamAccountId String    @map("team_account_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash") @db.Char(64)
+  label         String    @db.VarChar(120)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt    DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  teamAccount TeamAccount @relation(fields: [teamAccountId], references: [id])
+
+  @@index([teamAccountId])
+  @@map("trusted_devices")
+}
+
+enum AuthTokenPurpose {
+  password_reset
+  email_verify
+
+  @@map("auth_token_purpose")
+}
+
+/// Single-use tokens sent by email (password reset). Only the HMAC is stored.
+model AuthToken {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  purpose       AuthTokenPurpose
+  teamAccountId String?          @map("team_account_id") @db.Uuid
+  tokenHash     String           @unique @map("token_hash") @db.Char(64)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt     DateTime         @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime?        @map("used_at") @db.Timestamptz(3)
+
+  teamAccount TeamAccount? @relation(fields: [teamAccountId], references: [id])
+
+  @@index([teamAccountId])
+  @@map("auth_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+enum EmailStatus {
+  queued
+  sent
+  failed
+
+  @@map("email_status")
+}
+
+/// Transactional outbox and delivery log in one table. The API inserts a row in the same
+/// transaction as the change that caused it; the worker sends it and records the result.
+/// `payload` holds the template data (it can contain a code or link) and is erased once the
+/// message is sent or has finally failed. RLS: tenant policy; platform rows have no tenant.
+model EmailMessage {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  tenantId          String?     @map("tenant_id") @db.Uuid
+  toEmail           String      @map("to_email") @db.VarChar(254)
+  template          String      @db.VarChar(60)
+  payload           Json?
+  status            EmailStatus @default(queued)
+  attempts          Int         @default(0)
+  nextAttemptAt     DateTime    @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError         String?     @map("last_error") @db.VarChar(500)
+  providerMessageId String?     @map("provider_message_id") @db.VarChar(200)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt            DateTime?   @map("sent_at") @db.Timestamptz(3)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@map("email_messages")
+}
+
+/// Rate-limit counter shared by every API container (FSD 8.2). One row per counted event;
+/// the key is an HMAC, so emails and IP addresses are not stored in clear.
+model RateLimitHit {
+  id        BigInt   @id @default(autoincrement())
+  bucket    String   @db.VarChar(40)
+  keyHash   String   @map("key_hash") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([bucket, keyHash, createdAt])
+  @@map("rate_limit_hits")
 }

@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export default function NotFound() {
   return (
-    <div className="flex max-w-[640px] flex-col items-start gap-4 py-12">
+    <main className="mx-auto flex min-h-dvh max-w-[640px] flex-col items-start justify-center gap-4 p-6">
       <p className="text-sm font-bold text-primary-text">404</p>
       <h1 className="text-3xl font-extrabold">This screen does not exist yet</h1>
       <p className="text-muted">
@@ -15,6 +15,6 @@ export default function NotFound() {
       <Link href="/" className={buttonVariants()}>
         Back to dashboard
       </Link>
-    </div>
+    </main>
   );
 }

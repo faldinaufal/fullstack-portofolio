@@ -21,7 +21,10 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
         description: 'Multi-tenant booking and invoicing API. Errors use RFC 9457 problem details.',
         version,
       },
-      tags: [{ name: 'system', description: 'Health and readiness' }],
+      tags: [
+        { name: 'system', description: 'Health and readiness' },
+        { name: 'console-auth', description: 'Console sign-up, login with email code, sessions' },
+      ],
     },
     transform: jsonSchemaTransform,
     transformObject: jsonSchemaTransformObject,

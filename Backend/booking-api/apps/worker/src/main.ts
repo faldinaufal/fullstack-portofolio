@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
+import { setTimeout as sleep } from 'node:timers/promises';
 import closeWithGrace from 'close-with-grace';
+import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import { pino } from 'pino';
 import { loadEnv } from './config/env.js';
+import { createSmtpMailer } from './email/mailer.js';
+import { createOutboxProcessor } from './email/outbox.js';
 import { createHeartbeatHandler } from './jobs/heartbeat.js';
 import { QUEUES } from './queues.js';
 
@@ -28,11 +32,42 @@ await boss.createQueue(QUEUES.heartbeat, { retryLimit: 0 });
 await boss.schedule(QUEUES.heartbeat, '*/5 * * * *', { scheduledBy: 'cron' });
 await boss.work(QUEUES.heartbeat, createHeartbeatHandler(logger));
 
+// Email outbox (FSD 0.2): the API queues emails in `email_messages` inside its own
+// transactions; this loop sends them. A full batch means more may be waiting, so the next
+// batch starts right away; otherwise the loop waits for the poll interval.
+const OUTBOX_BATCH_SIZE = 20;
+const outboxPool = new pg.Pool({
+  connectionString: env.JOBS_DATABASE_URL,
+  max: 2,
+  application_name: 'tempora-worker-outbox',
+});
+const outbox = createOutboxProcessor({
+  db: outboxPool,
+  mailer: createSmtpMailer({ url: env.SMTP_URL, from: env.EMAIL_FROM }),
+  logger,
+  batchSize: OUTBOX_BATCH_SIZE,
+});
+let stopping = false;
+const outboxLoop = (async () => {
+  while (!stopping) {
+    try {
+      const { sent, failed } = await outbox.processBatch();
+      if (sent + failed === OUTBOX_BATCH_SIZE) continue;
+    } catch (err) {
+      logger.error({ err }, 'Email outbox batch failed');
+    }
+    await sleep(env.EMAIL_POLL_INTERVAL_MS);
+  }
+})();
+
 logger.info({ queues: Object.values(QUEUES) }, 'Worker started');
 
 // Graceful shutdown (FSD 8.5): stop taking new jobs, let running jobs finish, then exit.
 closeWithGrace({ delay: 30_000 }, async ({ err, signal }) => {
   if (err) logger.error({ err }, 'Shutting down after an error');
   else logger.info({ signal }, 'Shutting down');
+  stopping = true;
   await boss.stop({ graceful: true, timeout: 25_000 });
+  await outboxLoop;
+  await outboxPool.end();
 });

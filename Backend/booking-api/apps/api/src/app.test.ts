@@ -11,6 +11,7 @@ const env = {
   PORTAL_URL: 'http://localhost:3000',
   CONSOLE_URL: 'http://localhost:3001',
   ADMIN_URL: 'http://localhost:3002',
+  TRUST_PROXY: false,
 } as const;
 
 const healthyRepository: HealthRepository = {

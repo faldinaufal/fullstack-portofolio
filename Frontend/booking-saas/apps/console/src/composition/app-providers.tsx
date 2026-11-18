@@ -7,6 +7,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createApiClient } from '@tempora/api-client';
 import { ThemeProvider } from '@tempora/ui';
 import { useState, type ReactNode } from 'react';
+import { createHttpAuthRepository } from '@/core/auth/data/http-auth-repository';
+import { createSessionStorageChallengeStore } from '@/core/auth/data/session-storage-challenge-store';
+import { createAuthUseCases } from '@/core/auth/domain/auth-use-cases';
 import {
   createDemoDashboardRepository,
   DEMO_NOW,
@@ -24,8 +27,13 @@ import { DependenciesContext, type Dependencies } from '@/core/shared/presentati
 function createDependencies(): Dependencies {
   const apiClient = createApiClient({
     baseUrl: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000',
+    csrfPath: '/v1/console/auth/csrf',
   });
   return {
+    auth: createAuthUseCases(
+      createHttpAuthRepository(apiClient),
+      createSessionStorageChallengeStore(),
+    ),
     getApiStatus: createGetApiStatus(createHttpApiStatusRepository(apiClient)),
     // Demo data: a fixed "now" keeps "up next" meaningful whenever the demo is opened.
     getDashboard: createGetDashboard(createDemoDashboardRepository(), () => DEMO_NOW),

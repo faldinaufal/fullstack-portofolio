@@ -61,6 +61,7 @@ services:
       PORTAL_URL: http://localhost:3000
       CONSOLE_URL: http://localhost:3001
       ADMIN_URL: http://localhost:3002
+      TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET:?Set TOKEN_HASH_SECRET in .env (see .env.example)}
     ports:
       - '4000:4000'
     depends_on:
@@ -76,9 +77,13 @@ services:
       NODE_ENV: production
       LOG_LEVEL: info
       JOBS_DATABASE_URL: postgresql://tempora_jobs:${TEMPORA_JOBS_PASSWORD:?Set TEMPORA_JOBS_PASSWORD in .env}@postgres:5432/tempora
+      SMTP_URL: smtp://mailpit:1025
+      EMAIL_FROM: Tempora <no-reply@tempora.local>
     depends_on:
       migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
 
   portal:
     build: &frontend-build
