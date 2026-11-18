@@ -10,6 +10,7 @@ export {
   type Tx,
 } from './context.js';
 export {
+  AuditActorType,
   AuthTokenPurpose,
   EmailStatus,
   MembershipRole,

@@ -8,7 +8,9 @@ import { buildApp, type App } from '../app.js';
 import { createArgon2PasswordHasher } from '../lib/passwords.js';
 import { createPostgresRateLimiter } from '../lib/rate-limit.js';
 import { createTokenHasher } from '../lib/tokens.js';
+import { createBranchService } from '../modules/branches/service.js';
 import { createConsoleAuthService } from '../modules/console-auth/service.js';
+import { createTeamService } from '../modules/team/service.js';
 import { createPrismaHealthRepository } from '../modules/health/repository.js';
 
 function requireEnv(name: string): string {
@@ -22,6 +24,10 @@ function requireEnv(name: string): string {
 
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
+  'audit_logs',
+  'invitations',
+  'branch_closures',
+  'branch_opening_hours',
   'rate_limit_hits',
   'email_messages',
   'auth_tokens',
@@ -62,6 +68,9 @@ export async function createHarness(): Promise<Harness> {
   const now = () => new Date(Date.now() + offsetMs);
   const hashToken = createTokenHasher('integration-test-secret-0123456789abcdef');
 
+  const passwords = createArgon2PasswordHasher();
+  const rateLimiter = createPostgresRateLimiter(prisma, hashToken, now);
+
   const app = await buildApp({
     env: {
       LOG_LEVEL: 'silent',
@@ -75,13 +84,24 @@ export async function createHarness(): Promise<Harness> {
     consoleAuth: {
       service: createConsoleAuthService({
         prisma,
-        passwords: createArgon2PasswordHasher(),
+        passwords,
         hashToken,
-        rateLimiter: createPostgresRateLimiter(prisma, hashToken, now),
+        rateLimiter,
         consoleUrl: 'http://localhost:3001',
         now,
       }),
       cookies: { secure: false, domain: undefined },
+    },
+    consoleModules: {
+      branches: createBranchService({ prisma, now }),
+      team: createTeamService({
+        prisma,
+        passwords,
+        hashToken,
+        rateLimiter,
+        consoleUrl: 'http://localhost:3001',
+        now,
+      }),
     },
   });
 
@@ -146,17 +166,29 @@ export class TestBrowser {
   }
 
   async post(url: string, payload?: object, { csrf = true }: { csrf?: boolean } = {}) {
+    return this.request('POST', url, payload, {}, { csrf });
+  }
+
+  /** Any state-changing request: adds the CSRF header like the Console app does. */
+  async request(
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    url: string,
+    payload?: object,
+    headers: Record<string, string> = {},
+    { csrf = true }: { csrf?: boolean } = {},
+  ) {
     if (csrf && !this.csrf) {
       const response = await this.get('/v1/console/auth/csrf');
       this.csrf = response.json<{ csrfToken: string }>().csrfToken;
     }
     return this.store(
       await this.app.inject({
-        method: 'POST',
+        method,
         url,
         headers: {
           cookie: this.cookieHeader(),
           ...(csrf && this.csrf ? { 'x-csrf-token': this.csrf } : {}),
+          ...headers,
         },
         ...(payload !== undefined && { payload }),
       }),

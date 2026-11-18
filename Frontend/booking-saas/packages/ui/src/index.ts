@@ -6,6 +6,7 @@ export { Badge, badgeVariants, type BadgeProps, type BadgeTone } from './compone
 export { BarChart, type BarChartProps, type BarSeries } from './components/bar-chart.js';
 export { Button, buttonVariants, type ButtonProps } from './components/button.js';
 export { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/card.js';
+export { ConfirmDialog, type ConfirmDialogProps } from './components/confirm-dialog.js';
 export {
   DashboardShell,
   type DashboardShellProps,
@@ -17,6 +18,7 @@ export { Drawer, type DrawerProps } from './components/drawer.js';
 export { Icon, TemporaMark, type IconName, type IconProps } from './components/icon.js';
 export { KpiCard, type KpiCardProps } from './components/kpi-card.js';
 export { MonthCalendar, type MonthCalendarProps } from './components/month-calendar.js';
+export { SelectField, type SelectFieldProps } from './components/select-field.js';
 export { SearchField, type SearchFieldProps } from './components/search-field.js';
 export { TextField, type TextFieldProps } from './components/text-field.js';
 export { ThemeProvider, ThemeToggle, type ThemeToggleProps } from './components/theme.js';

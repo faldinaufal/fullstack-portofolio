@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import type { ConsoleSession } from '../domain/auth';
+import type { ConsoleSession, MemberRole } from '../domain/auth';
 import { roleLabel, scopeLabel } from '../domain/auth-rules';
 
 export interface SessionViewModel {
+  /** Active membership: what the screens use to show or hide actions. */
+  membershipId: string;
+  role: MemberRole;
+  branchId: string | null;
   accountName: string;
   /** "Maya R." */
   shortName: string;
@@ -32,6 +36,9 @@ function shortNameOf(name: string): string {
 export function toSessionViewModel(session: ConsoleSession): SessionViewModel {
   const active = session.activeMembership;
   return {
+    membershipId: active.id,
+    role: active.role,
+    branchId: active.branchId,
     accountName: session.account.name,
     shortName: shortNameOf(session.account.name),
     initials: initialsOf(session.account.name),

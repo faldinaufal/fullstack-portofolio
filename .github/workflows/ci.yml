@@ -109,7 +109,8 @@ jobs:
 
       - name: Worker starts and installs the job queue
         run: |
-          node Backend/booking-api/apps/worker/dist/main.js > worker.log 2>&1 &
+          # "Worker started" is an info-level line; the job-wide LOG_LEVEL=warn would hide it.
+          LOG_LEVEL=info node Backend/booking-api/apps/worker/dist/main.js > worker.log 2>&1 &
           for i in $(seq 1 30); do
             if grep -q "Worker started" worker.log; then cat worker.log; exit 0; fi
             sleep 1

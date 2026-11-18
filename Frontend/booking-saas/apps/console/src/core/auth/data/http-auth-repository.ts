@@ -78,6 +78,14 @@ export function createHttpAuthRepository(client: ApiClient): AuthRepository {
         await client.post(`${BASE}/auth/logout`, { schema: NoContent });
       }),
 
+    switchMembership: (membershipId) =>
+      guard(async () => {
+        await client.post(`${BASE}/me/active-membership`, {
+          schema: AuthenticatedSchema,
+          body: { membershipId },
+        });
+      }),
+
     requestPasswordReset: (email) =>
       guard(async () => {
         await client.post(`${BASE}/auth/forgot-password`, {

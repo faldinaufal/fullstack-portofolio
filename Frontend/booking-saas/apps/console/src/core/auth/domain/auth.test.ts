@@ -36,6 +36,7 @@ function repository(overrides: Partial<AuthRepository> = {}): AuthRepository {
     verifyCode: vi.fn(async () => {}),
     resendCode: vi.fn(async () => challenge),
     logout: vi.fn(async () => {}),
+    switchMembership: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
     ...overrides,

@@ -50,6 +50,8 @@ export function createAuthUseCases(repository: AuthRepository, challenges: Pendi
 
     abandonLogin: () => challenges.clear(),
 
+    switchMembership: (membershipId: string) => repository.switchMembership(membershipId),
+
     requestPasswordReset: (email: string) => repository.requestPasswordReset(email),
 
     resetPassword: (token: string, password: string) => repository.resetPassword(token, password),

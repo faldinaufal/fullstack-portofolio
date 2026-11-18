@@ -9,7 +9,13 @@ import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto
  * (for example a session).
  */
 export type TokenPurpose =
-  'session' | 'trusted-device' | 'password-reset' | 'csrf' | 'rate-limit' | `otp:${string}`;
+  | 'session'
+  | 'trusted-device'
+  | 'password-reset'
+  | 'invitation'
+  | 'csrf'
+  | 'rate-limit'
+  | `otp:${string}`;
 
 export type TokenHasher = (purpose: TokenPurpose, value: string) => string;
 

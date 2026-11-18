@@ -12,12 +12,14 @@ export interface DrawerProps {
   /** Accessible name of the drawer. */
   label: string;
   side?: 'left' | 'right';
+  /** Wider panel for forms (440 px) instead of navigation (320 px). */
+  wide?: boolean;
   className?: string;
   children: ReactNode;
 }
 
 /**
- * Off-canvas panel for mobile navigation, built on the native modal <dialog>: the browser
+ * Off-canvas panel (mobile navigation, side forms), built on the native modal <dialog>: the browser
  * traps focus inside it, makes the page behind it inert and closes it on Escape.
  * It also closes on a backdrop click and after any link inside it is followed.
  */
@@ -26,6 +28,7 @@ export function Drawer({
   onClose,
   label,
   side = 'left',
+  wide = false,
   className,
   children,
 }: Readonly<DrawerProps>) {
@@ -57,7 +60,8 @@ export function Drawer({
       aria-label={label}
       onClose={onClose}
       className={cn(
-        'fixed inset-y-0 m-0 h-dvh max-h-none w-[min(320px,86vw)] max-w-none overflow-y-auto border-0 bg-transparent p-0 text-foreground backdrop:bg-ink/55',
+        'fixed inset-y-0 m-0 h-dvh max-h-none max-w-none overflow-y-auto border-0 bg-transparent p-0 text-foreground backdrop:bg-ink/55',
+        wide ? 'w-[min(440px,100vw)]' : 'w-[min(320px,86vw)]',
         side === 'left' ? 'right-auto left-0' : 'right-0 left-auto',
       )}
     >

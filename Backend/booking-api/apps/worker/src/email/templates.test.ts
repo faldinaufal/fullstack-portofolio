@@ -24,6 +24,20 @@ describe('email templates', () => {
     expect(email.html).toContain('&lt;script&gt;');
   });
 
+  it('names the business, role and branch in an invitation', () => {
+    const email = renderEmail('console.invitation', {
+      businessName: 'Lumen Wellness Studio',
+      inviterName: 'Maya Reyes',
+      role: 'staff',
+      branchName: 'Downtown',
+      acceptUrl: 'http://localhost:3001/invite/abc',
+      expiresInDays: 7,
+    });
+    expect(email.subject).toBe('Maya Reyes invited you to Lumen Wellness Studio on Tempora');
+    expect(email.text).toContain('staff at Downtown');
+    expect(email.html).toContain('href="http://localhost:3001/invite/abc"');
+  });
+
   it('recognises only known templates', () => {
     expect(isKnownTemplate('console.password_reset')).toBe(true);
     expect(isKnownTemplate('console.unknown')).toBe(false);

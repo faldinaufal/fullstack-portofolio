@@ -32,6 +32,16 @@ export function useSession(): SessionState {
   return data ? { status: 'signed-in', view: toSessionViewModel(data) } : { status: 'signed-out' };
 }
 
+/**
+ * The signed-in member, for pages inside the Console shell (the shell only renders them
+ * once the session is known, so this is never null there).
+ */
+export function useCurrentMember(): SessionViewModel {
+  const session = useSession();
+  if (session.status !== 'signed-in') throw new Error('useCurrentMember used outside the shell');
+  return session.view;
+}
+
 export function useLogin() {
   const { auth } = useDependencies();
   const queryClient = useQueryClient();
@@ -104,6 +114,19 @@ export function useResetPassword() {
   return useMutation({
     mutationFn: ({ token, password }: { token: string; password: string }) =>
       auth.resetPassword(token, password),
+  });
+}
+
+/** Switches business; everything cached belongs to the previous one, so it is cleared. */
+export function useSwitchBusiness() {
+  const { auth } = useDependencies();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (membershipId: string) => auth.switchMembership(membershipId),
+    onSuccess: async () => {
+      queryClient.removeQueries();
+      await queryClient.invalidateQueries({ queryKey: SESSION_KEY });
+    },
   });
 }
 

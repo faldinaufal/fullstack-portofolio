@@ -11,8 +11,13 @@ import {
 } from 'fastify-type-provider-zod';
 import type { Env } from './config/env.js';
 import type { CookieSettings } from './modules/console-auth/cookies.js';
+import { installConsoleGuard } from './modules/console-auth/guard.js';
 import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
+import { branchRoutes } from './modules/branches/routes.js';
+import type { BranchService } from './modules/branches/service.js';
+import { teamRoutes } from './modules/team/routes.js';
+import type { TeamService } from './modules/team/service.js';
 import type { HealthRepository } from './modules/health/repository.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { createHealthService } from './modules/health/service.js';
@@ -32,11 +37,18 @@ export interface AppDependencies {
   healthRepository: HealthRepository;
   /** Console authentication. Left out by tests that only exercise the app shell. */
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
+  /** Console business modules; need `consoleAuth`. */
+  consoleModules?: { branches: BranchService; team: TeamService };
 }
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 
-export async function buildApp({ env, healthRepository, consoleAuth }: AppDependencies) {
+export async function buildApp({
+  env,
+  healthRepository,
+  consoleAuth,
+  consoleModules,
+}: AppDependencies) {
   const app = Fastify({
     trustProxy: env.TRUST_PROXY,
     logger: {
@@ -82,7 +94,19 @@ export async function buildApp({ env, healthRepository, consoleAuth }: AppDepend
   });
 
   if (consoleAuth) {
-    await app.register(consoleAuthRoutes, { prefix: '/v1/console', ...consoleAuth });
+    // One encapsulated scope for /v1/console: its CSRF hook and guard apply to every
+    // Console module registered inside it, and to nothing outside.
+    await app.register(
+      async (scope) => {
+        const guard = installConsoleGuard(scope, consoleAuth);
+        await scope.register(consoleAuthRoutes, { ...consoleAuth, guard });
+        if (consoleModules) {
+          await scope.register(branchRoutes, { service: consoleModules.branches, guard });
+          await scope.register(teamRoutes, { service: consoleModules.team, guard });
+        }
+      },
+      { prefix: '/v1/console' },
+    );
   }
 
   return app;

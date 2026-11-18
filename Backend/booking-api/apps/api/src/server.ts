@@ -8,13 +8,17 @@ import { loadEnv } from './config/env.js';
 import { createArgon2PasswordHasher } from './lib/passwords.js';
 import { createPostgresRateLimiter } from './lib/rate-limit.js';
 import { createTokenHasher } from './lib/tokens.js';
+import { createBranchService } from './modules/branches/service.js';
 import { createConsoleAuthService } from './modules/console-auth/service.js';
 import { createPrismaHealthRepository } from './modules/health/repository.js';
+import { createTeamService } from './modules/team/service.js';
 
 const env = loadEnv();
 const prisma = createPrismaClient({ connectionString: env.DATABASE_URL });
 
 const hashToken = createTokenHasher(env.TOKEN_HASH_SECRET);
+const passwords = createArgon2PasswordHasher();
+const rateLimiter = createPostgresRateLimiter(prisma, hashToken);
 
 const app = await buildApp({
   env,
@@ -22,12 +26,22 @@ const app = await buildApp({
   consoleAuth: {
     service: createConsoleAuthService({
       prisma,
-      passwords: createArgon2PasswordHasher(),
+      passwords,
       hashToken,
-      rateLimiter: createPostgresRateLimiter(prisma, hashToken),
+      rateLimiter,
       consoleUrl: env.CONSOLE_URL,
     }),
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
+  },
+  consoleModules: {
+    branches: createBranchService({ prisma }),
+    team: createTeamService({
+      prisma,
+      passwords,
+      hashToken,
+      rateLimiter,
+      consoleUrl: env.CONSOLE_URL,
+    }),
   },
 });
 

@@ -44,7 +44,10 @@ export const consoleAuthRepository = {
   listActiveMemberships: (tx: Tx, teamAccountId: string) =>
     tx.membership.findMany({
       where: { teamAccountId, status: 'active', tenant: { archivedAt: null } },
-      include: { tenant: { select: { id: true, slug: true, name: true } } },
+      include: {
+        tenant: { select: { id: true, slug: true, name: true } },
+        teamAccount: { select: { name: true } },
+      },
       orderBy: { createdAt: 'asc' },
     }),
 
@@ -152,6 +155,10 @@ export const consoleAuthRepository = {
 
   revokeSession: (tx: Tx, id: string, now: Date) =>
     tx.session.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: now } }),
+
+  /** Ends every session bound to one membership (deactivated, demoted or moved, FSD 6.8). */
+  revokeMembershipSessions: (tx: Tx, membershipId: string, now: Date) =>
+    tx.session.updateMany({ where: { membershipId, revokedAt: null }, data: { revokedAt: now } }),
 
   revokeAllSessions: (tx: Tx, teamAccountId: string, now: Date) =>
     tx.session.updateMany({ where: { teamAccountId, revokedAt: null }, data: { revokedAt: now } }),
