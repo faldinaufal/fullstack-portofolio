@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import { randomUUID } from 'node:crypto';
+import cookie from '@fastify/cookie';
 import Fastify, { LogController } from 'fastify';
 import {
   serializerCompiler,
@@ -9,6 +10,9 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import type { Env } from './config/env.js';
+import type { CookieSettings } from './modules/console-auth/cookies.js';
+import { consoleAuthRoutes } from './modules/console-auth/routes.js';
+import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import type { HealthRepository } from './modules/health/repository.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { createHealthService } from './modules/health/service.js';
@@ -21,19 +25,30 @@ import { registerSecurity } from './plugins/security.js';
  * tests pass fakes. This keeps the app testable without a database or network.
  */
 export interface AppDependencies {
-  env: Pick<Env, 'LOG_LEVEL' | 'APP_VERSION' | 'PORTAL_URL' | 'CONSOLE_URL' | 'ADMIN_URL'>;
+  env: Pick<
+    Env,
+    'LOG_LEVEL' | 'APP_VERSION' | 'PORTAL_URL' | 'CONSOLE_URL' | 'ADMIN_URL' | 'TRUST_PROXY'
+  >;
   healthRepository: HealthRepository;
+  /** Console authentication. Left out by tests that only exercise the app shell. */
+  consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
 }
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 
-export async function buildApp({ env, healthRepository }: AppDependencies) {
+export async function buildApp({ env, healthRepository, consoleAuth }: AppDependencies) {
   const app = Fastify({
+    trustProxy: env.TRUST_PROXY,
     logger: {
       level: env.LOG_LEVEL,
       // Never write credentials to the logs (FSD 8.3).
       redact: {
-        paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
+        paths: [
+          'req.headers.cookie',
+          'req.headers.authorization',
+          'req.headers["x-csrf-token"]',
+          'res.headers["set-cookie"]',
+        ],
         censor: '[redacted]',
       },
     },
@@ -56,6 +71,7 @@ export async function buildApp({ env, healthRepository }: AppDependencies) {
   });
 
   registerErrorHandling(app);
+  await app.register(cookie);
   await registerSecurity(app, {
     allowedOrigins: [env.PORTAL_URL, env.CONSOLE_URL, env.ADMIN_URL],
   });
@@ -64,6 +80,10 @@ export async function buildApp({ env, healthRepository }: AppDependencies) {
   await app.register(healthRoutes, {
     service: createHealthService({ repository: healthRepository, version: env.APP_VERSION }),
   });
+
+  if (consoleAuth) {
+    await app.register(consoleAuthRoutes, { prefix: '/v1/console', ...consoleAuth });
+  }
 
   return app;
 }

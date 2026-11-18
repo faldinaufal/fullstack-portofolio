@@ -2,7 +2,7 @@
 
 Backend of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Frontend: [`Frontend/booking-saas`](../../Frontend/booking-saas).
 
-**Status:** foundation in place (no business features yet).
+**Status:** foundation and Console authentication with tenant isolation (row-level security) are in place. Booking features come next.
 
 ## Stack
 
@@ -18,10 +18,14 @@ Node.js 24 · TypeScript · Fastify 5 · Zod 4 · PostgreSQL 17 · Prisma 7 · p
 | Security | Security headers (helmet), CORS allow-list for the three apps only |
 | API docs | OpenAPI 3.1 generated from the Zod schemas: `/v1/openapi.json`, Swagger UI at `/v1/docs` |
 | Shared contract | `packages/contracts`: Zod schemas and types imported by both the API and the frontends |
-| Database | Prisma schema and first migration; three database roles with least privilege (below) |
-| Background jobs | Worker process running pg-boss with an example scheduled job |
+| Database | Prisma schema and migrations; three database roles with least privilege (below) |
+| Tenant isolation | PostgreSQL row-level security on tenant-owned tables. Every query runs in a transaction that first sets `app.tenant_id` / `app.team_account_id` with `set_config(..., true)`; without a context, policies match no rows (fails closed) |
+| Console authentication | Sign-up (account + business + owner in one transaction), login with an emailed 6-digit code, "trust this device for 30 days", logout / logout everywhere, password reset, `GET /v1/console/me` |
+| Session security | Server-side sessions (random token in an httpOnly cookie, only its HMAC stored), 12 h idle / 7 days maximum, CSRF double-submit token, Argon2id passwords, rate limits counted in PostgreSQL, same answer for unknown email and wrong password |
+| Email | Transactional outbox: the API queues emails in `email_messages` inside its own transactions; the worker sends them over SMTP (Mailpit locally) with retries and exponential back-off, then erases codes and links from the row |
+| Background jobs | Worker process running the email outbox and pg-boss with an example scheduled job |
 | Shutdown | Graceful shutdown for API and worker (finish in-flight work on deploy) |
-| Tests | Unit tests for services and HTTP tests through `app.inject` without a network or database |
+| Tests | Unit tests (rules, tokens, templates) and integration tests through HTTP against a real PostgreSQL with the restricted roles: sign-up, login, code expiry and attempt limits, trusted devices, session timeout, password reset, rate limits, RLS isolation between tenants, one owner per tenant, concurrent outbox workers |
 
 ## Layout
 
@@ -52,7 +56,7 @@ Each process connects with the least privilege it needs:
 |---|---|---|
 | `tempora` (owner) | Owns the `public` schema, runs migrations | `prisma migrate deploy` (release step) |
 | `tempora_app` | Read and write data only; no schema changes; cannot modify the migration history; does not bypass row-level security | API |
-| `tempora_jobs` | Owns only the `pgboss` schema, where pg-boss manages its own tables | Worker |
+| `tempora_jobs` | Owns only the `pgboss` schema, where pg-boss manages its own tables; may read and update `email_messages` (the outbox) and nothing else in `public`. Has the database-level `CREATE` right because pg-boss runs `CREATE SCHEMA IF NOT EXISTS` on start (it can create schemas of its own, not touch others) | Worker |
 
 Roles hold passwords, so they are created by [`docker/postgres/init/01-roles.sh`](docker/postgres/init/01-roles.sh), not by migrations. CI verifies that `tempora_app` cannot create tables or change `_prisma_migrations`.
 
@@ -66,7 +70,7 @@ cp .env.example .env          # choose local passwords
 docker compose up --build     # PostgreSQL, migrations, API, worker, the three apps, Mailpit
 ```
 
-API: http://localhost:4000/health · Docs: http://localhost:4000/v1/docs
+API: http://localhost:4000/health · Docs: http://localhost:4000/v1/docs · Emails (codes, reset links): http://localhost:8025
 
 Run the API outside Docker (database still in Docker):
 
@@ -84,5 +88,7 @@ pnpm --filter @tempora/api dev
 | Command (from the repo root) | Does |
 |---|---|
 | `pnpm turbo run build --filter=./Backend/**` | Build contracts, db, API and worker |
-| `pnpm turbo run test --filter=./Backend/**` | Run backend tests |
+| `pnpm turbo run test --filter=./Backend/**` | Run backend unit tests (no database) |
+| `pnpm --filter @tempora/api test:integration` | API integration tests; needs `TEST_DATABASE_URL` (tempora_app) and `TEST_DATABASE_OWNER_URL` (owner) on a migrated database |
+| `pnpm --filter @tempora/worker test:integration` | Worker integration tests; needs `TEST_JOBS_DATABASE_URL` and `TEST_DATABASE_OWNER_URL` |
 | `pnpm --filter @tempora/db migrate:status` | Show migration state (`DATABASE_MIGRATION_URL` required) |

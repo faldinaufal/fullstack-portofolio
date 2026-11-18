@@ -34,6 +34,11 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 -- The job queue lives in its own schema, owned by the jobs role.
 CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION tempora_jobs;
 
+-- pg-boss runs `CREATE SCHEMA IF NOT EXISTS pgboss` on every start, and PostgreSQL checks
+-- the database-level CREATE right before it checks whether the schema exists. The right
+-- only lets this role create new schemas of its own; it gives no access to `public`.
+SELECT format('GRANT CREATE ON DATABASE %I TO tempora_jobs', current_database()) \gexec
+
 -- The API enqueues jobs inside its own transactions (FSD 0.2), so it needs
 -- data access to the pg-boss tables, but no right to change their structure.
 GRANT USAGE ON SCHEMA pgboss TO tempora_app;

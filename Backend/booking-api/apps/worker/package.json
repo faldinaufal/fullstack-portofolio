@@ -2,7 +2,7 @@
   "name": "@tempora/worker",
   "version": "0.0.0",
   "private": true,
-  "description": "Tempora background worker: runs pg-boss jobs (emails, payment hold expiry, reminders).",
+  "description": "Tempora background worker: sends the email outbox and runs pg-boss jobs (payment hold expiry, reminders).",
   "type": "module",
   "main": "dist/main.js",
   "files": [
@@ -13,16 +13,22 @@
     "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@tempora/db": "workspace:*",
     "close-with-grace": "2.5.0",
+    "nodemailer": "10.6.0",
+    "pg": "8.23.1",
     "pg-boss": "12.38.2",
     "pino": "10.4.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
+    "@types/nodemailer": "8.0.2",
+    "@types/pg": "8.23.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "5.1.0"

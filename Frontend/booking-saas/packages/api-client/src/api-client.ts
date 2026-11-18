@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import { ProblemDetailsSchema } from '@tempora/contracts';
+import { CsrfResponseSchema, ProblemDetailsSchema } from '@tempora/contracts';
 import type { z } from 'zod';
 import { ApiError } from './api-error.js';
 
@@ -10,6 +10,13 @@ export interface ApiClientOptions {
   baseUrl: string;
   /** Injected for tests; defaults to the global `fetch`. */
   fetch?: typeof fetch;
+  /**
+   * Endpoint that issues the CSRF token of this app's route group, e.g.
+   * `/v1/console/auth/csrf`. When set, every state-changing request sends the token in
+   * `X-CSRF-Token` (FSD 5.1); the token is fetched on first use and refreshed once if the
+   * API reports it as invalid.
+   */
+  csrfPath?: string;
 }
 
 export interface RequestOptions<TSchema extends z.ZodType> {
@@ -28,10 +35,43 @@ export interface RequestOptions<TSchema extends z.ZodType> {
  *   breaks the contract fails loudly here instead of rendering wrong data.
  * - Converts every failure into an `ApiError` with a stable code.
  */
-export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClientOptions) {
+export function createApiClient({ baseUrl, fetch: fetchImpl = fetch, csrfPath }: ApiClientOptions) {
   const origin = baseUrl.replace(/\/+$/, '');
+  let csrfToken: Promise<string> | undefined;
+
+  function getCsrfToken(): Promise<string> {
+    csrfToken ??= send(csrfPath ?? '', { schema: CsrfResponseSchema })
+      .then((response) => response.csrfToken)
+      .catch((error: unknown) => {
+        csrfToken = undefined; // do not cache a failure
+        throw error;
+      });
+    return csrfToken;
+  }
 
   async function request<TSchema extends z.ZodType>(
+    path: string,
+    options: RequestOptions<TSchema>,
+  ): Promise<z.infer<TSchema>> {
+    const method = options.method ?? 'GET';
+    if (!csrfPath || method === 'GET') return send(path, options);
+
+    const withToken = async () =>
+      send(path, {
+        ...options,
+        headers: { ...options.headers, 'X-CSRF-Token': await getCsrfToken() },
+      });
+    try {
+      return await withToken();
+    } catch (error) {
+      // The token cookie can expire or be cleared; fetch a fresh token and retry once.
+      if (!(error instanceof ApiError) || error.code !== 'CSRF_INVALID') throw error;
+      csrfToken = undefined;
+      return withToken();
+    }
+  }
+
+  async function send<TSchema extends z.ZodType>(
     path: string,
     { method = 'GET', schema, body, headers, signal }: RequestOptions<TSchema>,
   ): Promise<z.infer<TSchema>> {
@@ -58,6 +98,7 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
     }
 
     const requestId = response.headers.get('x-request-id') ?? undefined;
+    // 204 No Content (and any empty body) is read as `undefined`.
     const payload: unknown = await response.json().catch(() => undefined);
 
     if (!response.ok) {
@@ -90,6 +131,10 @@ export function createApiClient({ baseUrl, fetch: fetchImpl = fetch }: ApiClient
       path: string,
       options: Omit<RequestOptions<TSchema>, 'method' | 'body'>,
     ) => request(path, { ...options, method: 'GET' }),
+    post: <TSchema extends z.ZodType>(
+      path: string,
+      options: Omit<RequestOptions<TSchema>, 'method'>,
+    ) => request(path, { ...options, method: 'POST' }),
   };
 }
 

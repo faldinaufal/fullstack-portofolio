@@ -4,6 +4,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { AuthUseCases } from '../../auth/domain/auth-use-cases';
 import type { GetDashboard } from '../../dashboard/domain/get-dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 
@@ -13,6 +14,7 @@ import type { GetApiStatus } from '../../health/domain/get-api-status';
  * (HTTP or demo repositories in the app, fakes in tests).
  */
 export interface Dependencies {
+  auth: AuthUseCases;
   getApiStatus: GetApiStatus;
   getDashboard: GetDashboard;
 }

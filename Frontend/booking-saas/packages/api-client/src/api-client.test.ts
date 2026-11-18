@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import { HealthResponseSchema } from '@tempora/contracts';
+import { AcceptedResponseSchema, HealthResponseSchema } from '@tempora/contracts';
+import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from './api-client.js';
 import { ApiError } from './api-error.js';
@@ -71,5 +72,81 @@ describe('api client', () => {
       code: 'NETWORK_ERROR',
       status: 0,
     });
+  });
+
+  describe('CSRF', () => {
+    const csrf = (token: string) => jsonResponse(200, { csrfToken: token });
+    const problem = (code: string, status: number) =>
+      jsonResponse(
+        status,
+        { type: '/problems/x', title: 'x', status, code, requestId: 'req-1' },
+        'application/problem+json',
+      );
+
+    it('fetches the token once and sends it on every POST', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(csrf('tok-1'))
+        // A Response body can be read once, so build a new one per call.
+        .mockImplementation(async () => jsonResponse(202, { status: 'accepted' }));
+      const client = createApiClient({
+        baseUrl: 'https://api.test',
+        fetch: fetchMock,
+        csrfPath: '/v1/console/auth/csrf',
+      });
+
+      await client.post('/a', { schema: AcceptedResponseSchema, body: {} });
+      await client.post('/b', { schema: AcceptedResponseSchema, body: {} });
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]![0]).toBe('https://api.test/v1/console/auth/csrf');
+      for (const call of fetchMock.mock.calls.slice(1)) {
+        expect(call[1].headers).toMatchObject({ 'X-CSRF-Token': 'tok-1' });
+      }
+    });
+
+    it('refreshes an invalid token and retries once', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(csrf('old'))
+        .mockResolvedValueOnce(problem('CSRF_INVALID', 403))
+        .mockResolvedValueOnce(csrf('new'))
+        .mockResolvedValueOnce(jsonResponse(202, { status: 'accepted' }));
+      const client = createApiClient({
+        baseUrl: 'https://api.test',
+        fetch: fetchMock,
+        csrfPath: '/csrf',
+      });
+
+      await expect(
+        client.post('/a', { schema: AcceptedResponseSchema, body: {} }),
+      ).resolves.toEqual({ status: 'accepted' });
+      expect(fetchMock.mock.calls[3]![1].headers).toMatchObject({ 'X-CSRF-Token': 'new' });
+    });
+
+    it('does not retry other errors', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(csrf('tok'))
+        .mockResolvedValueOnce(problem('INVALID_CREDENTIALS', 401));
+      const client = createApiClient({
+        baseUrl: 'https://api.test',
+        fetch: fetchMock,
+        csrfPath: '/csrf',
+      });
+
+      await expect(
+        client.post('/a', { schema: AcceptedResponseSchema, body: {} }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('accepts an empty 204 response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const client = createApiClient({ baseUrl: 'https://api.test', fetch: fetchMock });
+    await expect(client.post('/logout', { schema: z.undefined() })).resolves.toBeUndefined();
   });
 });
