@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import type { ApiStatus } from '../domain/api-status';
 
 export type StatusTone = 'neutral' | 'success' | 'danger';

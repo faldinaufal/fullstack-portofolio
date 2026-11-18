@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { ProblemDetailsSchema } from '@tempora/contracts';
 import type { z } from 'zod';
 import { ApiError } from './api-error.js';

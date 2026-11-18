@@ -9,6 +9,7 @@ Repo portfolio publis milik freelancer Upwork (frontend developer React/Next.js 
 - Folder utama hanya `docs/`, `Frontend/`, dan `Backend/` (+ file di root seperti README). Satu subfolder per proyek di masing-masing.
 - **Dokumentasi dulu**: tiap proyek punya `docs/<proyek>/PRD.md` (apa & kenapa) dan `FSD.md` (role, layar, alur, skema data, API, aturan bisnis). Tulis/setujui PRD → FSD sebelum coding. Jika implementasi mengubah keputusan, perbarui FSD di commit yang sama.
 - Jangan commit secret. Pakai `.env.example`.
+- Lisensi: PolyForm Noncommercial 1.0.0 (`LICENSE.md`). Tiap file sumber diawali header SPDX + copyright; dicek `pnpm headers:check` (CI) dan ditambahkan otomatis oleh pre-commit hook / `pnpm headers:fix`.
 
 ## Proyek
 | # | Proyek | Frontend | Backend |

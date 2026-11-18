@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import type { HTMLAttributes } from 'react';
 import { cn } from '../lib/cn.js';
 

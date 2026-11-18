@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 export interface CalendarDay {
   /** ISO date `YYYY-MM-DD`. */
   date: string;

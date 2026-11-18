@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 /**
  * Picks a "nice" upper bound and evenly spaced ticks for a bar chart axis,
  * so labels read 0 / 100 / 200 / 300 instead of 0 / 93.67 / 187.33 / 281.

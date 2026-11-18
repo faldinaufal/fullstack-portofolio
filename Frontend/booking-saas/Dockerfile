@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Farhan Aldi Naufal
+
 # One image definition for the three Tempora apps. Build from the repository root:
 #   docker build -f Frontend/booking-saas/Dockerfile \
 #     --build-arg APP=portal --build-arg NEXT_PUBLIC_API_URL=http://localhost:4000 .

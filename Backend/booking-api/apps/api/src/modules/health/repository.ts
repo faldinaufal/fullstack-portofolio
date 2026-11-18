@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import type { PrismaClient } from '@tempora/db';
 
 /** Data access needed by the health checks. An interface, so tests can swap in a fake. */

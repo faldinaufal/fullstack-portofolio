@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp, type App } from './app.js';
 import type { HealthRepository } from './modules/health/repository.js';

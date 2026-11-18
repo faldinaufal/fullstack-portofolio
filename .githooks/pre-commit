@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Farhan Aldi Naufal
+
+# Adds the license header to staged source files (see license-headers.mjs).
+# Enabled by "pnpm install" through the "prepare" script (git config core.hooksPath .githooks).
+exec pnpm exec lint-staged

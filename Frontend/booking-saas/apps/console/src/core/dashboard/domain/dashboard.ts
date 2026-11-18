@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (c) 2026 Farhan Aldi Naufal
+
 export type BookingStatus =
   'pending_payment' | 'confirmed' | 'completed' | 'no_show' | 'cancelled' | 'expired';
 
