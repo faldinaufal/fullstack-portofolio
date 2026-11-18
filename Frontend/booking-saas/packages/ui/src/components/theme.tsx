@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from './button.js';
+import { Icon } from './icon.js';
 
 const subscribeToNothing = () => () => {};
 
@@ -20,7 +21,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function ThemeToggle() {
+export interface ThemeToggleProps {
+  /** `surface`: bordered round button (dashboards); `brand`: white icon on a blue band. */
+  appearance?: 'surface' | 'brand';
+  className?: string;
+}
+
+export function ThemeToggle({ appearance = 'surface', className }: Readonly<ThemeToggleProps>) {
   const { resolvedTheme, setTheme } = useTheme();
   // The theme is only known in the browser: false while rendering on the server and
   // during hydration, true afterwards. Avoids a hydration mismatch on the icon.
@@ -35,13 +42,14 @@ export function ThemeToggle() {
 
   return (
     <Button
-      variant="ghost"
+      variant={appearance === 'brand' ? 'inverse-outline' : 'secondary'}
       size="icon"
       aria-label={label}
       title={label}
+      className={className}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
     >
-      <span aria-hidden="true">{isDark ? '☀' : '☾'}</span>
+      <Icon name={isDark ? 'sun' : 'moon'} size={18} />
     </Button>
   );
 }

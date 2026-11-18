@@ -55,10 +55,12 @@ export default tseslint.config(
   },
 
   // Frontend architecture: core/<feature>/{domain,data,presentation} + ui (FSD 0.2).
-  // Allowed direction: ui â†’ presentation â†’ domain â† data. Only the composition root
-  // (src/composition) may wire data implementations into the app.
+  // Allowed direction: ui -> presentation -> domain <- data. Only the composition root
+  // (src/composition) may wire data implementations into the app. Tests are exempt:
+  // a test may assemble real layers together (e.g. a view-model test fed by demo data).
   {
     files: [`${FRONTEND_APPS}/src/**/*.{ts,tsx}`],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
     plugins: { boundaries },
     settings: {
       'boundaries/elements': [
