@@ -14,30 +14,23 @@ import {
   ProblemDetailsSchema,
   ResendOtpRequestSchema,
   ResetPasswordRequestSchema,
+  SwitchMembershipRequestSchema,
   VerifyOtpRequestSchema,
 } from '@tempora/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { AppError } from '../../lib/app-error.js';
-import { generateToken, safeEqual } from '../../lib/tokens.js';
+import { generateToken } from '../../lib/tokens.js';
 import { CONSOLE_COOKIES, cookieOptions, type CookieSettings } from './cookies.js';
+import type { ConsoleGuard } from './guard.js';
 import { addMs, CONSOLE_AUTH_POLICY } from './policy.js';
-import type { ConsoleAuth, ConsoleAuthService, IssuedToken, RequestMeta } from './service.js';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    /** Set by `requireConsoleSession` on authenticated Console routes. */
-    consoleAuth: ConsoleAuth | null;
-  }
-}
+import type { ConsoleAuthService, IssuedToken, RequestMeta } from './service.js';
 
 export interface ConsoleAuthRoutesOptions {
   service: ConsoleAuthService;
   cookies: CookieSettings;
+  guard: ConsoleGuard;
 }
-
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const NoContent = z.null().describe('No content');
 const problems = (...statuses: number[]) =>
   Object.fromEntries(statuses.map((status) => [status, ProblemDetailsSchema]));
@@ -46,32 +39,11 @@ function meta(request: FastifyRequest): RequestMeta {
   return { ip: request.ip, userAgent: request.headers['user-agent'] };
 }
 
-/**
- * `/v1/console/*`. Every state-changing request must carry the CSRF token (FSD 5.1):
- * double-submit pattern, where the token is in an httpOnly cookie and must be repeated in the
- * `X-CSRF-Token` header. Another site can make the browser send the cookie, but cannot read
- * the token to put it in the header.
- */
+/** `/v1/console/auth/*` and `/v1/console/me`: sign-up, login with email code, sessions. */
 export const consoleAuthRoutes: FastifyPluginAsyncZod<ConsoleAuthRoutesOptions> = async (
   app,
-  { service, cookies },
+  { service, cookies, guard },
 ) => {
-  app.decorateRequest('consoleAuth', null);
-
-  app.addHook('onRequest', async (request) => {
-    if (SAFE_METHODS.has(request.method)) return;
-    const header = request.headers['x-csrf-token'];
-    const cookie = request.cookies[CONSOLE_COOKIES.csrf];
-    if (typeof header !== 'string' || !cookie || !safeEqual(header, cookie)) {
-      throw new AppError({
-        status: 403,
-        code: 'CSRF_INVALID',
-        title: 'Missing or invalid CSRF token',
-        detail: 'Fetch a token from GET /v1/console/auth/csrf and send it in X-CSRF-Token.',
-      });
-    }
-  });
-
   const setSession = (reply: FastifyReply, session: IssuedToken) =>
     reply.setCookie(
       CONSOLE_COOKIES.session,
@@ -81,22 +53,8 @@ export const consoleAuthRoutes: FastifyPluginAsyncZod<ConsoleAuthRoutesOptions> 
   const clearSession = (reply: FastifyReply) =>
     reply.clearCookie(CONSOLE_COOKIES.session, cookieOptions(cookies));
 
-  /** Rejects the request with 401 unless it carries a live Console session. */
-  const requireConsoleSession = async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = request.cookies[CONSOLE_COOKIES.session];
-    const auth = token ? await service.authenticate(token) : null;
-    if (!auth) {
-      clearSession(reply);
-      throw new AppError({
-        status: 401,
-        code: 'UNAUTHENTICATED',
-        title: 'Authentication required',
-        detail: 'Log in to continue.',
-      });
-    }
-    request.consoleAuth = auth;
-  };
-  const authOf = (request: FastifyRequest) => request.consoleAuth as ConsoleAuth;
+  const requireConsoleSession = guard.require();
+  const authOf = (request: FastifyRequest) => guard.actor(request);
 
   app.get(
     '/auth/csrf',
@@ -250,6 +208,28 @@ export const consoleAuthRoutes: FastifyPluginAsyncZod<ConsoleAuthRoutesOptions> 
     async (request) => {
       await service.resetPassword(request.body);
       return { status: 'accepted' as const };
+    },
+  );
+
+  app.post(
+    '/me/active-membership',
+    {
+      preHandler: requireConsoleSession,
+      schema: {
+        tags: ['console-auth'],
+        summary: 'Switch to another business of this account (new session)',
+        body: SwitchMembershipRequestSchema,
+        response: { 200: AuthenticatedSchema, ...problems(401, 404) },
+      },
+    },
+    async (request, reply) => {
+      const session = await service.switchMembership(
+        authOf(request),
+        request.body.membershipId,
+        meta(request),
+      );
+      setSession(reply, session);
+      return { status: 'authenticated' as const };
     },
   );
 

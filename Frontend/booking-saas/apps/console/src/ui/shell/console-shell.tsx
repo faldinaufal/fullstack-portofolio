@@ -18,18 +18,24 @@ import type { SessionViewModel } from '@/core/auth/presentation/session.view-mod
 import { useLogout } from '@/core/auth/presentation/use-auth';
 import { ApiStatusBadge } from '@/ui/health/api-status-badge';
 
-const NAV: Omit<ShellNavItem, 'active'>[] = [
-  { href: '/', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/calendar', label: 'Calendar', icon: 'calendar' },
-  { href: '/bookings', label: 'Bookings', icon: 'bookings' },
-  { href: '/customers', label: 'Customers', icon: 'customers' },
-  { href: '/invoices', label: 'Invoices', icon: 'invoices' },
-  { href: '/branches', label: 'Branches', icon: 'branches' },
-  { href: '/services', label: 'Services', icon: 'services' },
-  { href: '/team', label: 'Team', icon: 'team' },
-  { href: '/audit', label: 'Audit log', icon: 'audit' },
-  { href: '/emails', label: 'Email log', icon: 'emails' },
-  { href: '/settings', label: 'Settings', icon: 'settings' },
+type Role = SessionViewModel['role'];
+const ALL: Role[] = ['owner', 'manager', 'staff'];
+const LEADS: Role[] = ['owner', 'manager'];
+
+/** Sidebar entries and who sees them (FSD 2.2: the sidebar shows only what the role may use). */
+const NAV: (Omit<ShellNavItem, 'active'> & { roles: Role[] })[] = [
+  { href: '/', label: 'Dashboard', icon: 'dashboard', roles: ALL },
+  { href: '/calendar', label: 'Calendar', icon: 'calendar', roles: ALL },
+  { href: '/schedule', label: 'My schedule', icon: 'clock', roles: ['staff'] },
+  { href: '/bookings', label: 'Bookings', icon: 'bookings', roles: LEADS },
+  { href: '/customers', label: 'Customers', icon: 'customers', roles: LEADS },
+  { href: '/invoices', label: 'Invoices', icon: 'invoices', roles: LEADS },
+  { href: '/branches', label: 'Branches', icon: 'branches', roles: LEADS },
+  { href: '/services', label: 'Services', icon: 'services', roles: LEADS },
+  { href: '/team', label: 'Team', icon: 'team', roles: LEADS },
+  { href: '/audit', label: 'Audit log', icon: 'audit', roles: LEADS },
+  { href: '/emails', label: 'Email log', icon: 'emails', roles: LEADS },
+  { href: '/settings', label: 'Settings', icon: 'settings', roles: ['owner'] },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -38,7 +44,7 @@ function isActive(pathname: string, href: string) {
 
 /**
  * Console layout (dashboard design) for the signed-in account. The rail lists the
- * businesses the account belongs to (FSD 1.1: memberships); switching is a later milestone.
+ * businesses the account belongs to (FSD 1.1: memberships); choosing one switches the session.
  */
 export function ConsoleShell({
   session,
@@ -55,13 +61,18 @@ export function ConsoleShell({
       brand={{ title: session.tenantName, subtitle: session.subtitle }}
       railLabel="Businesses"
       railItems={session.businesses.map((business) => ({
-        href: '/',
-        label: business.active ? `${business.name} (current)` : business.name,
+        href: business.active ? '/' : `/switch/${business.id}`,
+        label: business.active ? `${business.name} (current)` : `Switch to ${business.name}`,
         content: { initials: business.initial },
         active: business.active,
       }))}
       navLabel="Console"
-      navItems={NAV.map((item) => ({ ...item, active: isActive(pathname, item.href) }))}
+      navItems={NAV.filter((item) => item.roles.includes(session.role)).map(
+        ({ roles: _roles, ...item }) => ({
+          ...item,
+          active: isActive(pathname, item.href),
+        }),
+      )}
       header={
         <>
           <SearchField label="Search bookings, customers, invoices" />

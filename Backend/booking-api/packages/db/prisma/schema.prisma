@@ -43,7 +43,11 @@ model Tenant {
 
   branches      Branch[]
   memberships   Membership[]
+  invitations   Invitation[]
   emailMessages EmailMessage[]
+  auditLogs     AuditLog[]
+  openingHours  BranchOpeningHours[]
+  closures      BranchClosure[]
 
   @@map("tenants")
 }
@@ -60,11 +64,49 @@ model Branch {
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  memberships Membership[]
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
+  memberships  Membership[]
+  invitations  Invitation[]
+  openingHours BranchOpeningHours[]
+  closures     BranchClosure[]
 
   @@index([tenantId])
   @@map("branches")
+}
+
+/// Weekly opening hours: one interval per weekday (0 = Sunday). No row = closed that day.
+/// Times are wall-clock times in the platform time zone (FSD 4.1). RLS: tenant policy.
+model BranchOpeningHours {
+  id       String   @id @default(uuid(7)) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  branchId String   @map("branch_id") @db.Uuid
+  weekday  Int      @db.SmallInt
+  opensAt  DateTime @map("opens_at") @db.Time(0)
+  closesAt DateTime @map("closes_at") @db.Time(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, weekday])
+  @@index([tenantId])
+  @@map("branch_opening_hours")
+}
+
+/// Holidays and one-off closures, inclusive date range. RLS: tenant policy.
+model BranchClosure {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  startsOn  DateTime @map("starts_on") @db.Date
+  endsOn    DateTime @map("ends_on") @db.Date
+  reason    String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId, startsOn])
+  @@map("branch_closures")
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +163,11 @@ model Membership {
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  teamAccount TeamAccount @relation(fields: [teamAccountId], references: [id])
-  branch      Branch?     @relation(fields: [branchId], references: [id])
-  sessions    Session[]
+  tenant             Tenant       @relation(fields: [tenantId], references: [id])
+  teamAccount        TeamAccount  @relation(fields: [teamAccountId], references: [id])
+  branch             Branch?      @relation(fields: [branchId], references: [id])
+  sessions           Session[]
+  invitationsCreated Invitation[]
 
   @@unique([teamAccountId, tenantId])
   @@index([tenantId])
@@ -229,9 +272,72 @@ model AuthToken {
   @@map("auth_tokens")
 }
 
+/// Invitation to join a tenant (FSD 3.6, 7.4). Valid 7 days; only the token's HMAC is stored.
+/// Status is derived: accepted, revoked, expired (time) or pending. RLS: tenant policy.
+model Invitation {
+  id                    String         @id @default(uuid(7)) @db.Uuid
+  tenantId              String         @map("tenant_id") @db.Uuid
+  /// Stored lowercased.
+  email                 String         @db.VarChar(254)
+  role                  MembershipRole
+  /// Null only for owner invitations (assisted onboarding, FSD 3.5).
+  branchId              String?        @map("branch_id") @db.Uuid
+  tokenHash             String         @unique @map("token_hash") @db.Char(64)
+  invitedByMembershipId String?        @map("invited_by_membership_id") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt             DateTime       @map("expires_at") @db.Timestamptz(3)
+  acceptedAt            DateTime?      @map("accepted_at") @db.Timestamptz(3)
+  revokedAt             DateTime?      @map("revoked_at") @db.Timestamptz(3)
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  branch    Branch?     @relation(fields: [branchId], references: [id])
+  invitedBy Membership? @relation(fields: [invitedByMembershipId], references: [id])
+
+  @@index([tenantId, email])
+  @@map("invitations")
+}
+
 // ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
+
+enum AuditActorType {
+  team_member
+  platform_admin
+  customer
+  system
+
+  @@map("audit_actor_type")
+}
+
+/// Append-only record of every state change (FSD 4.3, 9.2). The API's database role can
+/// insert and read but never update or delete rows. RLS: tenant policy.
+model AuditLog {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  /// Null for platform-level events.
+  tenantId   String?        @map("tenant_id") @db.Uuid
+  /// Set for branch-scoped events, so managers see only their branch's entries.
+  branchId   String?        @map("branch_id") @db.Uuid
+  actorType  AuditActorType @map("actor_type")
+  actorId    String?        @map("actor_id") @db.Uuid
+  /// Name at the time of the action, kept even if the actor changes later.
+  actorLabel String         @map("actor_label") @db.VarChar(150)
+  action     String         @db.VarChar(80)
+  entityType String         @map("entity_type") @db.VarChar(40)
+  entityId   String?        @map("entity_id") @db.Uuid
+  before     Json?
+  after      Json?
+  reason     String?        @db.VarChar(500)
+  requestId  String?        @map("request_id") @db.VarChar(128)
+  ip         String?        @db.VarChar(45)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@map("audit_logs")
+}
 
 enum EmailStatus {
   queued

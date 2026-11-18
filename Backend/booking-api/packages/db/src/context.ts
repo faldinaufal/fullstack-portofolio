@@ -15,6 +15,8 @@ export interface DbContext {
   tenantId?: string;
   /** Signed-in team account (read its own memberships across tenants). */
   teamAccountId?: string;
+  /** HMAC of an invitation link token: reveals that one invitation, before any login. */
+  invitationTokenHash?: string;
 }
 
 export interface TransactionOptions {
@@ -52,6 +54,7 @@ export async function setDbContext(tx: Tx, context: DbContext): Promise<void> {
   await tx.$queryRaw`
     SELECT
       set_config('app.tenant_id', ${context.tenantId ?? ''}, true),
-      set_config('app.team_account_id', ${context.teamAccountId ?? ''}, true)
+      set_config('app.team_account_id', ${context.teamAccountId ?? ''}, true),
+      set_config('app.invitation_token_hash', ${context.invitationTokenHash ?? ''}, true)
   `;
 }

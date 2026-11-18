@@ -88,6 +88,8 @@ export interface AuthRepository {
   verifyCode(challengeId: string, code: string, trustDevice: boolean): Promise<void>;
   resendCode(challengeId: string): Promise<CodeChallenge>;
   logout(): Promise<void>;
+  /** Moves the session to another business of the same account. */
+  switchMembership(membershipId: string): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
   resetPassword(token: string, password: string): Promise<void>;
 }

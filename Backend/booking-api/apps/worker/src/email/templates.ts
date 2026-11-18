@@ -60,6 +60,31 @@ const RENDERERS: { [T in EmailTemplate]: Renderer<T> } = {
       'If this was not you, reset your password now and contact your business owner.',
     ]),
   }),
+
+  'console.invitation': ({
+    businessName,
+    inviterName,
+    role,
+    branchName,
+    acceptUrl,
+    expiresInDays,
+  }) => {
+    const place = branchName ? `${role} at ${branchName}` : role;
+    return {
+      subject: `${inviterName} invited you to ${businessName} on Tempora`,
+      text: `${inviterName} invited you to join ${businessName} as ${place}.
+
+Accept the invitation (valid for ${expiresInDays} days):
+${acceptUrl}
+
+If you were not expecting this, ignore this email.`,
+      html: layout(`Join ${businessName}`, [
+        `${escapeHtml(inviterName)} invited you to join <strong>${escapeHtml(businessName)}</strong> as ${escapeHtml(place)}.`,
+        `<a href="${escapeHtml(acceptUrl)}" style="color:#2f5f78;font-weight:bold">Accept the invitation</a> (valid for ${expiresInDays} days).`,
+        'If you were not expecting this, you can ignore this email.',
+      ]),
+    };
+  },
 };
 
 export function isKnownTemplate(template: string): template is EmailTemplate {

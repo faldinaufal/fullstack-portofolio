@@ -257,7 +257,7 @@ Alternative paths:
 
 ### 3.6 Invite and manage team
 1. Owner (any branch) or manager (own branch) → Team → Invite: email, role (manager only for owner), branch.
-2. Invitee opens the email link, sets name and password (or logs in with an existing team account) and joins the tenant.
+2. Invitee opens the email link, sets name and password (or confirms with the password of an existing team account) and joins the tenant. The link proves the email, so a new account is created verified; the invitee then logs in normally, with the email code.
 3. Owner or manager sets working hours and the services the therapist performs.
 4. Deactivating or moving a therapist with future bookings shows the conflicting bookings; each must be reassigned or cancelled first (FSD 6.8).
 
@@ -345,7 +345,7 @@ erDiagram
 |---|---|---|
 | `tenants` | `id`, `slug` (unique), `name`, `logo_url`, `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
 | `memberships` | `id`, `tenant_id`, `team_account_id`, `role` (`owner`/`manager`/`staff`), `branch_id` (null for owner), `status` (`active`/`deactivated`), `created_at` | Unique (`team_account_id`, `tenant_id`). Partial unique indexes: one active `owner` per tenant; one active `manager` per branch. Check: managers and staff must have a branch. |
-| `invitations` | `id`, `tenant_id`, `email`, `role`, `branch_id`, `token_hash`, `invited_by_membership_id`, `expires_at`, `accepted_at`, `revoked_at` | Valid for 7 days. Accepting creates (or reuses) the team account and the membership. |
+| `invitations` | `id`, `tenant_id`, `email`, `role`, `branch_id`, `token_hash`, `invited_by_membership_id`, `created_at`, `expires_at`, `accepted_at`, `revoked_at` | Valid for 7 days. Accepting creates (or reuses) the team account and the membership. Status is derived (pending, expired, accepted, revoked). Partial unique index: at most one open invitation per tenant and email. |
 | `support_grants` | `id`, `tenant_id`, `granted_by_membership_id`, `starts_at`, `expires_at`, `revoked_at` | At most one active grant per tenant. |
 
 #### Catalogue & schedules
@@ -390,7 +390,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 #### Operations
 | Table | Key columns | Notes |
 |---|---|---|
-| `audit_logs` | `id`, `tenant_id` (null for platform events), `branch_id`, `actor_type`, `actor_id`, `actor_label`, `action` (e.g. `booking.cancelled`), `entity_type`, `entity_id`, `before`, `after` (jsonb), `reason`, `request_id`, `ip`, `created_at` | Append-only: the API's database role has no `UPDATE` or `DELETE` permission on this table. |
+| `audit_logs` | `id`, `tenant_id` (null for platform events), `branch_id`, `actor_type`, `actor_id`, `actor_label`, `action` (e.g. `booking.cancelled`), `entity_type`, `entity_id`, `before`, `after` (jsonb), `reason`, `request_id`, `ip`, `created_at` | Append-only: the API's database role has no `UPDATE` or `DELETE` permission on this table. Written in the same transaction as the change it describes. |
 | `email_messages` | `id`, `tenant_id` (null for account emails), `booking_id`, `to_email`, `template`, `payload` (jsonb), `status` (`queued`/`sent`/`failed`), `attempts`, `next_attempt_at`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Outbox and delivery log in one table (0.2), shown to owners and managers. `payload` holds the template data (it can contain a code or a link) and is erased as soon as the message is sent or finally fails. The API cannot delete rows. |
 | `rate_limit_hits` | `id`, `bucket`, `key_hash`, `created_at` | One row per counted event (8.2). The key (email, IP, account) is HMAC-hashed, so it is never stored in clear. |
 | `idempotency_keys` | `key`, `subject`, `request_hash`, `response_status`, `response_body`, `created_at`, `expires_at` | Replaying a request with the same key returns the stored response; the same key with a different body returns `422`. Kept for 24 h. |
@@ -402,12 +402,14 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
   - `app.tenant_id`: the tenant of the Console session, or the tenant whose public page the Portal request targets.
   - `app.customer_account_id`: set for Portal "my bookings" requests across tenants.
   - `app.team_account_id`: the signed-in team account, so it can read **its own** memberships in every tenant (login, tenant switcher).
+  - `app.invitation_token_hash`: the HMAC of an invitation link token, before any login.
   - `app.support_grant`: set for read-only platform admin access.
 - Policies on every tenant-owned table:
   - **tenant policy:** `tenant_id = current_setting('app.tenant_id')::uuid`
   - **customer policy** (`tenant_customers`, `bookings`, `invoices`, `payments`, read only): the row belongs to a `tenant_customer` whose `customer_account_id = current_setting('app.customer_account_id')::uuid`.
   - **support policy** (read only): the row's tenant has an active, unexpired support grant matching `app.support_grant`.
 - **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
+- **Invitation-link policy** (`invitations`, read only): the one row whose `token_hash` matches `app.invitation_token_hash`. Once found, the API switches to that invitation's tenant context.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
 - If no context is set, policies match nothing, so a forgotten context fails closed (no rows) instead of leaking.
 - Tests run queries with a deliberately wrong or missing context and assert that zero rows of other tenants are returned.
@@ -487,8 +489,10 @@ All routes below act on the tenant of the session's active membership; scope rul
 | GET | `/me` | Account, memberships, active membership, permissions | team |
 | POST | `/me/active-membership` | Switch tenant (new session bound to that membership) | team |
 | PATCH | `/me`, POST `/me/password`, GET/DELETE `/me/sessions[/:id]` | Profile and sessions | team |
-| GET | `/invitations/:token` | Invitation preview (tenant, role, branch) | none (token) |
-| POST | `/invitations/:token/accept` | Accept: create or reuse account, create membership | none (token) |
+| GET | `/invitation-links/:token` | Invitation preview (tenant, role, branch, whether the email already has an account) | none (token) |
+| POST | `/invitation-links/:token/accept` | Accept: create an account (name + password) or confirm an existing one (password), create membership | none (token) |
+
+Invitation links use `/invitation-links/:token` so they never collide with `/invitations/:id` (managing invitations).
 
 **Tenant & settings**
 | Method | Endpoint | Description | Auth |
@@ -505,7 +509,7 @@ All routes below act on the tenant of the session's active membership; scope rul
 **Branches & services**
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/branches` | List (manager: own branch only) | owner, manager |
+| GET | `/branches` | List (manager and staff: own branch only) | owner, manager, staff |
 | POST | `/branches` | Create | owner |
 | GET | `/branches/:id` | Detail | owner, manager |
 | PATCH | `/branches/:id` | Update details | owner, manager (own) |
@@ -663,7 +667,9 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 - **Deactivating or demoting** a member, or changing their branch, revokes all their Console sessions for that tenant immediately.
 - **Ownership transfer** requires the owner's password; in one transaction the new owner's membership becomes `owner` and the old owner becomes `manager` of a branch without a manager, or is deactivated. The partial unique indexes guarantee exactly one owner at every moment.
 - **Assigning a manager** to a branch that already has one requires choosing the current manager's new state in the same request (demote to staff, move to a branch without a manager, or deactivate).
-- **Invitations** expire after 7 days; accepting an expired or revoked invitation returns `410 INVITATION_EXPIRED`.
+- **Invitations** expire after 7 days; accepting an expired or revoked invitation returns `410 INVITATION_EXPIRED`. Inviting someone who is already a member returns `409 ALREADY_MEMBER`; a second open invitation for the same email returns `409 INVITATION_PENDING`; inviting a manager to a branch that has one returns `409 BRANCH_HAS_MANAGER`.
+- **Archiving a branch** is also rejected while active members work there (`409 HAS_ACTIVE_MEMBERS`); move or deactivate them first. Open invitations to the branch are revoked.
+- **Implementation order:** the `HAS_ACTIVE_BOOKINGS` checks of this section are added together with bookings; until then, team and branch changes are not blocked by bookings because none exist.
 
 ### 6.9 Tenant suspension
 - The Portal shows the tenant as unavailable; availability search and new bookings return `423 TENANT_SUSPENDED`.
@@ -733,6 +739,9 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `HAS_ACTIVE_BOOKINGS` | 409 | Rule 6.8 (list of bookings included) |
 | `VERSION_CONFLICT` | 409 | Optimistic lock: the record changed since it was loaded |
 | `EMAIL_TAKEN` / `SLUG_TAKEN` | 409 | Sign-up with an email or business address already in use |
+| `ALREADY_MEMBER` / `INVITATION_PENDING` | 409 | Invitation for someone who is already a member / already invited (6.8) |
+| `BRANCH_HAS_MANAGER` | 409 | The branch already has an active manager; choose what happens to them (6.8) |
+| `HAS_ACTIVE_MEMBERS` | 409 | Archiving a branch where active members still work (6.8) |
 | `INVITATION_EXPIRED` | 410 | Rule 6.8 |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
 | `TENANT_SUSPENDED` | 423 | Rule 6.9 |

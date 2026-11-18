@@ -5,8 +5,10 @@
 
 import { createContext, useContext } from 'react';
 import type { AuthUseCases } from '../../auth/domain/auth-use-cases';
+import type { BranchRepository } from '../../branches/domain/branch';
 import type { GetDashboard } from '../../dashboard/domain/get-dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
+import type { TeamRepository } from '../../team/domain/team';
 
 /**
  * Use cases available to the presentation layer. Presentation depends on these
@@ -15,6 +17,8 @@ import type { GetApiStatus } from '../../health/domain/get-api-status';
  */
 export interface Dependencies {
   auth: AuthUseCases;
+  branches: BranchRepository;
+  team: TeamRepository;
   getApiStatus: GetApiStatus;
   getDashboard: GetDashboard;
 }

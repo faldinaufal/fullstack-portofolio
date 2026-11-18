@@ -11,6 +11,14 @@ export interface EmailPayloads {
   'console.login_code': { name: string; code: string; expiresInMinutes: number };
   'console.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
   'console.password_changed': { name: string };
+  'console.invitation': {
+    businessName: string;
+    inviterName: string;
+    role: 'owner' | 'manager' | 'staff';
+    branchName: string | null;
+    acceptUrl: string;
+    expiresInDays: number;
+  };
 }
 
 export type EmailTemplate = keyof EmailPayloads;

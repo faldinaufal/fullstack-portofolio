@@ -47,6 +47,8 @@ export interface IssuedToken {
 export interface ConsoleAuth {
   sessionId: string;
   teamAccountId: string;
+  /** Shown in the audit log as the actor's name. */
+  accountName: string;
   membershipId: string;
   tenantId: string;
   role: 'owner' | 'manager' | 'staff';
@@ -464,11 +466,44 @@ export function createConsoleAuthService({
         return {
           sessionId: session.id,
           teamAccountId,
+          accountName: membership.teamAccount.name,
           membershipId: membership.id,
           tenantId: membership.tenantId,
           role: membership.role,
           branchId: membership.branchId,
         };
+      });
+    },
+
+    /**
+     * Tenant switcher (FSD 1.1): a new session bound to another of the account's active
+     * memberships replaces the current one.
+     */
+    async switchMembership(
+      auth: ConsoleAuth,
+      membershipId: string,
+      meta: RequestMeta,
+    ): Promise<IssuedToken> {
+      return withDbContext(prisma, { teamAccountId: auth.teamAccountId }, async (tx) => {
+        const memberships = await repo.listActiveMemberships(tx, auth.teamAccountId);
+        const target = memberships.find((membership) => membership.id === membershipId);
+        if (!target) {
+          throw new AppError({ status: 404, code: 'NOT_FOUND', title: 'Not found' });
+        }
+        const at = now();
+        const token = generateToken();
+        const expiresAt = addMs(at, POLICY.sessionMaxMs);
+        await repo.createConsoleSession(tx, {
+          tokenHash: hashToken('session', token),
+          teamAccountId: auth.teamAccountId,
+          membershipId: target.id,
+          now: at,
+          expiresAt,
+          ip: meta.ip,
+          userAgent: meta.userAgent?.slice(0, 300) ?? null,
+        });
+        await repo.revokeSession(tx, auth.sessionId, at);
+        return { token, expiresAt };
       });
     },
 

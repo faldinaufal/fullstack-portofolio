@@ -2,7 +2,7 @@
 
 Backend of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Frontend: [`Frontend/booking-saas`](../../Frontend/booking-saas).
 
-**Status:** foundation and Console authentication with tenant isolation (row-level security) are in place. Booking features come next.
+**Status:** foundation, Console authentication, tenant isolation (row-level security), branches, team management and the audit log are in place. Services, schedules and bookings come next.
 
 ## Stack
 
@@ -22,10 +22,14 @@ Node.js 24 · TypeScript · Fastify 5 · Zod 4 · PostgreSQL 17 · Prisma 7 · p
 | Tenant isolation | PostgreSQL row-level security on tenant-owned tables. Every query runs in a transaction that first sets `app.tenant_id` / `app.team_account_id` with `set_config(..., true)`; without a context, policies match no rows (fails closed) |
 | Console authentication | Sign-up (account + business + owner in one transaction), login with an emailed 6-digit code, "trust this device for 30 days", logout / logout everywhere, password reset, `GET /v1/console/me` |
 | Session security | Server-side sessions (random token in an httpOnly cookie, only its HMAC stored), 12 h idle / 7 days maximum, CSRF double-submit token, Argon2id passwords, rate limits counted in PostgreSQL, same answer for unknown email and wrong password |
+| Branches | Create, update (optimistic locking with `If-Match`), archive, weekly opening hours, closures; owner sees every branch, a manager only their own |
+| Team | Invitations by email (7 days, resend, revoke), accept as a new or existing account, change role or branch, one manager per branch with an explicit decision about the current one, deactivate / reactivate (ends sessions at once), switch between businesses |
+| Authorization | Role check per route plus scope rules in one module (`console-auth/access.ts`); records outside the caller's scope answer `404`, not `403` |
+| Audit log | Every change above writes an entry (actor, before/after, request ID) in the same transaction; the API role cannot update or delete entries |
 | Email | Transactional outbox: the API queues emails in `email_messages` inside its own transactions; the worker sends them over SMTP (Mailpit locally) with retries and exponential back-off, then erases codes and links from the row |
 | Background jobs | Worker process running the email outbox and pg-boss with an example scheduled job |
 | Shutdown | Graceful shutdown for API and worker (finish in-flight work on deploy) |
-| Tests | Unit tests (rules, tokens, templates) and integration tests through HTTP against a real PostgreSQL with the restricted roles: sign-up, login, code expiry and attempt limits, trusted devices, session timeout, password reset, rate limits, RLS isolation between tenants, one owner per tenant, concurrent outbox workers |
+| Tests | Unit tests (rules, access scopes, tokens, templates) and integration tests through HTTP against a real PostgreSQL with the restricted roles: sign-up, login, code expiry and attempt limits, trusted devices, session timeout, password reset, rate limits, RLS isolation between tenants, one owner per tenant, branch scope per role, invitations end to end, manager replacement, optimistic locking, append-only audit log, concurrent outbox workers |
 
 ## Layout
 

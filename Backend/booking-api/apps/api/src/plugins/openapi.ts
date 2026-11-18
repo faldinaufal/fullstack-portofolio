@@ -24,6 +24,8 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
       tags: [
         { name: 'system', description: 'Health and readiness' },
         { name: 'console-auth', description: 'Console sign-up, login with email code, sessions' },
+        { name: 'console-branches', description: 'Branches, opening hours and closures' },
+        { name: 'console-team', description: 'Members, roles and invitations' },
       ],
     },
     transform: jsonSchemaTransform,
