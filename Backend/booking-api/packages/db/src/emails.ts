@@ -7,6 +7,23 @@
  * type-check against the same definition. Import from `@tempora/db/emails`, which does not
  * load the Prisma client.
  */
+/**
+ * What every booking email says about the booking. A `type`, not an `interface`, so it fits
+ * Prisma's JSON column type (interfaces have no implicit index signature).
+ */
+export type BookingEmailDetails = {
+  name: string;
+  businessName: string;
+  serviceName: string;
+  therapist: string;
+  /** Formatted in the platform time zone, e.g. "Monday 23 November 2026 at 10:00". */
+  when: string;
+  branchName: string;
+  address: string | null;
+  /** My bookings for a linked account, else the guest link. */
+  bookingUrl: string;
+};
+
 export interface EmailPayloads {
   'console.login_code': { name: string; code: string; expiresInMinutes: number };
   'console.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
@@ -14,18 +31,9 @@ export interface EmailPayloads {
   'portal.verify_email': { name: string; verifyUrl: string; expiresInHours: number };
   'portal.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
   'portal.password_changed': { name: string };
-  'portal.booking_confirmed': {
-    name: string;
-    businessName: string;
-    serviceName: string;
-    therapist: string;
-    when: string;
-    branchName: string;
-    address: string | null;
-    invoiceNumber: string;
-    priceCents: number;
-    bookingUrl: string;
-  };
+  'portal.booking_confirmed': BookingEmailDetails & { invoiceNumber: string; priceCents: number };
+  'portal.booking_reminder': BookingEmailDetails;
+  'portal.booking_rescheduled': BookingEmailDetails & { previousWhen: string };
   'console.payment_needs_attention': { name: string; bookingId: string };
   'console.invitation': {
     businessName: string;

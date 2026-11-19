@@ -69,6 +69,7 @@ const app = await buildApp({
       payments,
       hashToken,
       timeZone: env.APP_TIME_ZONE,
+      portalUrl: env.PORTAL_URL,
     }),
   },
   portalAuth: {

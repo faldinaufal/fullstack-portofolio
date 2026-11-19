@@ -6,7 +6,9 @@ import type { Tx } from '@tempora/db';
 import { displayName } from '../public/service.js';
 
 const INCLUDE = {
-  tenant: { select: { slug: true, name: true } },
+  tenant: {
+    select: { slug: true, name: true, cancellationCutoffHours: true, maxCustomerReschedules: true },
+  },
   branch: { select: { name: true, address: true } },
   staff: { include: { teamAccount: { select: { name: true } } } },
   invoice: { include: { payments: { orderBy: { createdAt: 'desc' as const } } } },
@@ -33,7 +35,7 @@ function toPortalBooking(row: BookingRow, now: Date, timeZone: string): PortalBo
   return {
     id: row.id,
     status,
-    business: row.tenant,
+    business: { slug: row.tenant.slug, name: row.tenant.name },
     branchName: row.branch.name,
     serviceName: row.serviceName,
     therapist: displayName(row.staff.teamAccount.name),
@@ -46,13 +48,41 @@ function toPortalBooking(row: BookingRow, now: Date, timeZone: string): PortalBo
   };
 }
 
+/**
+ * FSD 6.5, customer or guest: confirmed bookings only, before `starts_at − cut-off`, and
+ * while reschedules are left. Null for any other status.
+ */
+export function reschedulingOf(
+  row: {
+    status: string;
+    startsAt: Date;
+    customerRescheduleCount: number;
+    tenant: { cancellationCutoffHours: number; maxCustomerReschedules: number };
+  },
+  now: Date,
+): { allowed: boolean; remaining: number; until: string; reason: RescheduleBlock | null } | null {
+  if (row.status !== 'confirmed') return null;
+  const until = new Date(row.startsAt.getTime() - row.tenant.cancellationCutoffHours * 3_600_000);
+  const remaining = Math.max(0, row.tenant.maxCustomerReschedules - row.customerRescheduleCount);
+  let reason: RescheduleBlock | null = null;
+  if (now >= until) reason = 'CUTOFF_PASSED';
+  else if (remaining === 0) reason = 'RESCHEDULE_LIMIT_REACHED';
+  return { allowed: reason === null, remaining, until: until.toISOString(), reason };
+}
+
+export type RescheduleBlock = 'CUTOFF_PASSED' | 'RESCHEDULE_LIMIT_REACHED';
+
 function toDetail(row: BookingRow, now: Date, timeZone: string): PortalBookingDetail {
   const booking = toPortalBooking(row, now, timeZone);
   const invoice = row.invoice!;
   const open = booking.status === 'pending_payment';
   const checkout = invoice.payments.find((p) => p.status === 'pending' && p.expiresAt > now);
+  const rescheduling = reschedulingOf(row, now);
   return {
     ...booking,
+    branchId: row.branchId,
+    serviceId: row.serviceId,
+    staffId: row.staffMembershipId,
     branchAddress: row.branch.address,
     notes: row.customerNotes,
     invoice: {
@@ -63,7 +93,8 @@ function toDetail(row: BookingRow, now: Date, timeZone: string): PortalBookingDe
       paidAt: invoice.paidAt?.toISOString() ?? null,
     },
     payBy: open && checkout ? checkout.expiresAt.toISOString() : null,
-    actions: { pay: open && !!checkout, cancel: open },
+    actions: { pay: open && !!checkout, cancel: open, reschedule: rescheduling?.allowed ?? false },
+    rescheduling: rescheduling && { remaining: rescheduling.remaining, until: rescheduling.until },
   };
 }
 

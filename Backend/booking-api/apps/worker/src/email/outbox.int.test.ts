@@ -60,7 +60,7 @@ describe('email outbox (as tempora_jobs)', () => {
 
     const result = await createOutboxProcessor({ db: jobs, mailer, logger }).processBatch();
 
-    expect(result).toEqual({ sent: 1, failed: 0 });
+    expect(result).toEqual({ sent: 1, failed: 0, skipped: 0 });
     expect(sent[0]).toMatchObject({ to: 'ines.halvorsen@veloria.test' });
     expect(sent[0]!.subject).toContain('421700');
     expect(await row(id)).toMatchObject({ status: 'sent', payload: null, attempts: 1 });

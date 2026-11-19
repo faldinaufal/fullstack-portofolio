@@ -26,6 +26,9 @@ export interface ReservationSummary {
 }
 
 export interface Reservation extends ReservationSummary {
+  branchId: string;
+  serviceId: string;
+  staffId: string;
   branchAddress: string | null;
   notes: string | null;
   invoice: {
@@ -38,7 +41,49 @@ export interface Reservation extends ReservationSummary {
   /** Pay before this; null when nothing is left to pay. */
   payBy: Date | null;
   /** Decided by the API, so every screen offers the same actions. */
-  actions: { pay: boolean; cancel: boolean };
+  actions: { pay: boolean; cancel: boolean; reschedule: boolean };
+  /** Confirmed bookings: customer reschedules left and the last moment to move it. */
+  rescheduling: { remaining: number; until: Date } | null;
+}
+
+export interface RescheduleSlot {
+  startsAt: Date;
+  endsAt: Date;
+}
+
+export interface InvoiceSummary {
+  reservationId: string;
+  number: string;
+  status: 'open' | 'paid' | 'void';
+  amountCents: number;
+  issuedAt: Date;
+  businessName: string;
+  serviceName: string;
+}
+
+export interface InvoicePage {
+  items: InvoiceSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** Everything a printed invoice shows (FSD 6.10). */
+export interface Invoice {
+  reservationId: string;
+  number: string;
+  status: 'open' | 'paid' | 'void';
+  currency: string;
+  amountCents: number;
+  issuedAt: Date;
+  paidAt: Date | null;
+  voidedAt: Date | null;
+  voidReason: string | null;
+  business: { name: string; slug: string };
+  branch: { name: string; address: string | null };
+  billedTo: { name: string; email: string };
+  line: { description: string; therapist: string; startsAt: Date; durationMinutes: number };
+  timeZone: string;
 }
 
 export interface GuestContact {
@@ -83,6 +128,19 @@ export interface ReservationRepository {
   /** The Checkout URL that is still open. */
   resumePayment(id: string, accessToken: string | null): Promise<string>;
   cancel(id: string, accessToken: string | null): Promise<Reservation>;
+  /** Free times to move to (FSD 6.5); the booking's own time does not count as taken. */
+  rescheduleSlots(
+    id: string,
+    accessToken: string | null,
+    query: { date: string; staffId: string },
+  ): Promise<RescheduleSlot[]>;
+  reschedule(
+    id: string,
+    accessToken: string | null,
+    input: { startsAt: Date; staffId: string },
+  ): Promise<Reservation>;
+  invoice(id: string, accessToken: string | null): Promise<Invoice>;
+  invoices(page: number): Promise<InvoicePage>;
 }
 
 /**
@@ -135,4 +193,30 @@ export function keepWaitingForPayment(
     (status === undefined || status === 'pending_payment') &&
     now.getTime() - waitingSince.getTime() < CONFIRMATION_WAIT_MS
   );
+}
+
+/**
+ * Why a confirmed booking can or cannot be moved online (FSD 6.5), for the line next to
+ * the "Reschedule" button. Null when the booking is not confirmed.
+ */
+export function rescheduleNotice(
+  reservation: Pick<Reservation, 'rescheduling' | 'actions'>,
+): { allowed: boolean; message: string } | null {
+  const rules = reservation.rescheduling;
+  if (!rules) return null;
+  if (reservation.actions.reschedule) {
+    const left = rules.remaining === 1 ? '1 change left' : `${rules.remaining} changes left`;
+    return { allowed: true, message: left };
+  }
+  if (rules.remaining === 0) {
+    return {
+      allowed: false,
+      message:
+        'This booking has been moved as often as allowed. Contact the business to change it.',
+    };
+  }
+  return {
+    allowed: false,
+    message: 'It is too close to the session to move it online. Contact the business to change it.',
+  };
 }

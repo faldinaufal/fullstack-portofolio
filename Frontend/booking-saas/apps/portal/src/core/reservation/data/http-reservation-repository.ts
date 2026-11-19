@@ -3,17 +3,26 @@
 
 import type { ApiClient } from '@tempora/api-client';
 import {
+  AvailabilitySchema,
   BookingCreatedSchema,
   CheckoutLinkSchema,
   PortalBookingDetailSchema,
   PortalBookingListSchema,
+  PortalInvoiceListSchema,
+  PortalInvoiceSchema,
   type PortalBooking,
   type PortalBookingDetail,
+  type PortalInvoice,
 } from '@tempora/contracts';
 import { z } from 'zod';
 import { request } from '../../shared/data/to-request-error';
 import type { DemoCheckoutRepository } from '../domain/demo-checkout';
-import type { Reservation, ReservationRepository, ReservationSummary } from '../domain/reservation';
+import type {
+  Invoice,
+  Reservation,
+  ReservationRepository,
+  ReservationSummary,
+} from '../domain/reservation';
 
 const PT = '/v1/portal';
 
@@ -40,6 +49,9 @@ export function toReservationSummary(dto: PortalBooking): ReservationSummary {
 export function toReservation(dto: PortalBookingDetail): Reservation {
   return {
     ...toReservationSummary(dto),
+    branchId: dto.branchId,
+    serviceId: dto.serviceId,
+    staffId: dto.staffId,
     branchAddress: dto.branchAddress,
     notes: dto.notes,
     invoice: {
@@ -49,6 +61,31 @@ export function toReservation(dto: PortalBookingDetail): Reservation {
     },
     payBy: dto.payBy ? new Date(dto.payBy) : null,
     actions: dto.actions,
+    rescheduling: dto.rescheduling && {
+      remaining: dto.rescheduling.remaining,
+      until: new Date(dto.rescheduling.until),
+    },
+  };
+}
+
+const optionalDate = (value: string | null) => (value ? new Date(value) : null);
+
+export function toInvoice(dto: PortalInvoice): Invoice {
+  return {
+    reservationId: dto.bookingId,
+    number: dto.number,
+    status: dto.status,
+    currency: dto.currency,
+    amountCents: dto.amountCents,
+    issuedAt: new Date(dto.issuedAt),
+    paidAt: optionalDate(dto.paidAt),
+    voidedAt: optionalDate(dto.voidedAt),
+    voidReason: dto.voidReason,
+    business: dto.business,
+    branch: dto.branch,
+    billedTo: dto.billedTo,
+    line: { ...dto.line, startsAt: new Date(dto.line.startsAt) },
+    timeZone: dto.timeZone,
   };
 }
 
@@ -123,6 +160,59 @@ export function createHttpReservationRepository(client: ApiClient): ReservationR
           }),
         ),
       ),
+
+    rescheduleSlots: (id, token, query) =>
+      request(async () => {
+        const params = new URLSearchParams(query);
+        const dto = await client.get(`${PT}/bookings/${id}/reschedule-slots?${params}`, {
+          schema: AvailabilitySchema,
+          headers: guest(token),
+        });
+        return dto.slots.map((slot) => ({
+          startsAt: new Date(slot.startsAt),
+          endsAt: new Date(slot.endsAt),
+        }));
+      }),
+
+    reschedule: (id, token, input) =>
+      request(async () =>
+        toReservation(
+          await client.post(`${PT}/bookings/${id}/reschedule`, {
+            schema: PortalBookingDetailSchema,
+            headers: guest(token),
+            body: { startsAt: input.startsAt.toISOString(), staffId: input.staffId },
+          }),
+        ),
+      ),
+
+    invoice: (id, token) =>
+      request(async () =>
+        toInvoice(
+          await client.get(`${PT}/bookings/${id}/invoice`, {
+            schema: PortalInvoiceSchema,
+            headers: guest(token),
+          }),
+        ),
+      ),
+
+    invoices: (page) =>
+      request(async () => {
+        const dto = await client.get(`${PT}/invoices?page=${page}&pageSize=20`, {
+          schema: PortalInvoiceListSchema,
+        });
+        return {
+          ...dto,
+          items: dto.items.map((item) => ({
+            reservationId: item.bookingId,
+            number: item.number,
+            status: item.status,
+            amountCents: item.amountCents,
+            issuedAt: new Date(item.issuedAt),
+            businessName: item.businessName,
+            serviceName: item.serviceName,
+          })),
+        };
+      }),
   };
 }
 

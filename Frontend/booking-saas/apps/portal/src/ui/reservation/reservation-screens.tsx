@@ -5,7 +5,7 @@
 
 import { Alert, Badge, Button, Card, Icon } from '@tempora/ui';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCustomer } from '@/core/account/presentation/use-account';
 import {
@@ -146,9 +146,14 @@ export function MyBookingsScreen() {
     <ReservationPage>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-[32px] leading-tight font-extrabold">My bookings</h1>
-        <Link href="/account/profile" className="font-semibold text-primary-text">
-          Profile and security
-        </Link>
+        <span className="flex gap-4">
+          <Link href="/account/invoices" className="font-semibold text-primary-text">
+            Invoices
+          </Link>
+          <Link href="/account/profile" className="font-semibold text-primary-text">
+            Profile and security
+          </Link>
+        </span>
       </div>
       {!customer.emailVerified && (
         <Alert tone="info">
@@ -214,5 +219,20 @@ export function MyBookingsScreen() {
         </nav>
       )}
     </ReservationPage>
+  );
+}
+
+/** `/bookings/[id]`: one booking for customers and guests (session or this tab's link). */
+export function BookingScreen({ id }: Readonly<{ id: string }>) {
+  const rescheduled = useSearchParams().get('rescheduled') === '1';
+  const reservation = useReservation(id);
+  if (reservation.isPending) return <ReservationLoading />;
+  if (reservation.isError) return <ReservationUnavailable />;
+  return (
+    <ReservationDetail
+      reservation={reservation.data}
+      title="Your booking"
+      notice={rescheduled ? 'Your booking was moved. We emailed you the new time.' : undefined}
+    />
   );
 }

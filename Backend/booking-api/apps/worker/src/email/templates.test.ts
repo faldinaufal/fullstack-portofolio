@@ -38,6 +38,25 @@ describe('email templates', () => {
     expect(email.html).toContain('href="http://localhost:3001/invite/abc"');
   });
 
+  it('shows the new and the previous time when a booking is moved', () => {
+    const email = renderEmail('portal.booking_rescheduled', {
+      name: 'Omar Haddad',
+      businessName: 'Lumen <Wellness>',
+      serviceName: 'Deep Tissue Massage',
+      therapist: 'Ines H.',
+      when: 'Monday 23 November 2026 at 14:00',
+      previousWhen: 'Monday 23 November 2026 at 10:00',
+      branchName: 'Downtown',
+      address: '12 Harbor Street',
+      bookingUrl: 'http://localhost:3000/manage/token',
+    });
+    expect(email.subject).toContain('Booking moved');
+    expect(email.text).toContain('New: Monday 23 November 2026 at 14:00');
+    expect(email.text).toContain('Was: Monday 23 November 2026 at 10:00');
+    expect(email.html).toContain('Lumen &lt;Wellness&gt;');
+    expect(email.html).toContain('http://localhost:3000/manage/token');
+  });
+
   it('recognises only known templates', () => {
     expect(isKnownTemplate('console.password_reset')).toBe(true);
     expect(isKnownTemplate('console.unknown')).toBe(false);

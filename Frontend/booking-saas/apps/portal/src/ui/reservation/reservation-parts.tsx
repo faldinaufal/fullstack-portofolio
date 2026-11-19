@@ -3,12 +3,13 @@
 
 'use client';
 
-import { Alert, Badge, Button, Card, ConfirmDialog, Icon } from '@tempora/ui';
+import { Alert, Badge, Button, buttonVariants, Card, ConfirmDialog, Icon } from '@tempora/ui';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { formatPrice } from '@/core/booking/presentation/use-booking';
 import {
   toReservationView,
+  rescheduleNotice,
   useCancelReservation,
   useCountdown,
   useResumePayment,
@@ -164,10 +165,12 @@ export function PaymentActions({ reservation }: Readonly<{ reservation: Reservat
 export function ReservationDetail({
   reservation,
   title,
-}: Readonly<{ reservation: Reservation; title: string }>) {
+  notice,
+}: Readonly<{ reservation: Reservation; title: string; notice?: string | undefined }>) {
   return (
     <ReservationPage>
       <h1 className="text-[32px] leading-tight font-extrabold">{title}</h1>
+      {notice && <Alert tone="success">{notice}</Alert>}
       {reservation.status === 'cancelled' && (
         <Alert tone="info">This booking was cancelled. Nothing was charged.</Alert>
       )}
@@ -178,6 +181,7 @@ export function ReservationDetail({
       )}
       <ReservationSummaryCard reservation={reservation} />
       <PaymentActions reservation={reservation} />
+      <ChangeAndInvoice reservation={reservation} />
       {(reservation.status === 'cancelled' || reservation.status === 'expired') && (
         <Link
           href={`/${reservation.business.slug}/book`}
@@ -187,5 +191,33 @@ export function ReservationDetail({
         </Link>
       )}
     </ReservationPage>
+  );
+}
+
+/** "Reschedule" (or why not, FSD 6.5) and the invoice link. */
+function ChangeAndInvoice({ reservation }: Readonly<{ reservation: Reservation }>) {
+  const notice = rescheduleNotice(reservation);
+  return (
+    <div className="flex flex-col gap-3">
+      {notice && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <span className="text-sm text-muted">{notice.message}</span>
+          {notice.allowed && (
+            <Link
+              href={`/bookings/${reservation.id}/reschedule`}
+              className={buttonVariants({ variant: 'secondary' })}
+            >
+              Reschedule
+            </Link>
+          )}
+        </Card>
+      )}
+      <Link
+        href={`/bookings/${reservation.id}/invoice`}
+        className="font-semibold text-primary-text"
+      >
+        View invoice {reservation.invoice.number}
+      </Link>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { EmailSchema, PersonNameSchema } from './console-auth.js';
-import { PhoneSchema } from './console-branches.js';
+import { DateOnlySchema, PhoneSchema } from './console-branches.js';
 
 /** `POST /v1/portal/bookings` and payments (FSD 5.3, 6.3, 6.4). */
 
@@ -93,13 +93,21 @@ export const BookingInvoiceSchema = z
 
 /** `GET /v1/portal/bookings/:id` and `/guest/booking`: the booking with what may be done next. */
 export const PortalBookingDetailSchema = PortalBookingSchema.extend({
+  branchId: z.uuid(),
+  serviceId: z.uuid(),
+  staffId: z.uuid(),
   branchAddress: z.string().nullable(),
   notes: z.string().nullable(),
   invoice: BookingInvoiceSchema,
   /** Pay before this (the Checkout expiry, FSD 6.3); null when nothing is left to pay. */
   payBy: z.iso.datetime().nullable(),
   /** Allowed actions, decided by the API so every screen shows the same buttons. */
-  actions: z.object({ pay: z.boolean(), cancel: z.boolean() }),
+  actions: z.object({ pay: z.boolean(), cancel: z.boolean(), reschedule: z.boolean() }),
+  /**
+   * Confirmed bookings only (FSD 6.5): customer reschedules left and the cut-off, so the
+   * Portal can say why rescheduling is not offered.
+   */
+  rescheduling: z.object({ remaining: z.number().int(), until: z.iso.datetime() }).nullable(),
 }).meta({ id: 'PortalBookingDetail' });
 export type PortalBookingDetail = z.infer<typeof PortalBookingDetailSchema>;
 
@@ -122,3 +130,75 @@ export type PortalBookingList = z.infer<typeof PortalBookingListSchema>;
 
 export const CheckoutLinkSchema = z.object({ checkoutUrl: z.url() }).meta({ id: 'CheckoutLink' });
 export type CheckoutLink = z.infer<typeof CheckoutLinkSchema>;
+
+/** `GET /v1/portal/bookings/:id/reschedule-slots` (FSD 6.5). */
+export const RescheduleSlotsQuerySchema = z.object({
+  date: DateOnlySchema,
+  /** Another therapist of the same branch who performs the service, or the current one. */
+  staffId: z.uuid(),
+});
+export type RescheduleSlotsQuery = z.infer<typeof RescheduleSlotsQuerySchema>;
+
+export const RescheduleRequestSchema = z
+  .object({
+    startsAt: z.iso.datetime({ offset: true }),
+    /** Defaults to the current therapist. */
+    staffId: z.uuid().optional(),
+  })
+  .meta({ id: 'RescheduleRequest' });
+export type RescheduleRequest = z.infer<typeof RescheduleRequestSchema>;
+
+export const PortalInvoiceSummarySchema = z
+  .object({
+    bookingId: z.uuid(),
+    number: z.string(),
+    status: z.enum(['open', 'paid', 'void']),
+    amountCents: z.number().int(),
+    issuedAt: z.iso.datetime(),
+    businessName: z.string(),
+    serviceName: z.string(),
+  })
+  .meta({ id: 'PortalInvoiceSummary' });
+export type PortalInvoiceSummary = z.infer<typeof PortalInvoiceSummarySchema>;
+
+export const PortalInvoiceListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type PortalInvoiceListQuery = z.infer<typeof PortalInvoiceListQuerySchema>;
+
+export const PortalInvoiceListSchema = z
+  .object({
+    items: z.array(PortalInvoiceSummarySchema),
+    page: z.number().int(),
+    pageSize: z.number().int(),
+    total: z.number().int(),
+  })
+  .meta({ id: 'PortalInvoiceList' });
+export type PortalInvoiceList = z.infer<typeof PortalInvoiceListSchema>;
+
+/** `GET /v1/portal/bookings/:id/invoice` (FSD 6.10): everything a printed invoice shows. */
+export const PortalInvoiceSchema = z
+  .object({
+    bookingId: z.uuid(),
+    number: z.string(),
+    status: z.enum(['open', 'paid', 'void']),
+    currency: z.string(),
+    amountCents: z.number().int(),
+    issuedAt: z.iso.datetime(),
+    paidAt: z.iso.datetime().nullable(),
+    voidedAt: z.iso.datetime().nullable(),
+    voidReason: z.string().nullable(),
+    business: z.object({ name: z.string(), slug: z.string() }),
+    branch: z.object({ name: z.string(), address: z.string().nullable() }),
+    billedTo: z.object({ name: z.string(), email: z.string() }),
+    line: z.object({
+      description: z.string(),
+      therapist: z.string(),
+      startsAt: z.iso.datetime(),
+      durationMinutes: z.number().int(),
+    }),
+    timeZone: z.string(),
+  })
+  .meta({ id: 'PortalInvoice' });
+export type PortalInvoice = z.infer<typeof PortalInvoiceSchema>;

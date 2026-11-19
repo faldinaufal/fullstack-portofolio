@@ -15,6 +15,8 @@ export interface SlotRequest {
   staffId: string;
   /** Calendar date in the business time zone, `YYYY-MM-DD`. */
   date: string;
+  /** Rescheduling: the booking being moved does not block its own new time (FSD 6.5). */
+  excludeBookingId?: string;
 }
 
 /**
@@ -80,6 +82,7 @@ export async function loadAvailabilityInput(
   const active = await tx.booking.findMany({
     where: {
       staffMembershipId: therapist.id,
+      ...(request.excludeBookingId && { id: { not: request.excludeBookingId } }),
       startsAt: { lt: dayEnd },
       blockedUntil: { gt: dayStart },
       OR: [{ status: 'confirmed' }, { status: 'pending_payment', holdExpiresAt: { gt: now } }],

@@ -13,6 +13,8 @@ import { recordAudit, type AuditActor } from '../../lib/audit.js';
 import type { PaymentProvider } from '../../lib/payments/provider.js';
 import type { TokenHasher } from '../../lib/tokens.js';
 import { locateBooking, type BookingViewer, type LocatedBooking } from './access.js';
+import { createPortalInvoices } from './invoices.js';
+import { createReschedule } from './reschedule.js';
 import { portalBookingDetail, portalBookings } from './views.js';
 
 export interface PortalBookingServiceDeps {
@@ -20,6 +22,7 @@ export interface PortalBookingServiceDeps {
   payments: PaymentProvider;
   hashToken: TokenHasher;
   timeZone: string;
+  portalUrl: string;
   now?: () => Date;
 }
 
@@ -41,14 +44,16 @@ const holdExpired = () =>
   });
 
 /**
- * What customers and guests do with their bookings in the Portal (FSD 5.3, 6.7): "My
- * bookings", one booking's detail, resuming payment and cancelling an unpaid booking.
+ * What customers and guests do with their bookings in the Portal (FSD 5.3, 6.5, 6.7): "My
+ * bookings", one booking's detail, resuming payment, cancelling an unpaid booking,
+ * rescheduling (`reschedule.ts`) and invoices (`invoices.ts`).
  */
 export function createPortalBookingService({
   prisma,
   payments,
   hashToken,
   timeZone,
+  portalUrl,
   now = () => new Date(),
 }: PortalBookingServiceDeps) {
   const inTenant = <T>(tenantId: string, work: (tx: Tx) => Promise<T>) =>
@@ -61,7 +66,7 @@ export function createPortalBookingService({
     inTenant(found.tenantId, (tx) => portalBookingDetail(tx, found.bookingId, now(), timeZone));
   const detailOf = async (found: LocatedBooking) => (await load(found)).detail;
 
-  return {
+  const core = {
     /** My bookings across every business (customer policy), newest relevant first. */
     async list(
       customerAccountId: string,
@@ -185,6 +190,19 @@ export function createPortalBookingService({
       }
       return detailOf(found);
     },
+  };
+
+  return {
+    ...core,
+    ...createReschedule({
+      inTenant,
+      locate,
+      detailOf,
+      emails: { hashToken, portalUrl, timeZone },
+      timeZone,
+      now,
+    }),
+    ...createPortalInvoices({ prisma, inTenant, locate, timeZone }),
   };
 }
 
