@@ -61,6 +61,36 @@ const RENDERERS: { [T in EmailTemplate]: Renderer<T> } = {
     ]),
   }),
 
+  'portal.verify_email': ({ name, verifyUrl, expiresInHours }) => ({
+    subject: 'Confirm your email for Tempora',
+    text: `Hi ${name},\n\nConfirm your email address (valid for ${expiresInHours} hours):\n${verifyUrl}\n\nIf you did not create a Tempora account, ignore this email.`,
+    html: layout('Confirm your email', [
+      `Hi ${escapeHtml(name)},`,
+      `<a href="${escapeHtml(verifyUrl)}" style="color:#2f5f78;font-weight:bold">Confirm your email address</a> (valid for ${expiresInHours} hours).`,
+      'If you did not create a Tempora account, you can ignore this email.',
+    ]),
+  }),
+
+  'portal.password_reset': ({ name, resetUrl, expiresInMinutes }) => ({
+    subject: 'Reset your Tempora password',
+    text: `Hi ${name},\n\nOpen this link to choose a new password (valid for ${expiresInMinutes} minutes):\n${resetUrl}\n\nIf you did not ask for this, ignore this email.`,
+    html: layout('Reset your password', [
+      `Hi ${escapeHtml(name)},`,
+      `<a href="${escapeHtml(resetUrl)}" style="color:#2f5f78;font-weight:bold">Choose a new password</a> (valid for ${expiresInMinutes} minutes).`,
+      'If you did not ask for this, you can ignore this email.',
+    ]),
+  }),
+
+  'portal.password_changed': ({ name }) => ({
+    subject: 'Your Tempora password was changed',
+    text: `Hi ${name},\n\nYour password was just changed and you were logged out on every device.\nIf this was not you, reset your password now.`,
+    html: layout('Password changed', [
+      `Hi ${escapeHtml(name)},`,
+      'Your password was just changed and you were logged out on every device.',
+      'If this was not you, reset your password now.',
+    ]),
+  }),
+
   'console.invitation': ({
     businessName,
     inviterName,

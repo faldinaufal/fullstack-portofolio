@@ -2,7 +2,7 @@
 
 Backend of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Frontend: [`Frontend/booking-saas`](../../Frontend/booking-saas).
 
-**Status:** foundation, Console authentication, tenant isolation (row-level security), branches, team management, the service catalogue, therapist schedules and the audit log are in place. The public Portal API (directory, business pages, slot availability) is in place too. Customer accounts and bookings come next.
+**Status:** foundation, Console authentication, tenant isolation (row-level security), branches, team management, the service catalogue, therapist schedules and the audit log are in place. The public Portal API (directory, business pages, slot availability) is in place too. Customer accounts for the Portal are in place too. Bookings and payments come next.
 
 ## Stack
 
@@ -26,6 +26,7 @@ Node.js 24 · TypeScript · Fastify 5 · Zod 4 · PostgreSQL 17 · Prisma 7 · p
 | Team | Invitations by email (7 days, resend, revoke), accept as a new or existing account, change role or branch, one manager per branch with an explicit decision about the current one, deactivate / reactivate (ends sessions at once), switch between businesses |
 | Catalogue & schedules | Business booking settings (FSD 6.1), service catalogue (duration, buffer, price in integer cents, optimistic locking), therapist working hours checked against branch opening hours, services performed, time off; setup status derived for onboarding |
 | Availability | Slot engine for FSD 6.2 as a pure, unit-tested function: 30-minute grid, lead time and horizon, opening and working hours, closures, time off and buffers, daylight-saving transitions of the platform time zone (`@date-fns/tz`) |
+| Customer accounts | `/v1/portal`: sign-up (logs in, sends a verification link), login without 2FA (FSD 6.11), 30-day sessions renewed by activity, email verification, password reset and change, profile, active sessions with revoke; separate table, cookie and session check from the Console |
 | Public API | `/v1/public`: directory (search by business or service), business and branch pages, availability; bookability decided by `SECURITY DEFINER` SQL functions so RLS stays intact |
 | Authorization | Role check per route plus scope rules in one module (`console-auth/access.ts`); records outside the caller's scope answer `404`, not `403` |
 | Audit log | Every change above writes an entry (actor, before/after, request ID) in the same transaction; the API role cannot update or delete entries |

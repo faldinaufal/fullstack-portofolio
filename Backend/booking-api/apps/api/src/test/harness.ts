@@ -10,6 +10,7 @@ import { createPostgresRateLimiter } from '../lib/rate-limit.js';
 import { createTokenHasher } from '../lib/tokens.js';
 import { createBranchService } from '../modules/branches/service.js';
 import { createConsoleAuthService } from '../modules/console-auth/service.js';
+import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
 import { createServiceCatalogue } from '../modules/services/service.js';
@@ -37,6 +38,7 @@ const TABLES = [
   'branch_closures',
   'branch_opening_hours',
   'rate_limit_hits',
+  'customer_accounts',
   'email_messages',
   'auth_tokens',
   'trusted_devices',
@@ -102,6 +104,17 @@ export async function createHarness(): Promise<Harness> {
     },
     // New York observes daylight saving time, so the tests cover DST (FSD 9.2).
     publicCatalogue: createPublicCatalogue({ prisma, timeZone: 'America/New_York', now }),
+    portalAuth: {
+      service: createPortalAuthService({
+        prisma,
+        passwords,
+        hashToken,
+        rateLimiter,
+        portalUrl: 'http://localhost:3000',
+        now,
+      }),
+      cookies: { secure: false, domain: undefined },
+    },
     consoleModules: {
       tenant: createTenantService({ prisma }),
       branches: createBranchService({ prisma, now }),
@@ -157,7 +170,11 @@ export class TestBrowser {
   readonly cookies = new Map<string, string>();
   private csrf: string | undefined;
 
-  constructor(private readonly app: App) {}
+  /** `csrfPath`: the CSRF endpoint of the app being used (Console by default, or the Portal). */
+  constructor(
+    private readonly app: App,
+    private readonly csrfPath = '/v1/console/auth/csrf',
+  ) {}
 
   private store(response: LightMyRequestResponse) {
     for (const cookie of response.cookies as { name: string; value: string; expires?: Date }[]) {
@@ -191,7 +208,7 @@ export class TestBrowser {
     { csrf = true }: { csrf?: boolean } = {},
   ) {
     if (csrf && !this.csrf) {
-      const response = await this.get('/v1/console/auth/csrf');
+      const response = await this.get(this.csrfPath);
       this.csrf = response.json<{ csrfToken: string }>().csrfToken;
     }
     return this.store(
