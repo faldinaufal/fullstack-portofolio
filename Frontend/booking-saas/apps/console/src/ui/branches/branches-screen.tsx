@@ -6,13 +6,14 @@
 import { Badge, Button, Card, Icon, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
 import { useBranches, useCreateBranch } from '@/core/branches/presentation/use-branches';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 import { SidePanel } from '@/ui/common/side-panel';
+import { formText } from '@/ui/common/form-values';
 
 /** FSD 2.2 Branches: owner sees and creates every branch; a manager sees their own. */
 export function BranchesScreen() {
@@ -79,12 +80,12 @@ function NewBranchPanel({ open, onClose }: Readonly<{ open: boolean; onClose: ()
   const create = useCreateBranch();
   const error = toRequestErrorView(create.error);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const text = (name: string) => String(form.get(name)).trim() || null;
+    const text = (name: string) => formText(form, name).trim() || null;
     create.mutate(
-      { name: String(form.get('name')).trim(), address: text('address'), phone: text('phone') },
+      { name: formText(form, 'name').trim(), address: text('address'), phone: text('phone') },
       { onSuccess: (branch) => router.push(`/branches/${branch.id}`) },
     );
   }

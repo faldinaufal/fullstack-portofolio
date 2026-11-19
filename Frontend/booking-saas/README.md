@@ -2,7 +2,7 @@
 
 Frontends of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Backend: [`Backend/booking-api`](../../Backend/booking-api).
 
-**Status:** design system and app layouts in place; Console sign-up, login (with email code), branches and team management run against the real API. Other screens use fictional demo data until their API endpoints exist.
+**Status:** design system and app layouts in place; Console sign-up, login (with email code), onboarding, settings, branches, services, team management and schedules run against the real API. Other screens use fictional demo data until their API endpoints exist.
 
 | App | Users | Local URL |
 |---|---|---|
@@ -43,7 +43,8 @@ Reference implementations:
 | all | `health`: API connection badge | HTTP (`GET /health`) |
 | Console | `auth`: sign-up, login with emailed code, trusted device, password reset, session guard, logout, business switcher | HTTP (`/v1/console/auth/*`, `/v1/console/me`) |
 | Console | `branches`: list, create, details, opening hours editor, closures, archive | HTTP (`/v1/console/branches/*`) |
-| Console | `team`: members, invitations, invite, change role or branch, deactivate, accept-invitation page | HTTP (`/v1/console/members/*`, `/v1/console/invitations/*`) |
+| Console | `team`: members, invitations, invite, change role or branch, deactivate, accept-invitation page, member schedule (working hours, services, time off), My schedule | HTTP (`/v1/console/members/*`, `/v1/console/invitations/*`) |
+| Console | `catalogue`: business settings, service catalogue, onboarding wizard, setup checklist | HTTP (`/v1/console/tenant`, `/v1/console/services/*`) |
 | Portal | `directory`: featured businesses on the home page | demo repository |
 | Console | `dashboard`: KPIs, bookings chart, calendar, today's bookings | demo repository |
 | Platform Admin | `overview`: platform KPIs, system health, tenants | demo repository |

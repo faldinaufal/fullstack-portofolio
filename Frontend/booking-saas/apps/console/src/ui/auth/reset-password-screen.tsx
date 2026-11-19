@@ -6,7 +6,7 @@
 import { Alert, Button, buttonVariants, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import {
   PASSWORD_MIN_LENGTH,
@@ -16,6 +16,7 @@ import {
 import { useResetPassword } from '@/core/auth/presentation/use-auth';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
+import { formText } from '@/ui/common/form-values';
 
 /** Opened from the emailed link `/reset-password?token=...`. */
 export function ResetPasswordScreen() {
@@ -38,11 +39,11 @@ export function ResetPasswordScreen() {
     );
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const password = String(form.get('password'));
-    const errors = validateNewPassword(password, String(form.get('confirmation')));
+    const password = formText(form, 'password');
+    const errors = validateNewPassword(password, formText(form, 'confirmation'));
     setLocalErrors(errors);
     if (Object.keys(errors).length === 0) reset.mutate({ token, password });
   }

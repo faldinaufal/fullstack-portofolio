@@ -3,6 +3,7 @@
 
 export * from './console-auth.js';
 export * from './console-branches.js';
+export * from './console-catalogue.js';
 export * from './console-team.js';
 export * from './health.js';
 export * from './problem.js';

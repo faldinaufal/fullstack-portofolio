@@ -37,6 +37,12 @@ model Tenant {
   slug       String       @unique @db.VarChar(40)
   name       String       @db.VarChar(100)
   status     TenantStatus @default(active)
+  /// Booking settings (FSD 6.1), configurable by the owner.
+  minLeadHours           Int       @default(4) @map("min_lead_hours") @db.SmallInt
+  maxAdvanceDays         Int       @default(30) @map("max_advance_days") @db.SmallInt
+  cancellationCutoffHours Int      @default(24) @map("cancellation_cutoff_hours") @db.SmallInt
+  maxCustomerReschedules Int       @default(2) @map("max_customer_reschedules") @db.SmallInt
+  version    Int          @default(1)
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   archivedAt DateTime?    @map("archived_at") @db.Timestamptz(3)
@@ -48,6 +54,10 @@ model Tenant {
   auditLogs     AuditLog[]
   openingHours  BranchOpeningHours[]
   closures      BranchClosure[]
+  services      Service[]
+  staffServices StaffService[]
+  workingHours  StaffWorkingHours[]
+  timeOff       StaffTimeOff[]
 
   @@map("tenants")
 }
@@ -168,6 +178,10 @@ model Membership {
   branch             Branch?      @relation(fields: [branchId], references: [id])
   sessions           Session[]
   invitationsCreated Invitation[]
+  services           StaffService[]
+  workingHours       StaffWorkingHours[]
+  timeOff            StaffTimeOff[]       @relation("TimeOffOf")
+  timeOffCreated     StaffTimeOff[]       @relation("TimeOffCreatedBy")
 
   @@unique([teamAccountId, tenantId])
   @@index([tenantId])
@@ -295,6 +309,86 @@ model Invitation {
 
   @@index([tenantId, email])
   @@map("invitations")
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue and schedules
+// ---------------------------------------------------------------------------
+
+/// Tenant-wide service catalogue (FSD 4.3). Bookings copy name, duration, buffer and price,
+/// so later changes never alter past bookings. RLS: tenant policy.
+model Service {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  name            String    @db.VarChar(100)
+  description     String?   @db.VarChar(500)
+  durationMinutes Int       @map("duration_minutes") @db.SmallInt
+  bufferMinutes   Int       @default(0) @map("buffer_minutes") @db.SmallInt
+  /// Integer cents, USD (FSD 4.1).
+  priceCents      Int       @map("price_cents")
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  staffServices StaffService[]
+
+  @@index([tenantId])
+  @@map("services")
+}
+
+/// Which therapist performs which service. RLS: tenant policy.
+model StaffService {
+  tenantId     String @map("tenant_id") @db.Uuid
+  membershipId String @map("membership_id") @db.Uuid
+  serviceId    String @map("service_id") @db.Uuid
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  membership Membership @relation(fields: [membershipId], references: [id])
+  service    Service    @relation(fields: [serviceId], references: [id])
+
+  @@id([membershipId, serviceId])
+  @@index([tenantId])
+  @@index([serviceId])
+  @@map("staff_services")
+}
+
+/// Weekly working hours: one interval per weekday, within the branch opening hours
+/// (checked by the API). RLS: tenant policy.
+model StaffWorkingHours {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  weekday      Int      @db.SmallInt
+  startsAt     DateTime @map("starts_at") @db.Time(0)
+  endsAt       DateTime @map("ends_at") @db.Time(0)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  membership Membership @relation(fields: [membershipId], references: [id])
+
+  @@unique([membershipId, weekday])
+  @@index([tenantId])
+  @@map("staff_working_hours")
+}
+
+/// Time off blocks a therapist's availability (FSD 6.2 rule 5). RLS: tenant policy.
+model StaffTimeOff {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  membershipId          String   @map("membership_id") @db.Uuid
+  startsAt              DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt                DateTime @map("ends_at") @db.Timestamptz(3)
+  reason                String?  @db.VarChar(500)
+  createdByMembershipId String?  @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  membership Membership  @relation("TimeOffOf", fields: [membershipId], references: [id])
+  createdBy  Membership? @relation("TimeOffCreatedBy", fields: [createdByMembershipId], references: [id])
+
+  @@index([tenantId, membershipId, startsAt])
+  @@map("staff_time_off")
 }
 
 // ---------------------------------------------------------------------------

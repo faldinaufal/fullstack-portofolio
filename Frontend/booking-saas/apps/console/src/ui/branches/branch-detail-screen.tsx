@@ -16,7 +16,7 @@ import {
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
 import {
   openingHoursProblems,
@@ -26,12 +26,12 @@ import {
   useRemoveClosure,
   useReplaceOpeningHours,
   useUpdateBranch,
-  WEEK_ORDER,
-  WEEKDAYS,
 } from '@/core/branches/presentation/use-branches';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
+import { useWeekHours, WeekHoursEditor } from '@/ui/common/week-hours-editor';
+import { formText } from '@/ui/common/form-values';
 
 type Detail = NonNullable<ReturnType<typeof useBranch>['data']>;
 
@@ -95,14 +95,14 @@ function DetailsCard({ branch, editable }: Readonly<{ branch: Detail; editable: 
       'Someone else changed this branch in the meantime. Reload the page to see their changes.',
   });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const text = (name: string) => String(form.get(name)).trim() || null;
+    const text = (name: string) => formText(form, name).trim() || null;
     update.mutate({
       version: branch.version,
       input: {
-        name: String(form.get('name')).trim(),
+        name: formText(form, 'name').trim(),
         address: text('address'),
         phone: text('phone'),
       },
@@ -151,38 +151,15 @@ function DetailsCard({ branch, editable }: Readonly<{ branch: Detail; editable: 
   );
 }
 
-interface DayDraft {
-  open: boolean;
-  opensAt: string;
-  closesAt: string;
-}
-
-function HoursCard({ branch, editable }: Readonly<{ branch: Detail; editable: boolean }>) {
+/** Weekly opening hours editor; also used by the onboarding wizard. */
+export function HoursCard({ branch, editable }: Readonly<{ branch: Detail; editable: boolean }>) {
   const replace = useReplaceOpeningHours(branch.id);
-  const [days, setDays] = useState<Record<number, DayDraft>>(() =>
-    Object.fromEntries(
-      WEEK_ORDER.map((weekday) => {
-        const saved = branch.openingHours.find((h) => h.weekday === weekday);
-        return [
-          weekday,
-          {
-            open: !!saved,
-            opensAt: saved?.opensAt ?? '09:00',
-            closesAt: saved?.closesAt ?? '17:00',
-          },
-        ];
-      }),
-    ),
+  const week = useWeekHours(
+    branch.openingHours.map((h) => ({ weekday: h.weekday, start: h.opensAt, end: h.closesAt })),
   );
-  const hours = WEEK_ORDER.filter((d) => days[d]?.open).map((weekday) => ({
-    weekday,
-    opensAt: days[weekday]!.opensAt,
-    closesAt: days[weekday]!.closesAt,
-  }));
+  const hours = week.hours.map((h) => ({ weekday: h.weekday, opensAt: h.start, closesAt: h.end }));
   const problems = openingHoursProblems(hours);
   const error = toRequestErrorView(replace.error);
-  const set = (weekday: number, change: Partial<DayDraft>) =>
-    setDays((current) => ({ ...current, [weekday]: { ...current[weekday]!, ...change } }));
 
   return (
     <Card>
@@ -199,57 +176,13 @@ function HoursCard({ branch, editable }: Readonly<{ branch: Detail; editable: bo
         >
           <RequestErrorAlert error={error} />
           {replace.isSuccess && <Alert tone="success">Opening hours saved.</Alert>}
-          <fieldset disabled={!editable} className="m-0 flex flex-col gap-2 border-0 p-0">
-            <legend className="sr-only">Weekly opening hours</legend>
-            {WEEK_ORDER.map((weekday) => {
-              const day = days[weekday]!;
-              const name = WEEKDAYS[weekday]!;
-              return (
-                <div
-                  key={weekday}
-                  className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-muted/50 px-3 py-2"
-                >
-                  <label className="flex w-36 items-center gap-2.5 text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={day.open}
-                      onChange={(e) => set(weekday, { open: e.target.checked })}
-                      className="size-5 accent-primary"
-                    />
-                    {name}
-                  </label>
-                  {day.open ? (
-                    <span className="flex items-center gap-2 text-sm">
-                      <input
-                        type="time"
-                        step={900}
-                        aria-label={`${name} opens`}
-                        value={day.opensAt}
-                        onChange={(e) => set(weekday, { opensAt: e.target.value })}
-                        className="h-10 rounded-lg border border-border bg-surface px-2"
-                      />
-                      –
-                      <input
-                        type="time"
-                        step={900}
-                        aria-label={`${name} closes`}
-                        value={day.closesAt}
-                        onChange={(e) => set(weekday, { closesAt: e.target.value })}
-                        className="h-10 rounded-lg border border-border bg-surface px-2"
-                      />
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted">Closed</span>
-                  )}
-                  {problems[weekday] && (
-                    <span role="alert" className="w-full text-[13px] font-semibold text-danger">
-                      {problems[weekday]}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </fieldset>
+          <WeekHoursEditor
+            legend="Weekly opening hours"
+            days={week.days}
+            set={week.set}
+            problems={problems}
+            disabled={!editable}
+          />
           {editable && (
             <Button
               type="submit"
@@ -278,15 +211,15 @@ function ClosuresCard({ branch, editable }: Readonly<{ branch: Detail; editable:
   const remove = useRemoveClosure(branch.id);
   const error = toRequestErrorView(add.error ?? remove.error);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     add.mutate(
       {
-        startsOn: String(form.get('startsOn')),
-        endsOn: String(form.get('endsOn')),
-        reason: String(form.get('reason')).trim(),
+        startsOn: formText(form, 'startsOn'),
+        endsOn: formText(form, 'endsOn'),
+        reason: formText(form, 'reason').trim(),
       },
       { onSuccess: () => formElement.reset() },
     );

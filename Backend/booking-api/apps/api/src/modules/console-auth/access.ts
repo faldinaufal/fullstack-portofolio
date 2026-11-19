@@ -57,6 +57,20 @@ export function canManageMember(scope: Scope, member: MemberRef): boolean {
 }
 
 /**
+ * Working hours and services a therapist performs: owner for anyone, a manager for the
+ * members of their own branch, themselves included (FSD 1.2 Team).
+ */
+export function canEditSchedule(scope: Scope, member: MemberRef): boolean {
+  if (scope.role === 'owner') return true;
+  return scope.role === 'manager' && member.branchId === scope.branchId;
+}
+
+/** Time off: like schedules, plus staff for their own (FSD 1.2 "Therapist time off"). */
+export function canManageTimeOff(scope: Scope, member: MemberRef): boolean {
+  return canEditSchedule(scope, member) || member.id === scope.membershipId;
+}
+
+/**
  * Outside the caller's scope, a record does not exist for them: `404`, never `403`, so the
  * existence of another branch's data is not revealed (FSD 1.3 step 3).
  */

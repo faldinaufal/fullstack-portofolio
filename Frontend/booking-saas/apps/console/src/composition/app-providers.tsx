@@ -11,6 +11,7 @@ import { createHttpAuthRepository } from '@/core/auth/data/http-auth-repository'
 import { createSessionStorageChallengeStore } from '@/core/auth/data/session-storage-challenge-store';
 import { createAuthUseCases } from '@/core/auth/domain/auth-use-cases';
 import { createHttpBranchRepository } from '@/core/branches/data/http-branch-repository';
+import { createHttpCatalogueRepository } from '@/core/catalogue/data/http-catalogue-repository';
 import {
   createDemoDashboardRepository,
   DEMO_NOW,
@@ -39,6 +40,7 @@ function createDependencies(): Dependencies {
     // Simple CRUD features use their repository directly; a use-case layer is added when a
     // feature has rules of its own beyond the API's.
     branches: createHttpBranchRepository(apiClient),
+    catalogue: createHttpCatalogueRepository(apiClient),
     team: createHttpTeamRepository(apiClient),
     getApiStatus: createGetApiStatus(createHttpApiStatusRepository(apiClient)),
     // Demo data: a fixed "now" keeps "up next" meaningful whenever the demo is opened.

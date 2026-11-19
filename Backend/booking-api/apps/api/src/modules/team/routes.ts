@@ -43,20 +43,6 @@ export const teamRoutes: FastifyPluginAsyncZod<{
     async (request) => service.listMembers(guard.actor(request)),
   );
 
-  app.get(
-    '/members/:id',
-    {
-      preHandler: guard.require(),
-      schema: {
-        tags,
-        summary: 'Member detail (staff: self only)',
-        params: IdParams,
-        response: { 200: MemberSchema, ...problems(401, 404) },
-      },
-    },
-    async (request) => service.getMember(guard.actor(request), request.params.id),
-  );
-
   app.patch(
     '/members/:id',
     {

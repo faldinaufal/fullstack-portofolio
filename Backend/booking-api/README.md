@@ -2,7 +2,7 @@
 
 Backend of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Frontend: [`Frontend/booking-saas`](../../Frontend/booking-saas).
 
-**Status:** foundation, Console authentication, tenant isolation (row-level security), branches, team management and the audit log are in place. Services, schedules and bookings come next.
+**Status:** foundation, Console authentication, tenant isolation (row-level security), branches, team management, the service catalogue, therapist schedules and the audit log are in place. Availability and bookings come next.
 
 ## Stack
 
@@ -24,6 +24,7 @@ Node.js 24 · TypeScript · Fastify 5 · Zod 4 · PostgreSQL 17 · Prisma 7 · p
 | Session security | Server-side sessions (random token in an httpOnly cookie, only its HMAC stored), 12 h idle / 7 days maximum, CSRF double-submit token, Argon2id passwords, rate limits counted in PostgreSQL, same answer for unknown email and wrong password |
 | Branches | Create, update (optimistic locking with `If-Match`), archive, weekly opening hours, closures; owner sees every branch, a manager only their own |
 | Team | Invitations by email (7 days, resend, revoke), accept as a new or existing account, change role or branch, one manager per branch with an explicit decision about the current one, deactivate / reactivate (ends sessions at once), switch between businesses |
+| Catalogue & schedules | Business booking settings (FSD 6.1), service catalogue (duration, buffer, price in integer cents, optimistic locking), therapist working hours checked against branch opening hours, services performed, time off; setup status derived for onboarding |
 | Authorization | Role check per route plus scope rules in one module (`console-auth/access.ts`); records outside the caller's scope answer `404`, not `403` |
 | Audit log | Every change above writes an entry (actor, before/after, request ID) in the same transaction; the API role cannot update or delete entries |
 | Email | Transactional outbox: the API queues emails in `email_messages` inside its own transactions; the worker sends them over SMTP (Mailpit locally) with retries and exponential back-off, then erases codes and links from the row |

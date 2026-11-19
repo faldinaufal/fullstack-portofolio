@@ -6,7 +6,7 @@
 import { Alert, Button, buttonVariants, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import {
   useAbandonLogin,
@@ -43,7 +43,7 @@ export function VerifyCodeScreen() {
     );
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!challenge) return;
     const form = new FormData(event.currentTarget);

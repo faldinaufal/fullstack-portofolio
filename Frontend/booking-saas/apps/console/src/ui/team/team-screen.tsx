@@ -16,7 +16,8 @@ import {
   SelectField,
   TextField,
 } from '@tempora/ui';
-import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useState, type SubmitEvent } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
 import { useBranches } from '@/core/branches/presentation/use-branches';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
@@ -34,6 +35,7 @@ import {
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 import { SidePanel } from '@/ui/common/side-panel';
+import { formText } from '@/ui/common/form-values';
 
 /** FSD 2.2 Team: owner manages everyone; a manager manages the staff of their branch. */
 export function TeamScreen() {
@@ -96,7 +98,12 @@ export function TeamScreen() {
               {members.data?.map((member) => (
                 <tr key={member.id} className="border-t border-border">
                   <td className="px-5 py-3">
-                    <span className="block font-bold">{member.name}</span>
+                    <Link
+                      href={`/team/${member.id}`}
+                      className="block font-bold text-foreground hover:text-primary-text"
+                    >
+                      {member.name}
+                    </Link>
                     <span className="text-[13px] text-muted">{member.email}</span>
                   </td>
                   <td className="px-3 py-3">{member.roleLabel}</td>
@@ -219,15 +226,15 @@ function InvitePanel({ open, onClose }: Readonly<{ open: boolean; onClose: () =>
   const roles = invitableRoles(me.role);
   const error = toRequestErrorView(invite.error);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     invite.mutate(
       {
-        email: String(form.get('email')).trim(),
-        role: String(form.get('role')) as 'manager' | 'staff',
-        branchId: String(form.get('branchId')),
+        email: formText(form, 'email').trim(),
+        role: formText(form, 'role') as 'manager' | 'staff',
+        branchId: formText(form, 'branchId'),
       },
       { onSuccess: () => formElement.reset() },
     );
@@ -286,17 +293,17 @@ function ChangeMemberPanel({
   const [needsDecision, setNeedsDecision] = useState(false);
   const error = toRequestErrorView(update.error);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const decision = String(form.get('currentManager') ?? '');
-    const moveTo = String(form.get('moveTo') ?? '');
+    const decision = formText(form, 'currentManager');
+    const moveTo = formText(form, 'moveTo');
     update.mutate(
       {
         id: member.id,
         change: {
-          role: String(form.get('role')) as 'manager' | 'staff',
-          branchId: String(form.get('branchId')),
+          role: formText(form, 'role') as 'manager' | 'staff',
+          branchId: formText(form, 'branchId'),
           ...(needsDecision &&
             decision && {
               currentManager:

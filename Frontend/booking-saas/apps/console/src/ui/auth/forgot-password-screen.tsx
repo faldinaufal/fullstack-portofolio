@@ -5,19 +5,20 @@
 
 import { Alert, Button, TextField } from '@tempora/ui';
 import Link from 'next/link';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import { useRequestPasswordReset } from '@/core/auth/presentation/use-auth';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
+import { formText } from '@/ui/common/form-values';
 
 export function ForgotPasswordScreen() {
   const request = useRequestPasswordReset();
   const error = toErrorView(request.error);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    request.mutate(String(new FormData(event.currentTarget).get('email')));
+    request.mutate(formText(new FormData(event.currentTarget), 'email'));
   }
 
   return (
