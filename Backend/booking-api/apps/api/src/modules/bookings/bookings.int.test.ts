@@ -14,10 +14,12 @@ import {
   nextWeekday,
   nyTime,
   portalBrowser,
+  signUpCustomer,
   type BookableBusiness,
 } from '../../test/booking-flows.js';
 import { C } from '../../test/console-flows.js';
 import { createHarness, type Harness } from '../../test/harness.js';
+import { createTokenHasher } from '../../lib/tokens.js';
 import { createBookingService } from './service.js';
 
 let h: Harness;
@@ -90,13 +92,8 @@ describe('creating a booking (FSD 6.3)', () => {
     expect(customer).toMatchObject({ email: GUEST.email, customerAccountId: null });
   });
 
-  it('links the booking to a logged-in customer', async () => {
-    const shopper = portalBrowser(h);
-    await shopper.post('/v1/portal/auth/signup', {
-      name: 'Ines Halvorsen',
-      email: 'ines.customer@veloria.test',
-      password: 'quiet river at dawn 4217',
-    });
+  it('links the booking to a logged-in customer with a verified email', async () => {
+    const shopper = await signUpCustomer(h);
     const withoutGuest = customerBookingBody(b, at('10:00'));
     await expectBooked(shopper, withoutGuest);
     const customer = await h.owner.tenantCustomer.findFirstOrThrow({
@@ -140,7 +137,14 @@ describe('idempotency (FSD 5.1, 9.2)', () => {
     const first = await book(portalBrowser(h), bookingBody(b, at('10:00')), key);
     const again = await book(portalBrowser(h), bookingBody(b, at('10:00')), key);
     expect(again.statusCode).toBe(201);
-    expect(again.json()).toEqual(first.json());
+    const { accessToken: firstToken, ...original } = first.json<{ accessToken: string }>();
+    const { accessToken: retryToken, ...retried } = again.json<{ accessToken: string }>();
+    expect(retried).toEqual(original);
+    // The token is not kept with the stored response: the retry gets a new, working one.
+    expect(retryToken).not.toBe(firstToken);
+    const stored = await h.owner.idempotencyKey.findFirstOrThrow();
+    expect(JSON.stringify(stored.responseBody)).not.toContain(firstToken);
+    expect(stored.responseBody).not.toHaveProperty('accessToken');
     expect(await h.owner.booking.count()).toBe(1);
 
     const reused = await book(portalBrowser(h), bookingBody(b, at('11:30')), key);
@@ -349,7 +353,9 @@ describe('payment (FSD 6.4)', () => {
         parseWebhook: () => {
           throw new Error('unused');
         },
+        expireCheckout: async () => {},
       },
+      hashToken: createTokenHasher('test-secret-'.repeat(3)),
       timeZone: 'America/New_York',
       portalUrl: 'http://localhost:3000',
     });
@@ -365,21 +371,15 @@ describe('payment (FSD 6.4)', () => {
 
 describe('row-level security for customers (FSD 4.4)', () => {
   it('a customer context sees only that customer’s bookings, across businesses', async () => {
-    const shopper = portalBrowser(h);
-    await shopper.post('/v1/portal/auth/signup', {
-      name: 'Ines Halvorsen',
-      email: 'ines.customer@veloria.test',
-      password: 'quiet river at dawn 4217',
-    });
+    const shopper = await signUpCustomer(h);
     const asCustomer = customerBookingBody(b, at('10:00'));
     await expectBooked(shopper, asCustomer);
     await expectBooked(portalBrowser(h), bookingBody(b, at('13:00'))); // someone else, as guest
 
     const account = await h.owner.customerAccount.findFirstOrThrow();
-    const visible = await withDbContext(h.prisma, {}, async (tx) => {
-      await tx.$queryRaw`SELECT set_config('app.customer_account_id', ${account.id}, true)`;
-      return tx.booking.findMany();
-    });
+    const visible = await withDbContext(h.prisma, { customerAccountId: account.id }, (tx) =>
+      tx.booking.findMany(),
+    );
     expect(visible).toHaveLength(1);
     expect(await withDbContext(h.prisma, {}, (tx) => tx.booking.findMany())).toEqual([]);
   });

@@ -56,6 +56,14 @@ export function createStripePaymentProvider({
       }
     },
 
+    async expireCheckout(sessionId: string): Promise<void> {
+      try {
+        await stripe.checkout.sessions.expire(sessionId);
+      } catch (error) {
+        throw new PaymentProviderUnavailableError(error);
+      }
+    },
+
     parseWebhook(rawBody: string, signature: string | undefined): PaymentEvent {
       let event: Stripe.Event;
       try {

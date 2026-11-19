@@ -20,6 +20,7 @@ import { installPortalGuard } from './modules/portal-auth/guard.js';
 import { portalAuthRoutes } from './modules/portal-auth/routes.js';
 import { bookingRoutes, paymentRoutes } from './modules/bookings/routes.js';
 import type { BookingService } from './modules/bookings/service.js';
+import type { PortalBookingService } from './modules/bookings/portal-service.js';
 import type { PortalAuthService } from './modules/portal-auth/service.js';
 import { publicRoutes } from './modules/public/routes.js';
 import type { PublicCatalogue } from './modules/public/service.js';
@@ -52,8 +53,8 @@ export interface AppDependencies {
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
   /** Customer accounts (`/v1/portal`). */
   portalAuth?: { service: PortalAuthService; cookies: CookieSettings };
-  /** Booking, payments and webhooks; needs `portalAuth`. */
-  bookings?: BookingService;
+  /** Booking, payments and webhooks, and the Portal's booking pages; need `portalAuth`. */
+  bookings?: { service: BookingService; portal: PortalBookingService };
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
@@ -132,13 +133,13 @@ export async function buildApp({
       async (scope) => {
         const guard = installPortalGuard(scope, portalAuth);
         await scope.register(portalAuthRoutes, { ...portalAuth, guard });
-        if (bookings) await scope.register(bookingRoutes, { service: bookings, guard });
+        if (bookings) await scope.register(bookingRoutes, { ...bookings, guard });
       },
       { prefix: '/v1/portal' },
     );
   }
   if (bookings) {
-    await app.register(paymentRoutes, { service: bookings });
+    await app.register(paymentRoutes, { service: bookings.service });
   }
 
   if (consoleAuth) {

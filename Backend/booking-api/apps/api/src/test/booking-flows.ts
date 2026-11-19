@@ -40,7 +40,20 @@ export interface BookableBusiness {
  * A business ready for bookings: Downtown open Mon–Fri 09:00–18:00, two services, and Ines
  * working Mon–Fri 09:00–18:00 performing both.
  */
-export async function bookableBusiness(h: Harness, input = OWNER): Promise<BookableBusiness> {
+/** A second business, for "My bookings across businesses". */
+export const SECOND_OWNER = {
+  name: 'Jonah Reed',
+  email: 'jonah@veloria.test',
+  password: 'correct horse battery',
+  businessName: 'Harbor Bodywork',
+  slug: 'harbor',
+};
+
+export async function bookableBusiness(
+  h: Harness,
+  input = OWNER,
+  therapist = PEOPLE.ines,
+): Promise<BookableBusiness> {
   const flows = consoleFlows(h);
   const owner = await flows.signUp(input);
   const branch = await flows.createBranch(owner, 'Downtown');
@@ -62,7 +75,7 @@ export async function bookableBusiness(h: Harness, input = OWNER): Promise<Booka
     bufferMinutes: 0,
     priceCents: 2500,
   });
-  const { membershipId } = await flows.addMember(owner, PEOPLE.ines, 'staff', branch.id);
+  const { membershipId } = await flows.addMember(owner, therapist, 'staff', branch.id);
   await owner.request('PUT', `${C}/members/${membershipId}/working-hours`, {
     hours: weekdays.map((weekday) => ({ weekday, startsAt: '09:00', endsAt: '18:00' })),
   });
@@ -111,5 +124,35 @@ export async function expectBooked(browser: TestBrowser, body: object) {
   return response.json<{
     booking: { id: string; status: string; invoiceNumber: string; holdExpiresAt: string | null };
     checkoutUrl: string;
+    accessToken: string;
   }>();
+}
+
+/** `Authorization: Guest <token>` (FSD 5.3). */
+export const asGuest = (token: string) => ({ authorization: `Guest ${token}` });
+
+export const CUSTOMER = {
+  name: 'Ines Halvorsen',
+  email: 'ines.customer@veloria.test',
+  password: 'quiet river at dawn 4217',
+};
+
+/** Confirms a customer's email with the link from the verification email. */
+export async function verifyCustomer(h: Harness, browser: TestBrowser, email = CUSTOMER.email) {
+  const payload = await h.lastEmail(email, 'portal.verify_email');
+  const token = new URL(payload!.verifyUrl).searchParams.get('token')!;
+  const response = await browser.post('/v1/portal/auth/verify-email', { token });
+  expect(response.statusCode, response.body).toBe(200);
+}
+
+/** A logged-in Portal customer, with a verified email unless asked otherwise. */
+export async function signUpCustomer(
+  h: Harness,
+  { verified = true, email = CUSTOMER.email }: { verified?: boolean; email?: string } = {},
+) {
+  const browser = portalBrowser(h);
+  const response = await browser.post('/v1/portal/auth/signup', { ...CUSTOMER, email });
+  expect(response.statusCode, response.body).toBe(201);
+  if (verified) await verifyCustomer(h, browser, email);
+  return browser;
 }

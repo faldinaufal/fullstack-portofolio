@@ -4,6 +4,7 @@
 'use client';
 
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, TextField } from '@tempora/ui';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, type SubmitEvent } from 'react';
 import {
@@ -43,7 +44,12 @@ export function ProfileScreen() {
   return (
     <main className="px-4 py-10 sm:px-6">
       <div className="mx-auto flex max-w-[760px] flex-col gap-6">
-        <h1 className="text-[32px] leading-tight font-extrabold">Profile and security</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-[32px] leading-tight font-extrabold">Profile and security</h1>
+          <Link href="/account/bookings" className="font-semibold text-primary-text">
+            My bookings
+          </Link>
+        </div>
         {welcome && <Alert tone="success">Welcome to Tempora, {customer.data.name}!</Alert>}
         {!customer.data.emailVerified && <VerifyBanner email={customer.data.email} />}
         {/* `key` resets the form after a save. */}

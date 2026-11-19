@@ -54,6 +54,11 @@ export interface PaymentProvider {
    * `WebhookSignatureError` when the signature is missing, wrong or too old.
    */
   parseWebhook(rawBody: string, signature: string | undefined): PaymentEvent;
+  /**
+   * Closes an open Checkout session so it can no longer be paid (cancelled booking, FSD 6.7).
+   * Best effort: a payment that still arrives is caught by the safety net (FSD 6.4).
+   */
+  expireCheckout(sessionId: string): Promise<void>;
 }
 
 export class WebhookSignatureError extends Error {

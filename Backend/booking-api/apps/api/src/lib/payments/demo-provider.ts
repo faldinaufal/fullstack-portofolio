@@ -65,6 +65,9 @@ export function createDemoPaymentProvider({
       return { sessionId, url: url.toString() };
     },
 
+    // The demo page reads the payment's status from the API, so there is nothing to close.
+    async expireCheckout() {},
+
     signedEvent(outcome, sessionId, metadata) {
       const body: DemoEventBody = {
         id: `demo_evt_${randomBytes(12).toString('hex')}`,

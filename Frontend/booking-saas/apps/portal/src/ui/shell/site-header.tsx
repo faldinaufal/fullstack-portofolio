@@ -22,9 +22,9 @@ const NAV = [
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const customer = useCustomer().data;
-  // Logged-in customers go to their profile; visitors to the login page.
+  // Logged-in customers go to their bookings; visitors to the login page.
   const account = customer
-    ? { href: '/account/profile', label: customer.name.split(' ')[0] ?? 'My account' }
+    ? { href: '/account/bookings', label: customer.name.split(' ')[0] ?? 'My account' }
     : { href: '/login', label: 'Log in' };
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 

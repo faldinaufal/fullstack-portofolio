@@ -14,6 +14,7 @@ export type TokenPurpose =
   | 'password-reset'
   | 'email-verify'
   | 'invitation'
+  | 'booking-link'
   | 'csrf'
   | 'rate-limit'
   | `otp:${string}`;

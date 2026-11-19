@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import { createHash } from 'node:crypto';
-import type { BookingCreated, CreateBookingRequest, PortalBooking } from '@tempora/contracts';
+import type { BookingCreated, CreateBookingRequest } from '@tempora/contracts';
 import { withDbContext, type Prisma, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { recordAudit, type AuditActor } from '../../lib/audit.js';
@@ -18,7 +18,10 @@ import { loadAvailabilityInput } from '../availability/load.js';
 import { notFound } from '../console-auth/access.js';
 import type { CustomerAuth } from '../portal-auth/service.js';
 import { displayName } from '../public/service.js';
+import type { TokenHasher } from '../../lib/tokens.js';
+import { issueAccessToken } from './access.js';
 import { formatInvoiceNumber } from './invoice-number.js';
+import { portalBooking } from './views.js';
 
 const MINUTE = 60_000;
 
@@ -56,9 +59,20 @@ function isOverlapViolation(error: unknown): boolean {
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+interface Contact {
+  name: string;
+  email: string;
+  phone: string | null;
+  /** The logged-in customer (actor, idempotency scope), even if the email is not verified. */
+  customerAccountId: string | null;
+  /** The account to attach the business's customer record to: verified accounts only. */
+  linkAccountId: string | null;
+}
+
 export interface BookingServiceDeps {
   prisma: PrismaClient;
   payments: PaymentProvider;
+  hashToken: TokenHasher;
   timeZone: string;
   portalUrl: string;
   now?: () => Date;
@@ -68,6 +82,7 @@ export interface BookingServiceDeps {
 export function createBookingService({
   prisma,
   payments,
+  hashToken,
   timeZone,
   portalUrl,
   now = () => new Date(),
@@ -75,33 +90,13 @@ export function createBookingService({
   const inTenant = <T>(tenantId: string, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId }, work, { timeoutMs: 15_000 });
 
-  /** The booking as the Portal shows it. Runs inside the booking's tenant context. */
-  async function toPortalBooking(tx: Tx, bookingId: string): Promise<PortalBooking> {
-    const booking = await tx.booking.findUniqueOrThrow({
-      where: { id: bookingId },
-      include: {
-        tenant: { select: { slug: true, name: true } },
-        branch: { select: { name: true } },
-        staff: { include: { teamAccount: { select: { name: true } } } },
-        invoice: { select: { number: true } },
-      },
+  /** A new access token for a booking created earlier (idempotent replay by the same sender). */
+  async function reissueAccessToken(tenantSlug: string, bookingId: string): Promise<string> {
+    const tenant = await prisma.tenant.findFirstOrThrow({ where: { slug: tenantSlug } });
+    return inTenant(tenant.id, async (tx) => {
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+      return issueAccessToken(tx, hashToken, booking);
     });
-    return {
-      id: booking.id,
-      status: booking.status,
-      business: booking.tenant,
-      branchName: booking.branch.name,
-      serviceName: booking.serviceName,
-      therapist: displayName(booking.staff.teamAccount.name),
-      startsAt: booking.startsAt.toISOString(),
-      endsAt: booking.endsAt.toISOString(),
-      priceCents: booking.priceCents,
-      holdExpiresAt:
-        booking.status === 'pending_payment'
-          ? (booking.holdExpiresAt?.toISOString() ?? null)
-          : null,
-      invoiceNumber: booking.invoice?.number ?? '',
-    };
   }
 
   /**
@@ -170,12 +165,7 @@ export function createBookingService({
 
   async function createHoldAndInvoice(
     input: CreateBookingRequest,
-    contact: {
-      name: string;
-      email: string;
-      phone: string | null;
-      customerAccountId: string | null;
-    },
+    contact: Contact,
     actor: AuditActor,
   ) {
     const tenant = await prisma.tenant.findFirst({
@@ -224,17 +214,17 @@ export function createBookingService({
         (await tx.tenantCustomer.create({
           data: {
             tenantId: tenant.id,
-            customerAccountId: contact.customerAccountId,
+            customerAccountId: contact.linkAccountId,
             email: contact.email,
             name: contact.name,
             phone: contact.phone,
             firstBookedAt: now(),
           },
         }));
-      if (existing && contact.customerAccountId && !existing.customerAccountId) {
+      if (existing && contact.linkAccountId && !existing.customerAccountId) {
         await tx.tenantCustomer.update({
           where: { id: existing.id },
-          data: { customerAccountId: contact.customerAccountId },
+          data: { customerAccountId: contact.linkAccountId },
         });
       }
 
@@ -275,7 +265,9 @@ export function createBookingService({
         entityId: booking.id,
         after: { status: booking.status, startsAt, staffId: therapist.id, invoice: invoice.number },
       });
-      return { tenant, booking, invoice, branch, contact };
+      // Access for the pages right after booking (guests, unverified accounts; FSD 5.3).
+      const accessToken = await issueAccessToken(tx, hashToken, booking);
+      return { tenant, booking, invoice, branch, contact, accessToken };
     });
   }
 
@@ -290,12 +282,7 @@ export function createBookingService({
       idempotencyKey: string,
       ip: string,
     ): Promise<BookingCreated> {
-      let contact: {
-        name: string;
-        email: string;
-        phone: string | null;
-        customerAccountId: string | null;
-      };
+      let contact: Contact;
       if (customerAuth) {
         const account = await prisma.customerAccount.findUniqueOrThrow({
           where: { id: customerAuth.customerAccountId },
@@ -305,6 +292,9 @@ export function createBookingService({
           email: account.email,
           phone: account.phone,
           customerAccountId: account.id,
+          // Linked to the account only once its email is verified (FSD 3.2 step 6): anyone can
+          // sign up with someone else's address, and must not see that person's bookings.
+          linkAccountId: account.emailVerifiedAt ? account.id : null,
         };
       } else if (input.guest) {
         contact = {
@@ -312,6 +302,7 @@ export function createBookingService({
           email: input.guest.email,
           phone: input.guest.phone ?? null,
           customerAccountId: null,
+          linkAccountId: null,
         };
       } else {
         throw new AppError({
@@ -340,7 +331,12 @@ export function createBookingService({
             detail: 'This Idempotency-Key was already used for a different request.',
           });
         }
-        return stored.responseBody as unknown as BookingCreated;
+        // The access token is never stored with the response: a retry gets a fresh one.
+        const replay = stored.responseBody as unknown as Omit<BookingCreated, 'accessToken'>;
+        return {
+          ...replay,
+          accessToken: await reissueAccessToken(input.tenantSlug, replay.booking.id),
+        };
       }
 
       const actor: AuditActor = {
@@ -359,7 +355,7 @@ export function createBookingService({
       }
 
       // Step 7: Checkout after the commit; if the provider fails, release the slot at once.
-      const { tenant, booking, invoice, branch } = held;
+      const { tenant, booking, invoice, branch, accessToken } = held;
       let checkout;
       try {
         checkout = await payments.createCheckout({
@@ -399,7 +395,10 @@ export function createBookingService({
             expiresAt: new Date(now().getTime() + BOOKING_POLICY.checkoutMs),
           },
         });
-        return { booking: await toPortalBooking(tx, booking.id), checkoutUrl: checkout.url };
+        return {
+          booking: await portalBooking(tx, booking.id, now(), timeZone),
+          checkoutUrl: checkout.url,
+        };
       });
 
       await prisma.idempotencyKey
@@ -409,13 +408,13 @@ export function createBookingService({
             subject,
             requestHash,
             responseStatus: 201,
-            responseBody: response as unknown as Prisma.InputJsonValue,
+            responseBody: response as unknown as Prisma.InputJsonValue, // without the token
             createdAt: now(),
             expiresAt: new Date(now().getTime() + BOOKING_POLICY.idempotencyTtlMs),
           },
         })
         .catch(() => undefined); // a concurrent retry stored it first: same response
-      return response;
+      return { ...response, accessToken };
     },
 
     /**
@@ -595,7 +594,9 @@ export function createBookingService({
             address: booking.branch.address,
             invoiceNumber: booking.invoice?.number ?? '',
             priceCents: booking.priceCents,
-            bookingUrl: `${portalUrl}/bookings/${booking.id}/confirmation`,
+            bookingUrl: booking.tenantCustomer.customerAccountId
+              ? `${portalUrl}/account/bookings/${booking.id}`
+              : `${portalUrl}/manage/${await issueAccessToken(tx, hashToken, booking)}`,
           },
         },
       ],

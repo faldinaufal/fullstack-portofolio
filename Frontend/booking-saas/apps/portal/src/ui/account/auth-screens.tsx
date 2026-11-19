@@ -87,6 +87,9 @@ export function LoginScreen() {
 export function SignupScreen() {
   const router = useRouter();
   const signup = useSignup();
+  // Back to where sign-up started (e.g. booking step 3), else the profile with a welcome.
+  const returning = useSearchParams().has('next');
+  const next = useNextPath();
   const [problems, setProblems] = useState<Record<string, string>>({});
   const error = toRequestErrorView(signup.error, {
     EMAIL_TAKEN: 'An account with this email already exists. Log in instead.',
@@ -106,7 +109,9 @@ export function SignupScreen() {
     const found = signupProblems(input);
     setProblems(found);
     if (Object.keys(found).length === 0) {
-      signup.mutate(input, { onSuccess: () => router.push('/account/profile?welcome=1') });
+      signup.mutate(input, {
+        onSuccess: () => router.push(returning ? next : '/account/profile?welcome=1'),
+      });
     }
   }
 
