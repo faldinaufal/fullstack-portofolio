@@ -63,6 +63,7 @@ jobs:
       LOG_LEVEL: warn
       # CI-only values; real secrets live in the hosting platforms.
       TOKEN_HASH_SECRET: ci-only-token-hash-secret-0123456789abcdef
+      APP_TIME_ZONE: America/New_York
       SMTP_URL: smtp://localhost:1025
       EMAIL_FROM: Tempora CI <ci@tempora.local>
       TEST_DATABASE_URL: postgresql://tempora_app:ci_app@localhost:5432/tempora

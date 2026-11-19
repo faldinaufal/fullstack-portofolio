@@ -19,6 +19,18 @@ const EnvSchema = z.object({
   COOKIE_DOMAIN: z.string().min(1).optional(),
   /** Trust X-Forwarded-For from the hosting proxy, so rate limits see the real client IP. */
   TRUST_PROXY: z.stringbool().default(false),
+  /** Platform time zone (IANA name): slots and opening hours are wall-clock times in it (FSD 4.1). */
+  APP_TIME_ZONE: z
+    .string()
+    .default('UTC')
+    .refine((zone) => {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: zone });
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Must be an IANA time zone, e.g. America/New_York.'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

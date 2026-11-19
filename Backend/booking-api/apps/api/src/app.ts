@@ -16,6 +16,8 @@ import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import type { BranchService } from './modules/branches/service.js';
+import { publicRoutes } from './modules/public/routes.js';
+import type { PublicCatalogue } from './modules/public/service.js';
 import { scheduleRoutes } from './modules/schedules/routes.js';
 import type { ScheduleService } from './modules/schedules/service.js';
 import { serviceRoutes } from './modules/services/routes.js';
@@ -43,6 +45,8 @@ export interface AppDependencies {
   healthRepository: HealthRepository;
   /** Console authentication. Left out by tests that only exercise the app shell. */
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
+  /** Portal pages before login (`/v1/public`). */
+  publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
   consoleModules?: {
     tenant: TenantService;
@@ -60,6 +64,7 @@ export async function buildApp({
   healthRepository,
   consoleAuth,
   consoleModules,
+  publicCatalogue,
 }: AppDependencies) {
   const app = Fastify({
     trustProxy: env.TRUST_PROXY,
@@ -104,6 +109,10 @@ export async function buildApp({
   await app.register(healthRoutes, {
     service: createHealthService({ repository: healthRepository, version: env.APP_VERSION }),
   });
+
+  if (publicCatalogue) {
+    await app.register(publicRoutes, { prefix: '/v1/public', service: publicCatalogue });
+  }
 
   if (consoleAuth) {
     // One encapsulated scope for /v1/console: its CSRF hook and guard apply to every

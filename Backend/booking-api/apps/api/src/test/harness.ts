@@ -10,6 +10,7 @@ import { createPostgresRateLimiter } from '../lib/rate-limit.js';
 import { createTokenHasher } from '../lib/tokens.js';
 import { createBranchService } from '../modules/branches/service.js';
 import { createConsoleAuthService } from '../modules/console-auth/service.js';
+import { createPublicCatalogue } from '../modules/public/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
 import { createServiceCatalogue } from '../modules/services/service.js';
 import { createTeamService } from '../modules/team/service.js';
@@ -99,6 +100,8 @@ export async function createHarness(): Promise<Harness> {
       }),
       cookies: { secure: false, domain: undefined },
     },
+    // New York observes daylight saving time, so the tests cover DST (FSD 9.2).
+    publicCatalogue: createPublicCatalogue({ prisma, timeZone: 'America/New_York', now }),
     consoleModules: {
       tenant: createTenantService({ prisma }),
       branches: createBranchService({ prisma, now }),

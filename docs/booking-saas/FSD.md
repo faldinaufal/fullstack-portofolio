@@ -411,6 +411,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
 - **Invitation-link policy** (`invitations`, read only): the one row whose `token_hash` matches `app.invitation_token_hash`. Once found, the API switches to that invitation's tenant context.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
+- **Public directory:** whether a tenant is bookable needs rows of several tenant-owned tables across tenants. Two `SECURITY DEFINER` functions (`tenant_is_bookable`, `public_directory`) run as the table owner and return only public facts (yes/no, names, slugs), never protected rows; their `search_path` is pinned and only `tempora_app` may execute them.
 - If no context is set, policies match nothing, so a forgotten context fails closed (no rows) instead of leaking.
 - Tests run queries with a deliberately wrong or missing context and assert that zero rows of other tenants are returned.
 
@@ -440,10 +441,10 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 ### 5.2 Public (`/v1/public`)
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/tenants` | Directory: search (`q`) and list active, listed tenants | none |
-| GET | `/tenants/:slug` | Business profile, branches with opening hours, services | none |
-| GET | `/tenants/:slug/branches/:branchId` | Branch details, therapists (name only), services offered | none |
-| GET | `/tenants/:slug/availability` | Free slots: `branchId`, `serviceId`, `staffId`, `date` | none |
+| GET | `/tenants` | Directory: search (`q`, business or service name) and list active tenants whose setup is complete | none |
+| GET | `/tenants/:slug` | Business profile, branches with opening hours and upcoming closures, services someone performs, platform time zone, booking horizon | none |
+| GET | `/tenants/:slug/branches/:branchId` | Branch details, therapists (first name and last initial, e.g. "Ines H."), services offered | none |
+| GET | `/tenants/:slug/availability` | Free slots: `branchId`, `serviceId`, `staffId` (required: no "any therapist"), `date` (`YYYY-MM-DD` in the platform time zone); `423` for a suspended tenant | none |
 | GET | `/demo-inbox` | Latest emails to `@demo.<domain>` addresses (filter by address); returns `404` unless `DEMO_MODE` is on | none |
 
 ### 5.3 Portal (`/v1/portal`)
@@ -616,7 +617,7 @@ A start time `S` for service `X` with therapist `T` at branch `B` is bookable on
    - the blocked range of any of `T`'s bookings that are `confirmed`, or `pending_payment` with `hold_expires_at > now`;
    - any of `T`'s `staff_time_off` entries.
 
-The availability endpoint applies these rules to return free slots; the create and reschedule endpoints apply them **again** inside the write transaction, because availability can change between viewing and booking.
+Wall-clock times are converted to instants in the platform time zone: a start time that does not exist when clocks go forward is skipped, and on the night clocks go back the first occurrence is used. The availability endpoint applies these rules to return free slots; the create and reschedule endpoints apply them **again** inside the write transaction, because availability can change between viewing and booking.
 
 ### 6.3 Creating a booking (book and pay)
 All steps from 2 to 6 run in **one database transaction**:

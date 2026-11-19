@@ -5,12 +5,14 @@
 
 import { Icon } from '@tempora/ui';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useFeaturedBusinesses } from '@/core/directory/presentation/use-featured-businesses';
 
 const BANNERS = ['bg-primary', 'bg-[#5e8aa0]'];
 
 export function FeaturedBusinesses() {
-  const { status, businesses } = useFeaturedBusinesses();
+  const search = useSearchParams().get('q')?.trim() || undefined;
+  const { status, businesses } = useFeaturedBusinesses(search);
 
   return (
     <div
@@ -63,7 +65,11 @@ export function FeaturedBusinesses() {
         </Link>
       ))}
 
-      {status === 'ready' && (
+      {status === 'ready' && search && businesses.length === 0 && (
+        <p className="text-muted">No business matches “{search}”.</p>
+      )}
+
+      {status === 'ready' && !search && (
         <Link
           href="/#for-business"
           className="flex flex-col items-start justify-center gap-3 rounded-[20px] border-2 border-dashed border-border p-7 text-foreground no-underline hover:border-primary"

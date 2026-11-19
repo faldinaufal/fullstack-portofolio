@@ -4,6 +4,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { BookingRepository } from '../../booking/domain/booking';
 import type { ListFeaturedBusinesses } from '../../directory/domain/list-featured-businesses';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 
@@ -15,6 +16,7 @@ import type { GetApiStatus } from '../../health/domain/get-api-status';
 export interface Dependencies {
   getApiStatus: GetApiStatus;
   listFeaturedBusinesses: ListFeaturedBusinesses;
+  booking: BookingRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);
