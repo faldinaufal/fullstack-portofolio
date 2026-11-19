@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Alert, Button, Card, Icon } from '@tempora/ui';
+import { Alert, buttonVariants, Card, Icon } from '@tempora/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -136,13 +136,12 @@ export function TimeScreen({ slug }: Readonly<{ slug: string }>) {
             {days.find((d) => d.date === date)?.label}, {chosen.label}–{chosen.until} with{' '}
             {therapist.displayName}
           </p>
-          <Alert tone="info">
-            Booking with payment opens in the next milestone: this demo stops before the checkout
-            step.
-          </Alert>
-          <Button size="lg" className="self-start" disabled>
+          <Link
+            href={`/${slug}/book/details?${params}`}
+            className={buttonVariants({ size: 'lg', className: 'self-start' })}
+          >
             Continue to details <Icon name="arrow-right" size={18} />
-          </Button>
+          </Link>
         </Card>
       )}
     </PageShell>

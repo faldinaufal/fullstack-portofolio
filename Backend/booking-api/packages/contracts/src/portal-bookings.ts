@@ -52,6 +52,8 @@ export const PortalBookingSchema = z
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
     priceCents: z.number().int(),
+    /** Platform time zone: show times in it, not in the visitor's (FSD 4.1). */
+    timeZone: z.string(),
     /** Until when the slot is held for payment (pending bookings only). */
     holdExpiresAt: z.iso.datetime().nullable(),
     invoiceNumber: z.string(),
@@ -64,6 +66,11 @@ export const BookingCreatedSchema = z
     booking: PortalBookingSchema,
     /** Payment page (Stripe Checkout, or the demo checkout without Stripe keys). */
     checkoutUrl: z.url(),
+    /**
+     * Access to this booking without a login (`Authorization: Guest <token>`), for the
+     * payment and confirmation pages. Shown once; keep it out of URLs (FSD 5.3).
+     */
+    accessToken: z.string(),
   })
   .meta({ id: 'BookingCreated' });
 export type BookingCreated = z.infer<typeof BookingCreatedSchema>;
@@ -73,3 +80,45 @@ export const DemoCheckoutOutcomeSchema = z
   .object({ outcome: z.enum(['paid', 'expired']) })
   .meta({ id: 'DemoCheckoutOutcome' });
 export type DemoCheckoutOutcome = z.infer<typeof DemoCheckoutOutcomeSchema>;
+
+export const BookingInvoiceSchema = z
+  .object({
+    number: z.string(),
+    status: z.enum(['open', 'paid', 'void']),
+    amountCents: z.number().int(),
+    issuedAt: z.iso.datetime(),
+    paidAt: z.iso.datetime().nullable(),
+  })
+  .meta({ id: 'BookingInvoice' });
+
+/** `GET /v1/portal/bookings/:id` and `/guest/booking`: the booking with what may be done next. */
+export const PortalBookingDetailSchema = PortalBookingSchema.extend({
+  branchAddress: z.string().nullable(),
+  notes: z.string().nullable(),
+  invoice: BookingInvoiceSchema,
+  /** Pay before this (the Checkout expiry, FSD 6.3); null when nothing is left to pay. */
+  payBy: z.iso.datetime().nullable(),
+  /** Allowed actions, decided by the API so every screen shows the same buttons. */
+  actions: z.object({ pay: z.boolean(), cancel: z.boolean() }),
+}).meta({ id: 'PortalBookingDetail' });
+export type PortalBookingDetail = z.infer<typeof PortalBookingDetailSchema>;
+
+export const PortalBookingListQuerySchema = z.object({
+  when: z.enum(['upcoming', 'past']).default('upcoming'),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type PortalBookingListQuery = z.infer<typeof PortalBookingListQuerySchema>;
+
+export const PortalBookingListSchema = z
+  .object({
+    items: z.array(PortalBookingSchema),
+    page: z.number().int(),
+    pageSize: z.number().int(),
+    total: z.number().int(),
+  })
+  .meta({ id: 'PortalBookingList' });
+export type PortalBookingList = z.infer<typeof PortalBookingListSchema>;
+
+export const CheckoutLinkSchema = z.object({ checkoutUrl: z.url() }).meta({ id: 'CheckoutLink' });
+export type CheckoutLink = z.infer<typeof CheckoutLinkSchema>;

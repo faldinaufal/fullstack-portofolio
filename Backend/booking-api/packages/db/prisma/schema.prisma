@@ -65,6 +65,7 @@ model Tenant {
   invoices      Invoice[]
   payments      Payment[]
   counters      InvoiceCounter[]
+  bookingLinks  BookingAccessToken[]
 
   @@map("tenants")
 }
@@ -490,22 +491,47 @@ model Booking {
   customerNotes           String?       @map("customer_notes") @db.VarChar(500)
   customerRescheduleCount Int           @default(0) @map("customer_reschedule_count") @db.SmallInt
   cancelReason            String?       @map("cancel_reason") @db.VarChar(500)
+  cancelledAt             DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  /// `customer`, `guest`, `owner` or `manager` (FSD 6.7).
+  cancelledByType         String?       @map("cancelled_by_type") @db.VarChar(10)
+  /// Customer account or membership that cancelled; null for a guest.
+  cancelledById           String?       @map("cancelled_by_id") @db.Uuid
   version                 Int           @default(1)
   createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  tenant         Tenant         @relation(fields: [tenantId], references: [id])
-  branch         Branch         @relation(fields: [branchId], references: [id])
-  service        Service        @relation(fields: [serviceId], references: [id])
-  staff          Membership     @relation(fields: [staffMembershipId], references: [id])
-  tenantCustomer TenantCustomer @relation(fields: [tenantCustomerId], references: [id])
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  branch         Branch               @relation(fields: [branchId], references: [id])
+  service        Service              @relation(fields: [serviceId], references: [id])
+  staff          Membership           @relation(fields: [staffMembershipId], references: [id])
+  tenantCustomer TenantCustomer       @relation(fields: [tenantCustomerId], references: [id])
   invoice        Invoice?
+  accessTokens   BookingAccessToken[]
 
   @@index([tenantId, startsAt])
   @@index([staffMembershipId, startsAt])
   @@index([tenantCustomerId])
   @@index([status, holdExpiresAt])
   @@map("bookings")
+}
+
+/// Access to one booking without a login: the guest "manage booking" link, and the token the
+/// booking browser keeps for the payment pages (FSD 4.3, 5.3). Only the HMAC is stored.
+/// RLS: tenant policy + the one row matching `app.booking_token_hash` (read).
+model BookingAccessToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  bookingId String    @map("booking_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@map("booking_access_tokens")
 }
 
 enum InvoiceStatus {

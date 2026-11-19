@@ -8,6 +8,11 @@ import type { AccountRepository } from '../../account/domain/account';
 import type { BookingRepository } from '../../booking/domain/booking';
 import type { ListFeaturedBusinesses } from '../../directory/domain/list-featured-businesses';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
+import type { DemoCheckoutRepository } from '../../reservation/domain/demo-checkout';
+import type {
+  BookingAccessStore,
+  ReservationRepository,
+} from '../../reservation/domain/reservation';
 
 /**
  * Use cases available to the presentation layer. Presentation depends on these
@@ -19,6 +24,9 @@ export interface Dependencies {
   listFeaturedBusinesses: ListFeaturedBusinesses;
   booking: BookingRepository;
   account: AccountRepository;
+  reservations: ReservationRepository;
+  bookingAccess: BookingAccessStore;
+  demoCheckout: DemoCheckoutRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);

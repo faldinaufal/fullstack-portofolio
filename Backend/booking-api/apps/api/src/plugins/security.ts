@@ -22,7 +22,14 @@ export async function registerSecurity(app: FastifyInstance, { allowedOrigins }:
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Idempotency-Key', 'If-Match', 'X-CSRF-Token', 'X-Request-Id'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Idempotency-Key',
+      'If-Match',
+      'X-CSRF-Token',
+      'X-Request-Id',
+    ],
     exposedHeaders: ['X-Request-Id'],
     maxAge: 600,
   });

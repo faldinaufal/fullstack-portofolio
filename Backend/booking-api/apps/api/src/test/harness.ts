@@ -14,6 +14,7 @@ import {
   createDemoPaymentProvider,
   type DemoPaymentProvider,
 } from '../lib/payments/demo-provider.js';
+import { createPortalBookingService } from '../modules/bookings/portal-service.js';
 import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
@@ -35,6 +36,7 @@ function requireEnv(name: string): string {
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
   'idempotency_keys',
+  'booking_access_tokens',
   'stripe_events',
   'payments',
   'invoices',
@@ -123,13 +125,23 @@ export async function createHarness(): Promise<Harness> {
     },
     // New York observes daylight saving time, so the tests cover DST (FSD 9.2).
     publicCatalogue: createPublicCatalogue({ prisma, timeZone: 'America/New_York', now }),
-    bookings: createBookingService({
-      prisma,
-      payments,
-      timeZone: 'America/New_York',
-      portalUrl: 'http://localhost:3000',
-      now,
-    }),
+    bookings: {
+      service: createBookingService({
+        prisma,
+        payments,
+        hashToken,
+        timeZone: 'America/New_York',
+        portalUrl: 'http://localhost:3000',
+        now,
+      }),
+      portal: createPortalBookingService({
+        prisma,
+        payments,
+        hashToken,
+        timeZone: 'America/New_York',
+        now,
+      }),
+    },
     portalAuth: {
       service: createPortalAuthService({
         prisma,
@@ -216,9 +228,13 @@ export class TestBrowser {
     return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
   }
 
-  async get(url: string) {
+  async get(url: string, headers: Record<string, string> = {}) {
     return this.store(
-      await this.app.inject({ method: 'GET', url, headers: { cookie: this.cookieHeader() } }),
+      await this.app.inject({
+        method: 'GET',
+        url,
+        headers: { cookie: this.cookieHeader(), ...headers },
+      }),
     );
   }
 

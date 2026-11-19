@@ -17,6 +17,10 @@ export interface DbContext {
   teamAccountId?: string;
   /** HMAC of an invitation link token: reveals that one invitation, before any login. */
   invitationTokenHash?: string;
+  /** Logged-in Portal customer: reads their own bookings at every business (customer policy). */
+  customerAccountId?: string;
+  /** HMAC of a booking access token (guest link): reveals that one token row. */
+  bookingTokenHash?: string;
 }
 
 export interface TransactionOptions {
@@ -55,6 +59,8 @@ export async function setDbContext(tx: Tx, context: DbContext): Promise<void> {
     SELECT
       set_config('app.tenant_id', ${context.tenantId ?? ''}, true),
       set_config('app.team_account_id', ${context.teamAccountId ?? ''}, true),
-      set_config('app.invitation_token_hash', ${context.invitationTokenHash ?? ''}, true)
+      set_config('app.invitation_token_hash', ${context.invitationTokenHash ?? ''}, true),
+      set_config('app.customer_account_id', ${context.customerAccountId ?? ''}, true),
+      set_config('app.booking_token_hash', ${context.bookingTokenHash ?? ''}, true)
   `;
 }

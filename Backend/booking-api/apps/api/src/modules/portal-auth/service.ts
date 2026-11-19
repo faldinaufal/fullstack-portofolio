@@ -247,6 +247,8 @@ export function createPortalAuthService({
           where: { id: row.customerAccountId },
           data: { emailVerifiedAt: now() },
         });
+        // FSD 3.2 step 5: guest bookings with this (now proven) email become this account's.
+        await t.$queryRaw`SELECT link_guest_bookings(${verified.id}::uuid)`;
         return toProfile(verified);
       });
     },

@@ -240,6 +240,7 @@ Alternative paths:
 3. The confirmation email contains the secure link `/manage/[token]`.
 4. With the link the guest can view, pay (while pending), reschedule (within rules) or cancel (unpaid only).
 5. If the guest later signs up with the same email and verifies it, past guest bookings appear under "My bookings" and the guest links are revoked.
+6. A logged-in customer whose email is **not verified yet** books with their account details but is treated like a guest for linking: the booking is not attached to the account (anyone can sign up with someone else's address) until the email is verified, and the pages right after booking use the booking's access token (5.3).
 
 ### 3.3 Customer: reschedule
 1. "My bookings" → booking → "Reschedule" (hidden with an explanation if the cut-off has passed or the limit is reached).
@@ -363,8 +364,8 @@ erDiagram
 | Table | Key columns | Notes |
 |---|---|---|
 | `tenant_customers` | `id`, `tenant_id`, `customer_account_id` (null for guests), `email`, `name`, `phone`, `first_booked_at` | The tenant's view of a customer. Unique (`tenant_id`, `email`). A tenant never sees the customer's records at other tenants. When a guest later signs up and verifies the same email, matching rows get `customer_account_id`. |
-| `bookings` | `id`, `tenant_id`, `branch_id`, `service_id`, `staff_membership_id`, `tenant_customer_id`, `starts_at`, `ends_at`, `blocked_until` (= `ends_at` + buffer), `status`, `hold_expires_at`, snapshot columns (`service_name`, `duration_minutes`, `buffer_minutes`, `price_cents`), `customer_notes`, `customer_reschedule_count`, `cancel_reason`, `cancelled_by_*`, `refund_handled_externally`, `marked_by_*` (completed/no-show), `version`, timestamps | Exclusion constraint below. Statuses in section 7. |
-| `booking_access_tokens` | `id`, `tenant_id`, `booking_id`, `token_hash`, `expires_at`, `revoked_at` | Guest "manage booking" link; expires after the session ends. |
+| `bookings` | `id`, `tenant_id`, `branch_id`, `service_id`, `staff_membership_id`, `tenant_customer_id`, `starts_at`, `ends_at`, `blocked_until` (= `ends_at` + buffer), `status`, `hold_expires_at`, snapshot columns (`service_name`, `duration_minutes`, `buffer_minutes`, `price_cents`), `customer_notes`, `customer_reschedule_count`, `cancel_reason`, `cancelled_at`, `cancelled_by_type` (`customer`/`guest`/`owner`/`manager`), `cancelled_by_id`, `refund_handled_externally`, `marked_by_*` (completed/no-show), `version`, timestamps | Exclusion constraint below. Statuses in section 7. |
+| `booking_access_tokens` | `id`, `tenant_id`, `booking_id`, `token_hash`, `expires_at`, `revoked_at` | Access to one booking without a login. One is created with every booking (returned once, to the browser that booked) and one with the confirmation email (the guest "manage booking" link). Expires 7 days after the session ends, so the receipt stays reachable; revoked when the email's owner verifies a customer account. Only the HMAC of the token is stored. |
 
 The double-booking guarantee:
 ```sql
@@ -401,6 +402,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - Every request runs its queries in a transaction that first sets context with `set_config(..., true)` (local to that transaction):
   - `app.tenant_id`: the tenant of the Console session, or the tenant whose public page the Portal request targets.
   - `app.customer_account_id`: set for Portal "my bookings" requests across tenants.
+  - `app.booking_token_hash`: the HMAC of a booking access token (guest link), before any login.
   - `app.team_account_id`: the signed-in team account, so it can read **its own** memberships in every tenant (login, tenant switcher).
   - `app.invitation_token_hash`: the HMAC of an invitation link token, before any login.
   - `app.support_grant`: set for read-only platform admin access.
@@ -410,6 +412,8 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
   - **support policy** (read only): the row's tenant has an active, unexpired support grant matching `app.support_grant`.
 - **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
 - **Invitation-link policy** (`invitations`, read only): the one row whose `token_hash` matches `app.invitation_token_hash`. Once found, the API switches to that invitation's tenant context.
+- **Booking-link policy** (`booking_access_tokens`, read only): the one row whose `token_hash` matches `app.booking_token_hash`. The API checks expiry and revocation, then switches to that booking's tenant context. Customer requests work the same way: the booking is found through the customer policy, then loaded in its tenant's context.
+- **Linking guest bookings:** when a customer verifies their email, the `SECURITY DEFINER` function `link_guest_bookings(account_id)` attaches every unlinked `tenant_customers` row with the account's **verified** email (across tenants) and revokes the booking links of those bookings. It reads the email from the account row itself, never from the caller.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
 - **Hold expiry** (`bookings`, `invoices`, `payments`): the worker role has a cross-tenant policy with `SELECT`/`UPDATE` only (no insert, no delete) and may `INSERT` into `audit_logs`. `DELETE` is revoked from the API role on these tables: bookings and invoices change status, they are never removed.
 - **Public directory:** whether a tenant is bookable needs rows of several tenant-owned tables across tenants. Two `SECURITY DEFINER` functions (`tenant_is_bookable`, `public_directory`) run as the table owner and return only public facts (yes/no, names, slugs), never protected rows; their `search_path` is pinned and only `tempora_app` may execute them.
@@ -465,16 +469,17 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | POST | `/me/verification-email` | Send the verification email again (3 per hour) | customer |
 | GET | `/me/sessions` | Active sessions | customer |
 | DELETE | `/me/sessions/:id` | Revoke one session | customer |
-| POST | `/bookings` | Create booking + invoice, start Checkout; body includes guest contact when not logged in; returns booking and `checkoutUrl` | customer or none (guest) · `Idempotency-Key` |
-| GET | `/bookings` | My bookings across tenants (filters: status, upcoming/past) | customer |
-| GET | `/bookings/:id` | Booking detail with invoice and allowed actions | customer, guest token |
-| POST | `/bookings/:id/checkout` | Resume payment: return the active Checkout URL | customer, guest token · `Idempotency-Key` |
+| POST | `/bookings` | Create booking + invoice, start Checkout; body includes guest contact when not logged in; returns booking, `checkoutUrl` and an `accessToken` for this booking | customer or none (guest) · `Idempotency-Key` |
+| GET | `/bookings` | My bookings across tenants (`when=upcoming` or `past`, `page`, `pageSize`) | customer |
+| GET | `/bookings/:id` | Booking detail with invoice, payment deadline and allowed actions | customer, guest token |
+| GET | `/guest/booking` | The booking a guest token belongs to (the `/manage/[token]` page) | guest token |
+| POST | `/bookings/:id/checkout` | Resume payment: return the active Checkout URL (nothing is created, so no `Idempotency-Key`) | customer, guest token |
 | POST | `/bookings/:id/reschedule` | New `startsAt` (and optional `staffId`) | customer, guest token |
 | POST | `/bookings/:id/cancel` | Cancel an unpaid booking | customer, guest token |
 | GET | `/invoices` | My invoices | customer |
 | GET | `/invoices/:id` | Invoice detail (PDF later: `?format=pdf`) | customer, guest token |
 
-Guest token: the secret from `/manage/[token]`, sent as `Authorization: Guest <token>`; it only grants access to its own booking.
+Guest token: the secret from `/manage/[token]`, or the `accessToken` returned when booking, sent as `Authorization: Guest <token>`; it only grants access to its own booking. The Portal keeps the booking's `accessToken` in the tab's `sessionStorage` so the payment and confirmation pages work for guests (and for customers whose email is not verified yet) without putting the token in a URL that Stripe would see.
 
 `POST /bookings`: a logged-in customer books with their account's contact details; otherwise the body must include `guest` (`name`, `email`, optional `phone`), or the API returns `400 GUEST_DETAILS_REQUIRED`. Idempotency keys are scoped to the sender (customer account, or guest email), so two people can never collide on a key.
 
@@ -661,7 +666,7 @@ Owner or manager moves a booking to another therapist of the same branch who per
 ### 6.7 Cancel, complete, no-show
 | Action | Who | Allowed when | Effect |
 |---|---|---|---|
-| Cancel unpaid | Customer, guest, owner, manager | Booking is `pending_payment` | Booking `cancelled`, invoice `void`, Checkout session expired |
+| Cancel unpaid | Customer, guest, owner, manager | Booking is `pending_payment` | Booking `cancelled`, invoice `void`, payment `expired`, slot free at once. After the commit the API asks the provider to expire the Checkout session (best effort: a payment that still arrives hits the safety net of 6.4) |
 | Cancel paid | Owner, manager | Booking is `confirmed` and has not started | Reason required; booking `cancelled`, `refund_handled_externally = true`; invoice stays `paid` with a note; customer emailed |
 | Mark completed | Staff (own), owner, manager | Booking is `confirmed` and has started; up to 7 days after it ended | Booking `completed` |
 | Mark no-show | Staff (own), owner, manager | Same as above | Booking `no_show` |
@@ -748,6 +753,7 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `SERVICE_NOT_OFFERED` | 409 | Therapist does not perform the service |
 | `CUTOFF_PASSED` / `RESCHEDULE_LIMIT_REACHED` | 409 | Rule 6.5 |
 | `HOLD_EXPIRED` | 409 | Paying for or changing an expired booking |
+| `NOT_CANCELLABLE` | 409 | Customer or guest cancelling a booking that is no longer `pending_payment` (6.7) |
 | `HAS_ACTIVE_BOOKINGS` | 409 | Rule 6.8 (list of bookings included) |
 | `VERSION_CONFLICT` | 409 | Optimistic lock: the record changed since it was loaded |
 | `EMAIL_TAKEN` / `SLUG_TAKEN` | 409 | Sign-up with an email or business address already in use |

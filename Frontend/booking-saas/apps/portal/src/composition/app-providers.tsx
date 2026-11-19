@@ -13,6 +13,11 @@ import { createHttpBusinessRepository } from '@/core/directory/data/http-busines
 import { createListFeaturedBusinesses } from '@/core/directory/domain/list-featured-businesses';
 import { createHttpApiStatusRepository } from '@/core/health/data/http-api-status-repository';
 import { createGetApiStatus } from '@/core/health/domain/get-api-status';
+import {
+  createHttpDemoCheckoutRepository,
+  createHttpReservationRepository,
+} from '@/core/reservation/data/http-reservation-repository';
+import { createSessionAccessStore } from '@/core/reservation/data/session-access-store';
 import { DependenciesContext, type Dependencies } from '@/core/shared/presentation/dependencies';
 
 /**
@@ -30,6 +35,9 @@ function createDependencies(): Dependencies {
     listFeaturedBusinesses: createListFeaturedBusinesses(createHttpBusinessRepository(apiClient)),
     booking: createHttpBookingRepository(apiClient),
     account: createHttpAccountRepository(apiClient),
+    reservations: createHttpReservationRepository(apiClient),
+    bookingAccess: createSessionAccessStore(),
+    demoCheckout: createHttpDemoCheckoutRepository(apiClient),
   };
 }
 

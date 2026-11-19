@@ -3,20 +3,42 @@
 
 import {
   BookingCreatedSchema,
+  CheckoutLinkSchema,
   CreateBookingRequestSchema,
   DemoCheckoutOutcomeSchema,
+  PortalBookingDetailSchema,
+  PortalBookingListQuerySchema,
+  PortalBookingListSchema,
 } from '@tempora/contracts';
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { NoContent, problems } from '../../lib/route-schemas.js';
+import { notFound } from '../console-auth/access.js';
 import type { PortalGuard } from '../portal-auth/guard.js';
+import { readGuestToken, type BookingViewer } from './access.js';
+import type { PortalBookingService } from './portal-service.js';
 import type { BookingService } from './service.js';
 
-/** `POST /v1/portal/bookings` (FSD 5.3): customers and guests. */
+const BookingParams = z.object({ id: z.uuid() });
+const GuestHeader = z.object({
+  authorization: z
+    .string()
+    .optional()
+    .describe('`Guest <token>`: a booking link, instead of (or as well as) a Portal session'),
+});
+
+/** `/v1/portal/bookings*` and `/v1/portal/guest/booking` (FSD 5.3): customers and guests. */
 export const bookingRoutes: FastifyPluginAsyncZod<{
   service: BookingService;
+  portal: PortalBookingService;
   guard: PortalGuard;
-}> = async (app, { service, guard }) => {
+}> = async (app, { service, portal, guard }) => {
+  const viewer = (request: FastifyRequest): BookingViewer => ({
+    customerAccountId: guard.customer(request)?.customerAccountId ?? null,
+    guestToken: readGuestToken(request.headers.authorization),
+  });
+
   app.post(
     '/bookings',
     {
@@ -45,6 +67,82 @@ export const bookingRoutes: FastifyPluginAsyncZod<{
             request.ip,
           ),
         ),
+  );
+
+  app.get(
+    '/bookings',
+    {
+      preHandler: guard.require,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'My bookings at every business (upcoming or past)',
+        querystring: PortalBookingListQuerySchema,
+        response: { 200: PortalBookingListSchema, ...problems(400, 401) },
+      },
+    },
+    async (request) => portal.list(guard.customer(request)!.customerAccountId, request.query),
+  );
+
+  app.get(
+    '/bookings/:id',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'One booking with its invoice, payment deadline and allowed actions',
+        params: BookingParams,
+        headers: GuestHeader,
+        response: { 200: PortalBookingDetailSchema, ...problems(404) },
+      },
+    },
+    async (request) => portal.detail(viewer(request), request.params.id),
+  );
+
+  app.get(
+    '/guest/booking',
+    {
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'The booking a guest link belongs to (the /manage/[token] page)',
+        headers: GuestHeader,
+        response: { 200: PortalBookingDetailSchema, ...problems(404) },
+      },
+    },
+    async (request) => {
+      const token = readGuestToken(request.headers.authorization);
+      if (!token) throw notFound('Booking');
+      return portal.guestBooking(token);
+    },
+  );
+
+  app.post(
+    '/bookings/:id/checkout',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'Resume payment: the Checkout that is still open',
+        params: BookingParams,
+        headers: GuestHeader,
+        response: { 200: CheckoutLinkSchema, ...problems(404, 409) },
+      },
+    },
+    async (request) => portal.checkout(viewer(request), request.params.id),
+  );
+
+  app.post(
+    '/bookings/:id/cancel',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'Cancel a booking that is still waiting for payment (the slot is free at once)',
+        params: BookingParams,
+        headers: GuestHeader,
+        response: { 200: PortalBookingDetailSchema, ...problems(404, 409) },
+      },
+    },
+    async (request) => portal.cancel(viewer(request), request.params.id, request.ip),
   );
 };
 
