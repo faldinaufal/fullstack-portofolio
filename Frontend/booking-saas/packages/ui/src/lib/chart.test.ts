@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { monthGrid } from './calendar.js';
-import { barPercent, niceScale } from './chart.js';
+import { barPercent, linePath, linePoints, niceScale } from './chart.js';
 
 describe('niceScale', () => {
   it('rounds the axis up to readable ticks', () => {
@@ -40,5 +40,22 @@ describe('monthGrid', () => {
       '2026-03-30',
       '2026-03-31',
     ]);
+  });
+});
+
+describe('line chart geometry', () => {
+  it('spreads points over the width and flips y (SVG grows downwards)', () => {
+    expect(linePoints([0, 50, 100], 100, 200, 100)).toEqual([
+      { x: 0, y: 100 },
+      { x: 100, y: 50 },
+      { x: 200, y: 0 },
+    ]);
+  });
+
+  it('leaves a gap for missing values instead of drawing a zero', () => {
+    const points = linePoints([10, null, 10], 10, 100, 10);
+    expect(points[1]).toBeNull();
+    expect(linePath(points)).toBe('M0.0 0.0 M100.0 0.0');
+    expect(linePath(linePoints([1, 2], 2, 10, 10))).toBe('M0.0 5.0 L10.0 0.0');
   });
 });

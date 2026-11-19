@@ -14,11 +14,7 @@ import { createHttpBookingRepository } from '@/core/bookings/data/http-booking-r
 import { createHttpBranchRepository } from '@/core/branches/data/http-branch-repository';
 import { createHttpRecordsRepository } from '@/core/records/data/http-records-repository';
 import { createHttpCatalogueRepository } from '@/core/catalogue/data/http-catalogue-repository';
-import {
-  createDemoDashboardRepository,
-  DEMO_NOW,
-} from '@/core/dashboard/data/demo-dashboard-repository';
-import { createGetDashboard } from '@/core/dashboard/domain/get-dashboard';
+import { createHttpDashboardRepository } from '@/core/dashboard/data/http-dashboard-repository';
 import { createHttpApiStatusRepository } from '@/core/health/data/http-api-status-repository';
 import { createGetApiStatus } from '@/core/health/domain/get-api-status';
 import { DependenciesContext, type Dependencies } from '@/core/shared/presentation/dependencies';
@@ -46,8 +42,7 @@ function createDependencies(): Dependencies {
     catalogue: createHttpCatalogueRepository(apiClient),
     team: createHttpTeamRepository(apiClient),
     getApiStatus: createGetApiStatus(createHttpApiStatusRepository(apiClient)),
-    // Demo data: a fixed "now" keeps "up next" meaningful whenever the demo is opened.
-    getDashboard: createGetDashboard(createDemoDashboardRepository(), () => DEMO_NOW),
+    dashboard: createHttpDashboardRepository(apiClient),
   };
 }
 
