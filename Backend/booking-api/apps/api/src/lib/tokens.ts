@@ -12,6 +12,7 @@ export type TokenPurpose =
   | 'session'
   | 'trusted-device'
   | 'password-reset'
+  | 'email-verify'
   | 'invitation'
   | 'csrf'
   | 'rate-limit'

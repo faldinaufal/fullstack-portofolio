@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createApiClient } from '@tempora/api-client';
 import { ThemeProvider } from '@tempora/ui';
 import { useState, type ReactNode } from 'react';
+import { createHttpAccountRepository } from '@/core/account/data/http-account-repository';
 import { createHttpBookingRepository } from '@/core/booking/data/http-booking-repository';
 import { createHttpBusinessRepository } from '@/core/directory/data/http-business-repository';
 import { createListFeaturedBusinesses } from '@/core/directory/domain/list-featured-businesses';
@@ -22,11 +23,13 @@ import { DependenciesContext, type Dependencies } from '@/core/shared/presentati
 function createDependencies(): Dependencies {
   const apiClient = createApiClient({
     baseUrl: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000',
+    csrfPath: '/v1/portal/auth/csrf',
   });
   return {
     getApiStatus: createGetApiStatus(createHttpApiStatusRepository(apiClient)),
     listFeaturedBusinesses: createListFeaturedBusinesses(createHttpBusinessRepository(apiClient)),
     booking: createHttpBookingRepository(apiClient),
+    account: createHttpAccountRepository(apiClient),
   };
 }
 

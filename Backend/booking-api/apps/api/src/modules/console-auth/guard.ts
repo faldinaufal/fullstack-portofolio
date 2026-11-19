@@ -3,7 +3,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../lib/app-error.js';
-import { safeEqual } from '../../lib/tokens.js';
+import { installCsrfProtection } from '../../lib/csrf.js';
 import { CONSOLE_COOKIES, cookieOptions, type CookieSettings } from './cookies.js';
 import type { ConsoleAuth, ConsoleAuthService } from './service.js';
 
@@ -32,15 +32,9 @@ export interface ConsoleGuard {
   actor(request: FastifyRequest): ConsoleActor;
 }
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
 /**
- * Installs the protections shared by every `/v1/console/*` route and returns the guard
- * the feature modules use.
- *
- * CSRF (FSD 5.1): double-submit pattern. The token sits in an httpOnly cookie and must be
- * repeated in the `X-CSRF-Token` header of every state-changing request. Another site can
- * make the browser send the cookie, but it cannot read the token to put it in the header.
+ * Installs the protections shared by every `/v1/console/*` route (CSRF, see lib/csrf.ts)
+ * and returns the guard the feature modules use.
  */
 export function installConsoleGuard(
   app: FastifyInstance,
@@ -48,19 +42,7 @@ export function installConsoleGuard(
 ): ConsoleGuard {
   app.decorateRequest('consoleAuth', null);
 
-  app.addHook('onRequest', async (request) => {
-    if (SAFE_METHODS.has(request.method)) return;
-    const header = request.headers['x-csrf-token'];
-    const cookie = request.cookies[CONSOLE_COOKIES.csrf];
-    if (typeof header !== 'string' || !cookie || !safeEqual(header, cookie)) {
-      throw new AppError({
-        status: 403,
-        code: 'CSRF_INVALID',
-        title: 'Missing or invalid CSRF token',
-        detail: 'Fetch a token from GET /v1/console/auth/csrf and send it in X-CSRF-Token.',
-      });
-    }
-  });
+  installCsrfProtection(app, CONSOLE_COOKIES.csrf, '/v1/console/auth/csrf');
 
   return {
     require:

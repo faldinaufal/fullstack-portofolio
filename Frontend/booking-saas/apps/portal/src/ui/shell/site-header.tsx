@@ -6,6 +6,7 @@
 import { buttonVariants, Drawer, Icon, TemporaMark, ThemeToggle } from '@tempora/ui';
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
+import { useCustomer } from '@/core/account/presentation/use-account';
 
 const NAV = [
   { href: '/', label: 'Home' },
@@ -20,6 +21,11 @@ const NAV = [
  */
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const customer = useCustomer().data;
+  // Logged-in customers go to their profile; visitors to the login page.
+  const account = customer
+    ? { href: '/account/profile', label: customer.name.split(' ')[0] ?? 'My account' }
+    : { href: '/login', label: 'Log in' };
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   return (
@@ -48,10 +54,10 @@ export function SiteHeader() {
         <div className="hidden items-center gap-2 lg:flex">
           <ThemeToggle appearance="brand" />
           <Link
-            href="/login"
+            href={account.href}
             className="rounded-full px-4 py-3 text-sm font-semibold text-on-brand hover:bg-white/10"
           >
-            Log in
+            {account.label}
           </Link>
           <Link href="/#businesses" className={buttonVariants({ variant: 'inverse' })}>
             Book a session
@@ -115,10 +121,10 @@ export function SiteHeader() {
             <ThemeToggle />
           </div>
           <Link
-            href="/login"
+            href={account.href}
             className={buttonVariants({ variant: 'secondary', size: 'lg', className: 'w-full' })}
           >
-            Log in
+            {account.label}
           </Link>
           <Link href="/#businesses" className={buttonVariants({ size: 'lg', className: 'w-full' })}>
             Book a session

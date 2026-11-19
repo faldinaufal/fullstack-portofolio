@@ -16,6 +16,8 @@ import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import type { BranchService } from './modules/branches/service.js';
+import { portalAuthRoutes } from './modules/portal-auth/routes.js';
+import type { PortalAuthService } from './modules/portal-auth/service.js';
 import { publicRoutes } from './modules/public/routes.js';
 import type { PublicCatalogue } from './modules/public/service.js';
 import { scheduleRoutes } from './modules/schedules/routes.js';
@@ -45,6 +47,8 @@ export interface AppDependencies {
   healthRepository: HealthRepository;
   /** Console authentication. Left out by tests that only exercise the app shell. */
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
+  /** Customer accounts (`/v1/portal`). */
+  portalAuth?: { service: PortalAuthService; cookies: CookieSettings };
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
@@ -65,6 +69,7 @@ export async function buildApp({
   consoleAuth,
   consoleModules,
   publicCatalogue,
+  portalAuth,
 }: AppDependencies) {
   const app = Fastify({
     trustProxy: env.TRUST_PROXY,
@@ -112,6 +117,10 @@ export async function buildApp({
 
   if (publicCatalogue) {
     await app.register(publicRoutes, { prefix: '/v1/public', service: publicCatalogue });
+  }
+
+  if (portalAuth) {
+    await app.register(portalAuthRoutes, { prefix: '/v1/portal', ...portalAuth });
   }
 
   if (consoleAuth) {

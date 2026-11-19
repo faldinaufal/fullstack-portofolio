@@ -11,6 +11,9 @@ export interface EmailPayloads {
   'console.login_code': { name: string; code: string; expiresInMinutes: number };
   'console.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
   'console.password_changed': { name: string };
+  'portal.verify_email': { name: string; verifyUrl: string; expiresInHours: number };
+  'portal.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
+  'portal.password_changed': { name: string };
   'console.invitation': {
     businessName: string;
     inviterName: string;

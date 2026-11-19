@@ -20,10 +20,9 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { generateToken } from '../../lib/tokens.js';
+import { issueCsrfToken } from '../../lib/csrf.js';
 import { CONSOLE_COOKIES, cookieOptions, type CookieSettings } from './cookies.js';
 import type { ConsoleGuard } from './guard.js';
-import { addMs, CONSOLE_AUTH_POLICY } from './policy.js';
 import type { ConsoleAuthService, IssuedToken, RequestMeta } from './service.js';
 
 export interface ConsoleAuthRoutesOptions {
@@ -65,12 +64,9 @@ export const consoleAuthRoutes: FastifyPluginAsyncZod<ConsoleAuthRoutesOptions> 
         response: { 200: CsrfResponseSchema },
       },
     },
-    async (_request, reply) => {
-      const token = generateToken();
-      const expires = addMs(new Date(), CONSOLE_AUTH_POLICY.sessionMaxMs);
-      reply.setCookie(CONSOLE_COOKIES.csrf, token, cookieOptions(cookies, expires));
-      return { csrfToken: token };
-    },
+    async (_request, reply) => ({
+      csrfToken: issueCsrfToken(reply, CONSOLE_COOKIES.csrf, cookies),
+    }),
   );
 
   app.post(

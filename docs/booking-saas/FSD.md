@@ -333,7 +333,7 @@ erDiagram
 | `platform_admins` | `id`, `email` (unique), `password_hash`, `name`, `disabled_at` | Created only by a server-side command. |
 | `team_accounts` | `id`, `email` (unique, lowercased), `password_hash`, `name`, `email_verified_at`, `password_changed_at` | One login for the Console; access comes from memberships. Trusted devices created before `password_changed_at` are ignored. |
 | `customer_accounts` | `id`, `email` (unique), `password_hash`, `name`, `phone`, `email_verified_at` | Platform-wide customer login for the Portal. |
-| `sessions` | `id`, `token_hash` (unique), `app` (`portal`/`console`/`admin`), `customer_account_id` \| `team_account_id` \| `platform_admin_id`, `membership_id` (Console only), `expires_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` | Exactly one subject column is set (check constraint). Revoking = setting `revoked_at`. |
+| `sessions` | `id`, `token_hash` (unique), `app` (`portal`/`console`/`admin`), `customer_account_id` \| `team_account_id` \| `platform_admin_id`, `membership_id` (Console only), `expires_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` | Exactly one subject column is set and it matches the app (check constraints). Revoking = setting `revoked_at`. Each app has its own cookie name and the API also checks the session's `app`, so a session never works in another app. |
 | `auth_tokens` | `id`, `purpose` (`password_reset`/`email_verify`), subject columns as in `sessions`, `token_hash`, `expires_at`, `used_at` | Single-use tokens sent by email. |
 | `otp_challenges` | `id`, `purpose` (`login`/`step_up`), `team_account_id` \| `platform_admin_id`, `session_id` (step-up only), `code_hash`, `attempts`, `expires_at`, `consumed_at`, `last_sent_at`, `ip` | Created after a correct password (or before a sensitive action). The code itself is never stored, only its hash. |
 | `trusted_devices` | `id`, `team_account_id`, `token_hash`, `label` (browser and OS), `created_at`, `last_used_at`, `expires_at`, `revoked_at` | Console only. The device token lives in a separate long-lived httpOnly cookie. |
@@ -451,7 +451,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | GET | `/auth/csrf` | Issue CSRF token | none |
-| POST | `/auth/signup` | Create customer account, send verification email | none |
+| POST | `/auth/signup` | Create customer account, log in (session cookie) and send the verification email | none |
 | POST | `/auth/login` | Log in, set session cookie | none |
 | POST | `/auth/logout` | End current session | customer |
 | POST | `/auth/logout-all` | End all sessions | customer |
@@ -460,7 +460,8 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | POST | `/auth/reset-password` | Set new password with token; revokes all sessions | none (token) |
 | GET | `/me` | Profile | customer |
 | PATCH | `/me` | Update name, phone | customer |
-| POST | `/me/password` | Change password (current password required) | customer |
+| POST | `/me/password` | Change password (current password required); other sessions end, this one stays | customer |
+| POST | `/me/verification-email` | Send the verification email again (3 per hour) | customer |
 | GET | `/me/sessions` | Active sessions | customer |
 | DELETE | `/me/sessions/:id` | Revoke one session | customer |
 | POST | `/bookings` | Create booking + invoice, start Checkout; body includes guest contact when not logged in; returns booking and `checkoutUrl` | customer or none (guest) · `Idempotency-Key` |
