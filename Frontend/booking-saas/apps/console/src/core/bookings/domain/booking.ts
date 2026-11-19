@@ -17,7 +17,7 @@ export interface BookingRow {
   therapist: { id: string; name: string };
   /** Email is null for staff. */
   customer: { name: string; email: string | null };
-  invoice: { number: string; status: 'open' | 'paid' | 'void' };
+  invoice: { id: string; number: string; status: 'open' | 'paid' | 'void' };
 }
 
 export interface BookingPage {
@@ -103,6 +103,8 @@ export interface Slot {
 /** Implemented by the data layer; failures are `RequestError`s. */
 export interface BookingRepository {
   list(filters: BookingFilters): Promise<BookingPage>;
+  /** Download link for every row with these filters, as CSV (FSD 5.1). */
+  exportUrl(filters: BookingFilters): string;
   get(id: string): Promise<BookingDetail>;
   calendar(range: { from: string; to: string; branchId?: string }): Promise<CalendarData>;
   slots(id: string, query: { date: string; staffId: string }): Promise<Slot[]>;

@@ -16,6 +16,7 @@ import {
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { IdParams, problems } from '../../lib/route-schemas.js';
 import type { ConsoleGuard } from '../console-auth/guard.js';
+import { sendCsv } from '../console-records/routes.js';
 import type { ConsoleBookingService } from './service.js';
 
 const tags = ['console-bookings'];
@@ -31,12 +32,18 @@ export const consoleBookingRoutes: FastifyPluginAsyncZod<{
       preHandler: guard.require('owner', 'manager'),
       schema: {
         tags,
-        summary: 'Bookings table: filters, sort, pagination (manager: own branch)',
+        summary: 'Bookings table: filters, sort, pagination (manager: own branch); CSV',
         querystring: ConsoleBookingListQuerySchema,
         response: { 200: ConsoleBookingListSchema, ...problems(400, 401, 403) },
       },
     },
-    async (request) => service.list(guard.actor(request), request.query),
+    async (request, reply) => {
+      const actor = guard.actor(request);
+      if (request.query.format === 'csv') {
+        return sendCsv(reply, await service.exportCsv(actor, request.query));
+      }
+      return service.list(actor, request.query);
+    },
   );
 
   app.get(

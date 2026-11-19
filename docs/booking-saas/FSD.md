@@ -438,7 +438,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - **Format:** JSON, `camelCase` fields, ISO 8601 timestamps in UTC (`2026-11-18T09:30:00Z`), money as integer cents.
 - **Errors:** RFC 9457 problem details with a stable `code` (6.13).
 - **Pagination:** list endpoints take `page`, `pageSize` (max 100), `sort` (e.g. `-startsAt`) and filters; responses include `items`, `page`, `pageSize`, `total`. The audit log uses cursor pagination (`cursor`, `limit`) because it grows fastest.
-- **CSV export:** `GET <list endpoint>?format=csv` with the same filters, streamed.
+- **CSV export:** `GET <list endpoint>?format=csv` with the same filters and scope, all pages (at most 10,000 rows), streamed in batches as `text/csv` with a dated file name. Cells that start with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'`, so a customer name can never run as a spreadsheet formula (CSV injection). Every export is written to the audit log (`export.created`: which list, filters, row count), because it takes customer data out of the app.
 - **Idempotency:** `POST` endpoints that create bookings or start payments require an `Idempotency-Key` header (UUID); other `POST`s accept it.
 - **Optimistic locking:** `PATCH` on versioned resources requires `If-Match: <version>`; a stale version returns `409 VERSION_CONFLICT`.
 - **CSRF:** cookies are `SameSite=Lax`; every state-changing request must also send the `X-CSRF-Token` header (double-submit token from `GET .../auth/csrf`). The token is stored in an httpOnly cookie and returned in the response body; a missing or different header returns `403 CSRF_INVALID`.
@@ -557,17 +557,17 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 |---|---|---|---|
 | GET | `/calendar` | Active and finished bookings (not expired or cancelled) and time off for `from`–`to` (at most 14 days), one `branchId` (owner chooses; manager and staff: their own), with the branch's therapists as columns | owner, manager (own branch), staff (self) |
 | GET | `/availability` | Free slots (for reschedule and reassign dialogs) | owner, manager |
-| GET | `/bookings` | Table: filters (`status`, `branchId`, `staffId`, `serviceId`, `from`/`to` dates, `q` customer name or email), `sort` (`startsAt` or `-startsAt`), pagination; CSV in 6b | owner, manager (own branch) |
+| GET | `/bookings` | Table: filters (`status`, `branchId`, `staffId`, `serviceId`, `from`/`to` dates, `q` customer name or email), `sort` (`startsAt` or `-startsAt`), pagination, `format=csv` | owner, manager (own branch) |
 | GET | `/bookings/:id` | Detail with customer, invoice, allowed actions and the timeline from the audit log. Staff get the customer's name and notes only (no email or phone, FSD 1.2) | owner, manager (own branch), staff (own) |
 | POST | `/bookings/:id/reschedule` | New `startsAt` (and optional `staffId`); `confirmed` or held `pending_payment` bookings, before the session starts; not counted against the customer's limit | owner, manager (own branch) |
 | POST | `/bookings/:id/reassign` | New `staffId`, same time (6.6) | owner, manager (own branch) |
 | POST | `/bookings/:id/cancel` | Cancel (6.7); `reason` required when paid | owner, manager (own branch) |
 | POST | `/bookings/:id/complete` | Mark completed (6.7) | owner, manager (own branch), staff (own) |
 | POST | `/bookings/:id/no-show` | Mark no-show (6.7) | owner, manager (own branch), staff (own) |
-| GET | `/customers` | Tenant customers (manager: who booked at own branch), CSV | owner, manager |
-| GET | `/customers/:id` | Customer detail with bookings at this tenant | owner, manager |
-| GET | `/invoices` | Table with filters, CSV | owner, manager (own branch) |
-| GET | `/invoices/:id` | Invoice detail | owner, manager (own branch) |
+| GET | `/customers` | Tenant customers with booking count, last visit and next booking; `q` (name or email), `sort` (`name`, `-lastVisit`), pagination, `format=csv`. A manager sees the customers who booked at their branch, with counts for that branch only | owner, manager |
+| GET | `/customers/:id` | Customer detail (contact, whether they have a Portal account) with their bookings at this tenant (manager: at their branch) | owner, manager |
+| GET | `/invoices` | Table: `status`, `branchId`, `from`/`to` (issue date), `q` (invoice number or customer), pagination, `format=csv` | owner, manager (own branch) |
+| GET | `/invoices/:id` | Invoice detail with the booking, the customer and every payment attempt (provider, status, time) | owner, manager (own branch) |
 
 **Reporting & operations**
 | Method | Endpoint | Description | Auth |

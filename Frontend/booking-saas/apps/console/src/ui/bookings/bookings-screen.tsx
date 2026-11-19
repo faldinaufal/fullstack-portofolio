@@ -3,7 +3,16 @@
 
 'use client';
 
-import { Alert, Badge, Button, Card, CardContent, SelectField, TextField } from '@tempora/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  buttonVariants,
+  Card,
+  CardContent,
+  SelectField,
+  TextField,
+} from '@tempora/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
@@ -12,6 +21,7 @@ import {
   formatWhen,
   STATUS,
   useBookings,
+  useBookingsExportUrl,
   type BookingFilters,
   type BookingStatus,
 } from '@/core/bookings/presentation/use-bookings';
@@ -32,6 +42,7 @@ export function BookingsScreen() {
   const branches = useBranches();
   const [filters, setFilters] = useState<BookingFilters>({ sort: 'startsAt', page: 1 });
   const list = useBookings(filters);
+  const exportUrl = useBookingsExportUrl(filters);
   const set = (changes: Partial<BookingFilters>) =>
     setFilters((current) => ({ ...current, page: 1, ...changes }));
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.pageSize)) : 1;
@@ -41,6 +52,11 @@ export function BookingsScreen() {
       <PageHeader
         title="Bookings"
         description={member.role === 'owner' ? 'Every branch.' : 'Bookings at your branch.'}
+        actions={
+          <a href={exportUrl} className={buttonVariants({ variant: 'secondary' })}>
+            Export CSV
+          </a>
+        }
       />
 
       <Card>

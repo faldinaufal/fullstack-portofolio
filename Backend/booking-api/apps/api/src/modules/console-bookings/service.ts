@@ -5,7 +5,6 @@ import type {
   Availability,
   Calendar,
   CalendarQuery,
-  ConsoleBooking,
   ConsoleBookingDetail,
   ConsoleBookingList,
   ConsoleBookingListQuery,
@@ -19,6 +18,7 @@ import { AppError } from '../../lib/app-error.js';
 import { recordAudit } from '../../lib/audit.js';
 import type { PaymentProvider } from '../../lib/payments/provider.js';
 import type { TokenHasher } from '../../lib/tokens.js';
+import { csvAmount, csvDateTime, csvStream } from '../../lib/csv.js';
 import { availableSlots, wallTimeToInstant } from '../availability/engine.js';
 import { loadAvailabilityInput } from '../availability/load.js';
 import { cancelBooking, closeCheckouts } from '../bookings/cancel.js';
@@ -34,19 +34,18 @@ import {
   canSeeCustomerContact,
   effectiveStatus,
 } from './access.js';
+import {
+  auditExport,
+  BOOKING_ROW_INCLUDE,
+  dateRange,
+  exportFileName,
+  toConsoleBooking,
+  type BookingRow,
+} from './rows.js';
 
 const DAY = 24 * 60 * 60_000;
 /** The calendar shows at most two weeks at a time. */
 const CALENDAR_MAX_DAYS = 14;
-
-const INCLUDE = {
-  branch: { select: { id: true, name: true } },
-  staff: { include: { teamAccount: { select: { name: true } } } },
-  tenantCustomer: true,
-  invoice: { select: { number: true, status: true } },
-} as const;
-
-type Row = Prisma.BookingGetPayload<{ include: typeof INCLUDE }>;
 
 export interface ConsoleBookingDeps {
   prisma: PrismaClient;
@@ -78,27 +77,11 @@ export function createConsoleBookingService({
   const nextDate = (date: string) =>
     new Date(new Date(`${date}T12:00:00Z`).getTime() + DAY).toISOString().slice(0, 10);
 
-  function toRow(row: Row, actor: ConsoleActor): ConsoleBooking {
-    return {
-      id: row.id,
-      status: effectiveStatus(row, now()) as ConsoleBooking['status'],
-      startsAt: row.startsAt.toISOString(),
-      endsAt: row.endsAt.toISOString(),
-      serviceName: row.serviceName,
-      priceCents: row.priceCents,
-      branch: row.branch,
-      therapist: { id: row.staffMembershipId, name: row.staff.teamAccount.name },
-      customer: {
-        name: row.tenantCustomer.name,
-        email: canSeeCustomerContact(actor) ? row.tenantCustomer.email : null,
-      },
-      invoice: { number: row.invoice?.number ?? '', status: row.invoice?.status ?? 'open' },
-    };
-  }
+  const toRow = (row: BookingRow, actor: ConsoleActor) => toConsoleBooking(row, actor, now());
 
   /** A booking the actor may see, else `404` (outside scope = does not exist, FSD 1.3). */
   async function visible(tx: Tx, actor: ConsoleActor, id: string) {
-    const row = await tx.booking.findUnique({ where: { id }, include: INCLUDE });
+    const row = await tx.booking.findUnique({ where: { id }, include: BOOKING_ROW_INCLUDE });
     if (!row || !canSeeBooking(actor, row)) throw notFound('Booking');
     return row;
   }
@@ -226,40 +209,55 @@ export function createConsoleBookingService({
     });
   }
 
+  /** Owner: every branch. Manager: their branch only, whatever the filter says. */
+  function listWhere(
+    actor: ConsoleActor,
+    query: ConsoleBookingListQuery,
+  ): Prisma.BookingWhereInput {
+    const startsAt = dateRange(timeZone, query.from, query.to);
+    return {
+      ...(actor.role === 'manager'
+        ? { branchId: actor.branchId! }
+        : query.branchId && { branchId: query.branchId }),
+      ...(query.status && { status: query.status }),
+      ...(query.staffId && { staffMembershipId: query.staffId }),
+      ...(query.serviceId && { serviceId: query.serviceId }),
+      ...(startsAt && { startsAt }),
+      ...(query.q && {
+        tenantCustomer: {
+          OR: [
+            { name: { contains: query.q, mode: 'insensitive' } },
+            { email: { contains: query.q.toLowerCase() } },
+          ],
+        },
+      }),
+    };
+  }
+
+  const page = (
+    tx: Tx,
+    where: Prisma.BookingWhereInput,
+    query: ConsoleBookingListQuery,
+    n: number,
+    size: number,
+  ) =>
+    tx.booking.findMany({
+      where,
+      include: BOOKING_ROW_INCLUDE,
+      orderBy: [{ startsAt: query.sort === '-startsAt' ? 'desc' : 'asc' }, { id: 'asc' }],
+      skip: (n - 1) * size,
+      take: size,
+    });
+
+  const filtersOf = ({ page: _p, pageSize: _s, format: _f, ...filters }: ConsoleBookingListQuery) =>
+    filters;
+
   return {
-    /** Owner: every branch. Manager: their branch only, whatever the filter says. */
     list: (actor: ConsoleActor, query: ConsoleBookingListQuery): Promise<ConsoleBookingList> =>
       inTenant(actor, async (tx) => {
-        const where: Prisma.BookingWhereInput = {
-          ...(actor.role === 'manager'
-            ? { branchId: actor.branchId! }
-            : query.branchId && { branchId: query.branchId }),
-          ...(query.status && { status: query.status }),
-          ...(query.staffId && { staffMembershipId: query.staffId }),
-          ...(query.serviceId && { serviceId: query.serviceId }),
-          ...((query.from || query.to) && {
-            startsAt: {
-              ...(query.from && { gte: startOf(query.from) }),
-              ...(query.to && { lt: startOf(nextDate(query.to)) }),
-            },
-          }),
-          ...(query.q && {
-            tenantCustomer: {
-              OR: [
-                { name: { contains: query.q, mode: 'insensitive' } },
-                { email: { contains: query.q.toLowerCase() } },
-              ],
-            },
-          }),
-        };
+        const where = listWhere(actor, query);
         const total = await tx.booking.count({ where });
-        const rows = await tx.booking.findMany({
-          where,
-          include: INCLUDE,
-          orderBy: [{ startsAt: query.sort === '-startsAt' ? 'desc' : 'asc' }, { id: 'asc' }],
-          skip: (query.page - 1) * query.pageSize,
-          take: query.pageSize,
-        });
+        const rows = await page(tx, where, query, query.page, query.pageSize);
         return {
           items: rows.map((row) => toRow(row, actor)),
           page: query.page,
@@ -268,6 +266,50 @@ export function createConsoleBookingService({
           timeZone,
         };
       }),
+
+    /** `?format=csv`: every page with the same filters and scope, audited (FSD 5.1). */
+    async exportCsv(actor: ConsoleActor, query: ConsoleBookingListQuery) {
+      const where = listWhere(actor, query);
+      await inTenant(actor, async (tx) =>
+        auditExport(tx, actor, 'bookings', filtersOf(query), await tx.booking.count({ where })),
+      );
+      return {
+        fileName: exportFileName('bookings', now()),
+        stream: csvStream(
+          [
+            'Booking ID',
+            'Starts',
+            'Ends',
+            'Status',
+            'Service',
+            'Therapist',
+            'Branch',
+            'Customer',
+            'Email',
+            'Phone',
+            'Price',
+            'Invoice',
+            'Invoice status',
+          ],
+          (n, size) => inTenant(actor, (tx) => page(tx, where, query, n, size)),
+          (row) => [
+            row.id,
+            csvDateTime(row.startsAt, timeZone),
+            csvDateTime(row.endsAt, timeZone),
+            effectiveStatus(row, now()),
+            row.serviceName,
+            row.staff.teamAccount.name,
+            row.branch.name,
+            row.tenantCustomer.name,
+            row.tenantCustomer.email,
+            row.tenantCustomer.phone,
+            csvAmount(row.priceCents),
+            row.invoice?.number,
+            row.invoice?.status,
+          ],
+        ),
+      };
+    },
 
     detail: (actor: ConsoleActor, id: string) => inTenant(actor, (tx) => detail(tx, actor, id)),
 

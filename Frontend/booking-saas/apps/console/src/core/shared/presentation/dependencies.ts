@@ -10,6 +10,7 @@ import type { BranchRepository } from '../../branches/domain/branch';
 import type { CatalogueRepository } from '../../catalogue/domain/catalogue';
 import type { GetDashboard } from '../../dashboard/domain/get-dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
+import type { RecordsRepository } from '../../records/domain/records';
 import type { TeamRepository } from '../../team/domain/team';
 
 /**
@@ -23,6 +24,7 @@ export interface Dependencies {
   branches: BranchRepository;
   catalogue: CatalogueRepository;
   team: TeamRepository;
+  records: RecordsRepository;
   getApiStatus: GetApiStatus;
   getDashboard: GetDashboard;
 }

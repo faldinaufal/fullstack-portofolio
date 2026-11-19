@@ -57,7 +57,11 @@ describe('booking detail', () => {
         email: null,
         phone: null,
       },
-      invoice: { number: 'LUM-2026-000001', status: 'paid' },
+      invoice: {
+        id: 'fa1d0000-0000-4000-8000-000000000015',
+        number: 'LUM-2026-000001',
+        status: 'paid',
+      },
       notes: 'Lower back',
       durationMinutes: 60,
       bufferMinutes: 15,
