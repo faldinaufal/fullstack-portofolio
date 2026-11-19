@@ -3,6 +3,7 @@
 
 import { buttonVariants, Icon, type IconName } from '@tempora/ui';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { FeaturedBusinesses } from './featured-businesses';
 
 const FACTS = [
@@ -200,9 +201,14 @@ export function HomeScreen() {
             <h2 id="businesses-title" className="text-[30px] font-extrabold">
               Businesses on Tempora
             </h2>
-            <p className="text-muted">Demo businesses with fictional data.</p>
+            <p className="text-muted">
+              Businesses taking bookings right now (fictional demo data).
+            </p>
           </div>
-          <FeaturedBusinesses />
+          {/* Reads the search query from the URL, which is only known in the browser. */}
+          <Suspense>
+            <FeaturedBusinesses />
+          </Suspense>
         </div>
       </section>
 

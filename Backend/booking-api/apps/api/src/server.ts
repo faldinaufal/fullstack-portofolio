@@ -11,6 +11,7 @@ import { createTokenHasher } from './lib/tokens.js';
 import { createBranchService } from './modules/branches/service.js';
 import { createConsoleAuthService } from './modules/console-auth/service.js';
 import { createPrismaHealthRepository } from './modules/health/repository.js';
+import { createPublicCatalogue } from './modules/public/service.js';
 import { createScheduleService } from './modules/schedules/service.js';
 import { createServiceCatalogue } from './modules/services/service.js';
 import { createTeamService } from './modules/team/service.js';
@@ -36,6 +37,7 @@ const app = await buildApp({
     }),
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
+  publicCatalogue: createPublicCatalogue({ prisma, timeZone: env.APP_TIME_ZONE }),
   consoleModules: {
     tenant: createTenantService({ prisma }),
     branches: createBranchService({ prisma }),

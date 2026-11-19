@@ -17,7 +17,7 @@ const business = (overrides: Partial<Business>): Business => ({
 describe('listFeaturedBusinesses', () => {
   it('hides businesses that have no branch yet', async () => {
     const list = createListFeaturedBusinesses({
-      listFeatured: async () => [business({ id: 'a' }), business({ id: 'b', branchNames: [] })],
+      search: async () => [business({ id: 'a' }), business({ id: 'b', branchNames: [] })],
     });
 
     await expect(list()).resolves.toEqual([business({ id: 'a' })]);

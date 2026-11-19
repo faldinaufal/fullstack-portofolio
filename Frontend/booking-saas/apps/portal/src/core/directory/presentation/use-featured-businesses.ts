@@ -12,11 +12,11 @@ export interface FeaturedBusinessesState {
   businesses: BusinessCardViewModel[];
 }
 
-export function useFeaturedBusinesses(): FeaturedBusinessesState {
+export function useFeaturedBusinesses(search?: string): FeaturedBusinessesState {
   const { listFeaturedBusinesses } = useDependencies();
   const query = useQuery({
-    queryKey: ['directory', 'featured'],
-    queryFn: () => listFeaturedBusinesses(),
+    queryKey: ['directory', search ?? ''],
+    queryFn: () => listFeaturedBusinesses(search),
   });
 
   if (query.isPending) return { status: 'loading', businesses: [] };
