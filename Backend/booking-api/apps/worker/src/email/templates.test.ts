@@ -38,23 +38,51 @@ describe('email templates', () => {
     expect(email.html).toContain('href="http://localhost:3001/invite/abc"');
   });
 
-  it('shows the new and the previous time when a booking is moved', () => {
+  it('shows the new and the previous time and therapist when a booking is changed', () => {
     const email = renderEmail('portal.booking_rescheduled', {
       name: 'Omar Haddad',
       businessName: 'Lumen <Wellness>',
       serviceName: 'Deep Tissue Massage',
-      therapist: 'Ines H.',
+      therapist: 'Daniel K.',
       when: 'Monday 23 November 2026 at 14:00',
       previousWhen: 'Monday 23 November 2026 at 10:00',
+      previousTherapist: 'Ines H.',
       branchName: 'Downtown',
       address: '12 Harbor Street',
       bookingUrl: 'http://localhost:3000/manage/token',
     });
-    expect(email.subject).toContain('Booking moved');
-    expect(email.text).toContain('New: Monday 23 November 2026 at 14:00');
-    expect(email.text).toContain('Was: Monday 23 November 2026 at 10:00');
+    expect(email.subject).toContain('Booking changed');
+    expect(email.text).toContain('New: Monday 23 November 2026 at 14:00 with Daniel K.');
+    expect(email.text).toContain('Was: Monday 23 November 2026 at 10:00 with Ines H.');
     expect(email.html).toContain('Lumen &lt;Wellness&gt;');
     expect(email.html).toContain('http://localhost:3000/manage/token');
+  });
+
+  it('says who refunds a paid booking cancelled by the business', () => {
+    const base = {
+      name: 'Omar Haddad',
+      businessName: 'Lumen Wellness',
+      serviceName: 'Deep Tissue Massage',
+      therapist: 'Ines H.',
+      when: 'Monday 23 November 2026 at 10:00',
+      branchName: 'Downtown',
+      address: null,
+      bookingUrl: 'http://localhost:3000/manage/token',
+    };
+    const paid = renderEmail('portal.booking_cancelled', {
+      ...base,
+      reason: 'Therapist is ill',
+      refundByBusiness: true,
+    });
+    expect(paid.text).toContain('Reason: Therapist is ill');
+    expect(paid.text).toContain('Lumen Wellness will refund your payment directly.');
+    const unpaid = renderEmail('portal.booking_cancelled', {
+      ...base,
+      reason: null,
+      refundByBusiness: false,
+    });
+    expect(unpaid.text).toContain('Nothing was charged.');
+    expect(unpaid.text).not.toContain('Reason:');
   });
 
   it('recognises only known templates', () => {

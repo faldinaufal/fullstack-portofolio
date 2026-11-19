@@ -108,11 +108,15 @@ export async function queueConfirmation(
   await queueReminder(tx, booking, to, details, now);
 }
 
-/** After a reschedule: "booking moved" now, and a reminder for the new time. */
+/**
+ * After a reschedule or a new therapist: "booking moved" now (new and previous time and
+ * therapist), and for a paid booking a reminder for the new time. An unpaid booking gets its
+ * reminder when it is paid, so it never has two that match.
+ */
 export async function queueRescheduled(
   tx: Tx,
   bookingId: string,
-  previousStartsAt: Date,
+  previous: { startsAt: Date; therapist: string },
   context: BookingEmailContext,
   now: Date,
 ): Promise<void> {
@@ -123,8 +127,30 @@ export async function queueRescheduled(
       tenantId: booking.tenantId,
       toEmail: to,
       template: 'portal.booking_rescheduled',
-      payload: { ...details, previousWhen: formatWhen(previousStartsAt, context.timeZone) },
+      payload: {
+        ...details,
+        previousWhen: formatWhen(previous.startsAt, context.timeZone),
+        previousTherapist: previous.therapist,
+      },
     },
   });
-  await queueReminder(tx, booking, to, details, now);
+  if (booking.status === 'confirmed') await queueReminder(tx, booking, to, details, now);
+}
+
+/** The business cancelled: tell the customer why, and who refunds a paid booking (FSD 6.7). */
+export async function queueCancelled(
+  tx: Tx,
+  bookingId: string,
+  cancellation: { reason: string | null; paid: boolean },
+  context: BookingEmailContext,
+): Promise<void> {
+  const { booking, details } = await describe(tx, bookingId, context);
+  await tx.emailMessage.create({
+    data: {
+      tenantId: booking.tenantId,
+      toEmail: booking.tenantCustomer.email,
+      template: 'portal.booking_cancelled',
+      payload: { ...details, reason: cancellation.reason, refundByBusiness: cancellation.paid },
+    },
+  });
 }

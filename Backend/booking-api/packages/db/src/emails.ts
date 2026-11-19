@@ -33,7 +33,15 @@ export interface EmailPayloads {
   'portal.password_changed': { name: string };
   'portal.booking_confirmed': BookingEmailDetails & { invoiceNumber: string; priceCents: number };
   'portal.booking_reminder': BookingEmailDetails;
-  'portal.booking_rescheduled': BookingEmailDetails & { previousWhen: string };
+  'portal.booking_rescheduled': BookingEmailDetails & {
+    previousWhen: string;
+    previousTherapist: string;
+  };
+  'portal.booking_cancelled': BookingEmailDetails & {
+    reason: string | null;
+    /** Paid booking cancelled by the business: it refunds the customer outside Tempora. */
+    refundByBusiness: boolean;
+  };
   'console.payment_needs_attention': { name: string; bookingId: string };
   'console.invitation': {
     businessName: string;

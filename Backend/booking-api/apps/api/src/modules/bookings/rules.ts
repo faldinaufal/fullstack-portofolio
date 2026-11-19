@@ -35,6 +35,16 @@ export function isOverlapViolation(error: unknown): boolean {
   return text.includes('23P01') || text.includes('bookings_no_overlap');
 }
 
+/** Runs a write and turns the exclusion constraint's rejection into `409 SLOT_TAKEN`. */
+export async function translateOverlap<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (isOverlapViolation(error)) throw slotError('SLOT_TAKEN');
+    throw error;
+  }
+}
+
 /**
  * FSD 6.3 step 2: writes to one therapist's schedule happen one at a time. Several therapists
  * (a reschedule to someone else) are locked in ID order, so two such writes can never wait

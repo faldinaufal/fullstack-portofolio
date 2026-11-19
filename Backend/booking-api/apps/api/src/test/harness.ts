@@ -18,6 +18,7 @@ import { createPortalBookingService } from '../modules/bookings/portal-service.j
 import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
+import { createConsoleBookingService } from '../modules/console-bookings/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
 import { createServiceCatalogue } from '../modules/services/service.js';
 import { createTeamService } from '../modules/team/service.js';
@@ -156,9 +157,17 @@ export async function createHarness(): Promise<Harness> {
     },
     consoleModules: {
       tenant: createTenantService({ prisma }),
-      branches: createBranchService({ prisma, now }),
+      branches: createBranchService({ prisma, timeZone: 'America/New_York', now }),
       services: createServiceCatalogue({ prisma }),
-      schedules: createScheduleService({ prisma, now }),
+      schedules: createScheduleService({ prisma, timeZone: 'America/New_York', now }),
+      bookings: createConsoleBookingService({
+        prisma,
+        payments,
+        hashToken,
+        portalUrl: 'http://localhost:3000',
+        timeZone: 'America/New_York',
+        now,
+      }),
       team: createTeamService({
         prisma,
         passwords,

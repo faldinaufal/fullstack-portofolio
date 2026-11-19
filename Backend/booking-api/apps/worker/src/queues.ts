@@ -9,6 +9,7 @@
 export const QUEUES = {
   heartbeat: 'system.heartbeat',
   expireHolds: 'bookings.expire-holds',
+  autoComplete: 'bookings.auto-complete',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

@@ -9,15 +9,13 @@ import type {
 } from '@tempora/contracts';
 import type { Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
-import { recordAudit } from '../../lib/audit.js';
-import { availableSlots, calendarDateOf, slotProblem } from '../availability/engine.js';
+import { availableSlots } from '../availability/engine.js';
 import { loadAvailabilityInput } from '../availability/load.js';
 import type { BookingViewer, LocatedBooking } from './access.js';
-import { queueRescheduled, type BookingEmailContext } from './emails.js';
-import { expireStaleHolds, isOverlapViolation, lockTherapists, slotError } from './rules.js';
+import type { BookingEmailContext } from './emails.js';
+import { moveBooking } from './move.js';
+import { translateOverlap } from './rules.js';
 import { reschedulingOf } from './views.js';
-
-const MINUTE = 60_000;
 
 export interface RescheduleDeps {
   inTenant: <T>(tenantId: string, work: (tx: Tx) => Promise<T>) => Promise<T>;
@@ -43,14 +41,11 @@ const BLOCKED = {
  * The booking being moved, checked against FSD 6.5 for customers and guests. Runs in the
  * booking's tenant context; throws the specific reason when moving is not allowed.
  */
-async function movable(tx: Tx, bookingId: string, now: Date) {
-  const booking = await tx.booking.findUniqueOrThrow({
-    where: { id: bookingId },
-    include: {
-      tenant: true,
-      tenantCustomer: true,
-    },
-  });
+/** FSD 6.5 for customers and guests; throws the specific reason when moving is not allowed. */
+export function assertMovableByCustomer(
+  booking: Parameters<typeof reschedulingOf>[0],
+  now: Date,
+): void {
   const rules = reschedulingOf(booking, now);
   if (!rules) {
     throw new AppError({
@@ -63,6 +58,15 @@ async function movable(tx: Tx, bookingId: string, now: Date) {
   if (rules.reason) {
     throw new AppError({ status: 409, code: rules.reason, ...BLOCKED[rules.reason] });
   }
+}
+
+/** The booking a customer wants to move, checked against FSD 6.5. */
+async function movable(tx: Tx, bookingId: string, now: Date) {
+  const booking = await tx.booking.findUniqueOrThrow({
+    where: { id: bookingId },
+    include: { tenant: true },
+  });
+  assertMovableByCustomer(booking, now);
   return booking;
 }
 
@@ -138,90 +142,35 @@ export function createReschedule({
       ip: string,
     ): Promise<PortalBookingDetail> {
       const found = await locate(viewer, bookingId);
-      const startsAt = new Date(input.startsAt);
-      try {
-        await inTenant(found.tenantId, async (tx) => {
-          const current = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
-          const staffId = input.staffId ?? current.staffMembershipId;
-          await lockTherapists(tx, [current.staffMembershipId, staffId]);
-          // Re-read under the lock: a concurrent reschedule may have moved it meanwhile.
-          const booking = await movable(tx, bookingId, now());
-          if (
-            booking.startsAt.getTime() === startsAt.getTime() &&
-            booking.staffMembershipId === staffId
-          ) {
-            throw new AppError({
-              status: 400,
-              code: 'VALIDATION_FAILED',
-              title: 'Same time',
-              detail: 'Choose a different time or therapist.',
-              errors: [{ path: 'startsAt', message: 'This is the current time of the booking.' }],
-            });
-          }
-          await expireStaleHolds(tx, staffId, now());
-
-          const { input: slotInput } = await loadAvailabilityInput(
-            tx,
-            {
-              branchId: booking.branchId,
-              serviceId: booking.serviceId,
-              staffId,
-              date: calendarDateOf(startsAt, timeZone),
-              excludeBookingId: booking.id,
-            },
-            { timeZone, now: now(), settings: settingsOf(booking.tenant) },
-          );
-          const problem = slotProblem(
-            {
-              ...slotInput,
-              service: {
-                durationMinutes: booking.durationMinutes,
-                bufferMinutes: booking.bufferMinutes,
-              },
-            },
-            startsAt,
-          );
-          if (problem) throw slotError(problem);
-
-          const endsAt = new Date(startsAt.getTime() + booking.durationMinutes * MINUTE);
-          await tx.booking.update({
-            where: { id: booking.id },
-            data: {
-              startsAt,
-              endsAt,
-              blockedUntil: new Date(endsAt.getTime() + booking.bufferMinutes * MINUTE),
-              staffMembershipId: staffId,
-              customerRescheduleCount: { increment: 1 },
-              version: { increment: 1 },
-            },
+      const byCustomer = found.via === 'customer' ? viewer.customerAccountId : null;
+      await translateOverlap(() =>
+        inTenant(found.tenantId, async (tx) => {
+          const { tenantCustomer } = await tx.booking.findUniqueOrThrow({
+            where: { id: bookingId },
+            select: { tenantCustomer: { select: { name: true } } },
           });
-          const byCustomer = found.via === 'customer' ? viewer.customerAccountId : null;
-          await recordAudit(
+          await moveBooking(
             tx,
+            bookingId,
+            { startsAt: new Date(input.startsAt), staffId: input.staffId },
             {
-              type: 'customer',
-              id: byCustomer,
-              label: byCustomer
-                ? booking.tenantCustomer.name
-                : `${booking.tenantCustomer.name} (guest)`,
-              ip,
-            },
-            {
-              tenantId: booking.tenantId,
-              branchId: booking.branchId,
+              timeZone,
+              now: now(),
+              emails,
+              byCustomer: true,
               action: 'booking.rescheduled',
-              entityType: 'booking',
-              entityId: booking.id,
-              before: { startsAt: booking.startsAt, staffId: booking.staffMembershipId },
-              after: { startsAt, staffId },
+              actor: {
+                type: 'customer',
+                id: byCustomer,
+                label: byCustomer ? tenantCustomer.name : `${tenantCustomer.name} (guest)`,
+                ip,
+              },
+              // FSD 6.5 for customers and guests, checked again under the lock.
+              check: (booking) => assertMovableByCustomer(booking, now()),
             },
           );
-          await queueRescheduled(tx, booking.id, booking.startsAt, emails, now());
-        });
-      } catch (error) {
-        if (isOverlapViolation(error)) throw slotError('SLOT_TAKEN');
-        throw error;
-      }
+        }),
+      );
       return detailOf(found);
     },
   };
