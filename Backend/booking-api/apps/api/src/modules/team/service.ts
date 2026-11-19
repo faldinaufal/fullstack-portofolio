@@ -15,6 +15,8 @@ import {
 import { Prisma, setDbContext, withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { recordAudit } from '../../lib/audit.js';
+import { activeBookings, assertNoConflicts } from '../bookings/active.js';
+import { lockTherapists } from '../bookings/rules.js';
 import type { PasswordHasher } from '../../lib/passwords.js';
 import { RATE_LIMITS, type RateLimiter } from '../../lib/rate-limit.js';
 import { generateToken, type TokenHasher } from '../../lib/tokens.js';
@@ -158,6 +160,12 @@ export function createTeamService({
    * role (FSD 6.8). Order matters: the partial unique index allows one active manager per
    * branch at every moment, so the old manager steps down first.
    */
+  /** FSD 6.8: a therapist leaving their branch (or the team) must not strand bookings. */
+  async function assertNoBookingsOf(tx: Tx, member: { id: string }, detail: string) {
+    await lockTherapists(tx, [member.id]);
+    assertNoConflicts(await activeBookings(tx, { staffMembershipId: member.id }, now()), detail);
+  }
+
   async function resolveCurrentManager(
     tx: Tx,
     actor: ConsoleActor,
@@ -170,11 +178,13 @@ export function createTeamService({
       after = await repo.updateMember(tx, current.id, { role: 'staff' });
     } else if (action.action === 'move') {
       if (action.branchId === takenBranchId) throw branchHasManager(current.teamAccount.name);
+      await assertNoBookingsOf(tx, current, `${current.teamAccount.name} has upcoming bookings.`);
       await usableBranch(tx, actor, action.branchId);
       const other = await repo.activeManagerOf(tx, action.branchId);
       if (other) throw branchHasManager(other.teamAccount.name);
       after = await repo.updateMember(tx, current.id, { branchId: action.branchId });
     } else {
+      await assertNoBookingsOf(tx, current, `${current.teamAccount.name} has upcoming bookings.`);
       after = await repo.updateMember(tx, current.id, { status: 'deactivated' });
     }
     await endSessions(tx, current, action.action === 'deactivate');
@@ -225,6 +235,9 @@ export function createTeamService({
         const branchId = input.branchId ?? member.branchId;
         if (!branchId) throw notFound('Branch');
         if (input.branchId) await usableBranch(tx, actor, input.branchId);
+        if (branchId !== member.branchId) {
+          await assertNoBookingsOf(tx, member, 'The member has upcoming bookings at their branch.');
+        }
 
         if (role === 'manager') {
           const current = await repo.activeManagerOf(tx, branchId);
@@ -261,6 +274,7 @@ export function createTeamService({
         const member = await visibleMember(tx, actor, id);
         if (!canManageMember(actor, member)) throw forbidden('You cannot deactivate this member.');
         if (member.status === 'deactivated') return toMember(member);
+        await assertNoBookingsOf(tx, member, 'The member has upcoming bookings.');
         const updated = await repo.updateMember(tx, id, { status: 'deactivated' });
         await endSessions(tx, member, true);
         await recordAudit(tx, auditActor(actor), {

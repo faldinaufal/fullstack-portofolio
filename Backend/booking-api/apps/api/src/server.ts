@@ -18,6 +18,7 @@ import { createPortalBookingService } from './modules/bookings/portal-service.js
 import { createBookingService } from './modules/bookings/service.js';
 import { createPortalAuthService } from './modules/portal-auth/service.js';
 import { createPublicCatalogue } from './modules/public/service.js';
+import { createConsoleBookingService } from './modules/console-bookings/service.js';
 import { createScheduleService } from './modules/schedules/service.js';
 import { createServiceCatalogue } from './modules/services/service.js';
 import { createTeamService } from './modules/team/service.js';
@@ -84,9 +85,16 @@ const app = await buildApp({
   },
   consoleModules: {
     tenant: createTenantService({ prisma }),
-    branches: createBranchService({ prisma }),
+    branches: createBranchService({ prisma, timeZone: env.APP_TIME_ZONE }),
     services: createServiceCatalogue({ prisma }),
-    schedules: createScheduleService({ prisma }),
+    schedules: createScheduleService({ prisma, timeZone: env.APP_TIME_ZONE }),
+    bookings: createConsoleBookingService({
+      prisma,
+      payments,
+      hashToken,
+      portalUrl: env.PORTAL_URL,
+      timeZone: env.APP_TIME_ZONE,
+    }),
     team: createTeamService({
       prisma,
       passwords,

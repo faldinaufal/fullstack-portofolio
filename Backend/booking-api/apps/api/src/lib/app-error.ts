@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import type { ErrorCode, FieldError } from '@tempora/contracts';
+import type { BookingConflict, ErrorCode, FieldError } from '@tempora/contracts';
 
 export interface AppErrorOptions {
   status: number;
@@ -9,6 +9,7 @@ export interface AppErrorOptions {
   title: string;
   detail?: string;
   errors?: FieldError[];
+  conflicts?: BookingConflict[];
 }
 
 /**
@@ -21,6 +22,7 @@ export class AppError extends Error {
   readonly title: string;
   readonly detail: string | undefined;
   readonly errors: FieldError[] | undefined;
+  readonly conflicts: BookingConflict[] | undefined;
 
   constructor(options: AppErrorOptions) {
     super(options.detail ?? options.title);
@@ -30,5 +32,6 @@ export class AppError extends Error {
     this.title = options.title;
     this.detail = options.detail;
     this.errors = options.errors;
+    this.conflicts = options.conflicts;
   }
 }

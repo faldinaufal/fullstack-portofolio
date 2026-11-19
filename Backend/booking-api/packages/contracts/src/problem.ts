@@ -42,6 +42,7 @@ export const ErrorCode = z.enum([
   'GUEST_DETAILS_REQUIRED',
   'NOT_CANCELLABLE',
   'NOT_RESCHEDULABLE',
+  'NOT_MARKABLE',
   'INVITATION_EXPIRED',
   'IDEMPOTENCY_KEY_REUSED',
   'TENANT_SUSPENDED',
@@ -59,6 +60,19 @@ export const FieldErrorSchema = z.object({
 
 export type FieldError = z.infer<typeof FieldErrorSchema>;
 
+/** A booking that blocks a change (`HAS_ACTIVE_BOOKINGS`, FSD 6.8). */
+export const BookingConflictSchema = z
+  .object({
+    id: z.string(),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime(),
+    serviceName: z.string(),
+    therapist: z.string(),
+    customerName: z.string(),
+  })
+  .meta({ id: 'BookingConflict' });
+export type BookingConflict = z.infer<typeof BookingConflictSchema>;
+
 /** Error body in the RFC 9457 "problem details" format, plus Tempora's `code` and `requestId`. */
 export const ProblemDetailsSchema = z
   .object({
@@ -70,6 +84,8 @@ export const ProblemDetailsSchema = z
     code: ErrorCode,
     requestId: z.string(),
     errors: z.array(FieldErrorSchema).optional(),
+    /** `HAS_ACTIVE_BOOKINGS`: the bookings to reassign or cancel first. */
+    conflicts: z.array(BookingConflictSchema).optional(),
   })
   .meta({ id: 'ProblemDetails' });
 

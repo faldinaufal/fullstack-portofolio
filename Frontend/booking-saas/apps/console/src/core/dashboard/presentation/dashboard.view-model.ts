@@ -4,8 +4,7 @@
 import type { BookingStatus, DashboardBooking } from '../domain/dashboard';
 import type { Dashboard } from '../domain/get-dashboard';
 
-/** Platform time zone (FSD 6: one time zone for the whole platform). */
-const TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIME_ZONE ?? 'UTC';
+import { PLATFORM_TIME_ZONE as TIME_ZONE } from '../../shared/presentation/time-zone';
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 export type KpiIcon = 'calendar-check' | 'revenue' | 'utilization' | 'no-show' | 'timer' | 'team';

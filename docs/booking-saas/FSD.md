@@ -555,15 +555,15 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 **Bookings, customers, invoices**
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/calendar` | Bookings and time off for a date range, by branch/therapist | owner, manager (own branch), staff (self) |
+| GET | `/calendar` | Active and finished bookings (not expired or cancelled) and time off for `from`–`to` (at most 14 days), one `branchId` (owner chooses; manager and staff: their own), with the branch's therapists as columns | owner, manager (own branch), staff (self) |
 | GET | `/availability` | Free slots (for reschedule and reassign dialogs) | owner, manager |
-| GET | `/bookings` | Table: filters (status, branch, therapist, service, date range, customer), sort, CSV | owner, manager (own branch) |
-| GET | `/bookings/:id` | Detail with timeline from the audit log (staff: limited fields) | owner, manager (own branch), staff (own) |
-| POST | `/bookings/:id/reschedule` | New time (and optional therapist) | owner, manager (own branch) |
-| POST | `/bookings/:id/reassign` | New therapist, same time | owner, manager (own branch) |
-| POST | `/bookings/:id/cancel` | Cancel; `reason` required when paid | owner, manager (own branch) |
-| POST | `/bookings/:id/complete` | Mark completed | owner, manager (own branch), staff (own) |
-| POST | `/bookings/:id/no-show` | Mark no-show | owner, manager (own branch), staff (own) |
+| GET | `/bookings` | Table: filters (`status`, `branchId`, `staffId`, `serviceId`, `from`/`to` dates, `q` customer name or email), `sort` (`startsAt` or `-startsAt`), pagination; CSV in 6b | owner, manager (own branch) |
+| GET | `/bookings/:id` | Detail with customer, invoice, allowed actions and the timeline from the audit log. Staff get the customer's name and notes only (no email or phone, FSD 1.2) | owner, manager (own branch), staff (own) |
+| POST | `/bookings/:id/reschedule` | New `startsAt` (and optional `staffId`); `confirmed` or held `pending_payment` bookings, before the session starts; not counted against the customer's limit | owner, manager (own branch) |
+| POST | `/bookings/:id/reassign` | New `staffId`, same time (6.6) | owner, manager (own branch) |
+| POST | `/bookings/:id/cancel` | Cancel (6.7); `reason` required when paid | owner, manager (own branch) |
+| POST | `/bookings/:id/complete` | Mark completed (6.7) | owner, manager (own branch), staff (own) |
+| POST | `/bookings/:id/no-show` | Mark no-show (6.7) | owner, manager (own branch), staff (own) |
 | GET | `/customers` | Tenant customers (manager: who booked at own branch), CSV | owner, manager |
 | GET | `/customers/:id` | Customer detail with bookings at this tenant | owner, manager |
 | GET | `/invoices` | Table with filters, CSV | owner, manager (own branch) |
@@ -658,7 +658,7 @@ While the hold is active, the customer can return to the same Checkout URL from 
 ### 6.5 Reschedule
 - The booking's detail tells the Portal whether rescheduling is allowed, how many customer reschedules are left and until when (`starts_at − cancellation_cutoff_hours`), so the button is hidden with the reason instead of failing.
 - **Customer or guest:** only `confirmed` bookings, only while `now < starts_at − cancellation_cutoff_hours`, and only if `customer_reschedule_count < max_customer_reschedules`. Same branch and service; the therapist may change to another therapist of that branch who performs the service.
-- **Owner / manager:** any `confirmed` or `pending_payment` booking in their scope, at any time before the session starts; not counted against the customer's limit.
+- **Owner / manager:** any `confirmed` or `pending_payment` booking in their scope, at any time before the session starts; not counted against the customer's limit. The minimum lead time (6.1) is a rule for customers, so it does not apply to the team; every other rule of 6.2 does.
 - The new slot must pass every rule in 6.2. The transaction locks both the old and the new therapist, always in ID order so two reschedules can never deadlock each other.
 - The booking row is updated in place (same invoice, same payment); the exclusion constraint checks the new range.
 - The old reminder job is not deleted. Every reminder job checks, when it runs, that the booking is still `confirmed` and still starts at the time the reminder was scheduled for, and does nothing otherwise. A new reminder is scheduled.
@@ -672,9 +672,11 @@ Owner or manager moves a booking to another therapist of the same branch who per
 |---|---|---|---|
 | Cancel unpaid | Customer, guest, owner, manager | Booking is `pending_payment` | Booking `cancelled`, invoice `void`, payment `expired`, slot free at once. After the commit the API asks the provider to expire the Checkout session (best effort: a payment that still arrives hits the safety net of 6.4) |
 | Cancel paid | Owner, manager | Booking is `confirmed` and has not started | Reason required; booking `cancelled`, `refund_handled_externally = true`; invoice stays `paid` with a note; customer emailed |
-| Mark completed | Staff (own), owner, manager | Booking is `confirmed` and has started; up to 7 days after it ended | Booking `completed` |
+| Mark completed | Staff (own), owner, manager | Booking is `confirmed` and has started; up to 7 days after it ended. Owner and manager may also switch `no_show` ↔ `completed` in that window (7.1) | Booking `completed`; who and when are recorded (`marked_by_membership_id`, `marked_at`) |
 | Mark no-show | Staff (own), owner, manager | Same as above | Booking `no_show` |
-| Auto-complete | System (nightly job) | `confirmed` bookings that ended more than 24 h ago and were not marked | Booking `completed`, audited with the system as actor |
+| Auto-complete | System (worker job, every hour) | `confirmed` bookings that ended more than 24 h ago and were not marked | Booking `completed`, audited with the system as actor |
+
+Every change by the team that affects the customer emails them (FSD 3.8): "booking moved" for a reschedule or a new therapist (new and previous time and therapist), "booking cancelled" for a cancellation (with the reason, and for a paid booking that the refund is handled by the business).
 
 Customers cannot cancel a paid booking (PRD); they can only reschedule within the rules of 6.5.
 
@@ -688,7 +690,7 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 - **Assigning a manager** to a branch that already has one requires choosing the current manager's new state in the same request (demote to staff, move to a branch without a manager, or deactivate).
 - **Invitations** expire after 7 days; accepting an expired or revoked invitation returns `410 INVITATION_EXPIRED`. Inviting someone who is already a member returns `409 ALREADY_MEMBER`; a second open invitation for the same email returns `409 INVITATION_PENDING`; inviting a manager to a branch that has one returns `409 BRANCH_HAS_MANAGER`.
 - **Archiving a branch** is also rejected while active members work there (`409 HAS_ACTIVE_MEMBERS`); move or deactivate them first. Open invitations to the branch are revoked.
-- **Implementation order:** the `HAS_ACTIVE_BOOKINGS` checks of this section are added together with bookings; until then, team and branch changes are not blocked by bookings because none exist.
+- **Active booking** here means `confirmed`, or `pending_payment` with a hold that has not run out, and not yet ended. Checks that compare against a therapist's schedule take the therapist's advisory lock (6.3 step 2), so a booking cannot slip in between the check and the change.
 
 ### 6.9 Tenant suspension
 - The Portal shows the tenant as unavailable; availability search and new bookings return `423 TENANT_SUSPENDED`.
@@ -758,7 +760,9 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `CUTOFF_PASSED` / `RESCHEDULE_LIMIT_REACHED` | 409 | Rule 6.5 |
 | `HOLD_EXPIRED` | 409 | Paying for or changing an expired booking |
 | `NOT_CANCELLABLE` | 409 | Customer or guest cancelling a booking that is no longer `pending_payment` (6.7) |
-| `HAS_ACTIVE_BOOKINGS` | 409 | Rule 6.8 (list of bookings included) |
+| `NOT_RESCHEDULABLE` | 409 | Moving a booking that is not confirmed (customer) or not active and upcoming (team) |
+| `NOT_MARKABLE` | 409 | Completed / no-show outside the rules of 6.7 (not started yet, more than 7 days after, or a correction by staff) |
+| `HAS_ACTIVE_BOOKINGS` | 409 | Rule 6.8; the response's `conflicts` lists the blocking bookings (ID, time, service, therapist, customer name) |
 | `VERSION_CONFLICT` | 409 | Optimistic lock: the record changed since it was loaded |
 | `EMAIL_TAKEN` / `SLUG_TAKEN` | 409 | Sign-up with an email or business address already in use |
 | `ALREADY_MEMBER` / `INVITATION_PENDING` | 409 | Invitation for someone who is already a member / already invited (6.8) |

@@ -11,6 +11,13 @@ export function toRequestError(error: unknown): RequestError {
     return new RequestError(error.code, error.message, {
       fields: error.fieldErrors.map(({ path, message }) => ({ field: path, message })),
       requestId: error.requestId,
+      conflicts: error.conflicts.map((c) => ({
+        id: c.id,
+        startsAt: new Date(c.startsAt),
+        serviceName: c.serviceName,
+        therapist: c.therapist,
+        customerName: c.customerName,
+      })),
     });
   }
   return new RequestError('UNEXPECTED', 'Something went wrong.');

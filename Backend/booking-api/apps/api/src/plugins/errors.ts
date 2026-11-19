@@ -49,6 +49,7 @@ export function registerErrorHandling(app: FastifyInstance) {
         title: error.title,
         ...(error.detail !== undefined && { detail: error.detail }),
         ...(error.errors !== undefined && { errors: error.errors }),
+        ...(error.conflicts !== undefined && { conflicts: error.conflicts }),
       });
     }
 

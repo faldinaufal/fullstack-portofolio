@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import type { ErrorCode, FieldError, ProblemDetails } from '@tempora/contracts';
+import type { BookingConflict, ErrorCode, FieldError, ProblemDetails } from '@tempora/contracts';
 
 /** Errors that happen on the client side, before or after talking to the API. */
 export type ClientErrorCode = 'NETWORK_ERROR' | 'INVALID_RESPONSE';
@@ -15,6 +15,8 @@ export class ApiError extends Error {
   readonly code: ErrorCode | ClientErrorCode;
   readonly requestId: string | undefined;
   readonly fieldErrors: FieldError[];
+  /** `HAS_ACTIVE_BOOKINGS`: the bookings in the way (FSD 6.8). */
+  readonly conflicts: BookingConflict[];
 
   constructor(options: {
     status: number;
@@ -22,6 +24,7 @@ export class ApiError extends Error {
     message: string;
     requestId?: string | undefined;
     fieldErrors?: FieldError[] | undefined;
+    conflicts?: BookingConflict[] | undefined;
     cause?: unknown;
   }) {
     super(options.message, { cause: options.cause });
@@ -30,6 +33,7 @@ export class ApiError extends Error {
     this.code = options.code;
     this.requestId = options.requestId;
     this.fieldErrors = options.fieldErrors ?? [];
+    this.conflicts = options.conflicts ?? [];
   }
 
   static fromProblem(problem: ProblemDetails): ApiError {
@@ -39,6 +43,7 @@ export class ApiError extends Error {
       message: problem.detail ?? problem.title,
       requestId: problem.requestId,
       fieldErrors: problem.errors,
+      conflicts: problem.conflicts,
     });
   }
 }

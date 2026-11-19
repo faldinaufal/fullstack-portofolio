@@ -5,6 +5,8 @@ import type { CreateServiceRequest, Service, UpdateServiceRequest } from '@tempo
 import { withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { recordAudit } from '../../lib/audit.js';
+import { activeBookings, assertNoConflicts } from '../bookings/active.js';
+import { lockTherapists } from '../bookings/rules.js';
 import { versionConflict } from '../../lib/route-schemas.js';
 import { auditActor } from '../branches/service.js';
 import { notFound } from '../console-auth/access.js';
@@ -126,6 +128,16 @@ export function createServiceCatalogue({ prisma }: { prisma: PrismaClient }) {
     archive: (actor: ConsoleActor, id: string) =>
       inTenant(actor, async (tx) => {
         const before = await activeService(tx, actor, id);
+        // FSD 6.8: lock everyone who performs it, then refuse while bookings are coming up.
+        const performers = await tx.staffService.findMany({ where: { serviceId: id } });
+        await lockTherapists(
+          tx,
+          performers.map((p) => p.membershipId),
+        );
+        assertNoConflicts(
+          await activeBookings(tx, { serviceId: id }, new Date()),
+          'The service has upcoming bookings.',
+        );
         await tx.service.update({
           where: { id },
           data: { archivedAt: new Date(), version: { increment: 1 } },

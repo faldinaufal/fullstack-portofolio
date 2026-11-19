@@ -9,10 +9,10 @@ import type {
 } from '@tempora/contracts';
 import { withDbContext, type Prisma, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
-import { recordAudit, type AuditActor } from '../../lib/audit.js';
 import type { PaymentProvider } from '../../lib/payments/provider.js';
 import type { TokenHasher } from '../../lib/tokens.js';
 import { locateBooking, type BookingViewer, type LocatedBooking } from './access.js';
+import { cancelBooking, closeCheckouts } from './cancel.js';
 import { createPortalInvoices } from './invoices.js';
 import { createReschedule } from './reschedule.js';
 import { portalBookingDetail, portalBookings } from './views.js';
@@ -25,15 +25,6 @@ export interface PortalBookingServiceDeps {
   portalUrl: string;
   now?: () => Date;
 }
-
-const notCancellable = () =>
-  new AppError({
-    status: 409,
-    code: 'NOT_CANCELLABLE',
-    title: 'Booking cannot be cancelled here',
-    detail:
-      'Only bookings that are still waiting for payment can be cancelled online. Please contact the business.',
-  });
 
 const holdExpired = () =>
   new AppError({
@@ -130,64 +121,28 @@ export function createPortalBookingService({
       ip: string,
     ): Promise<PortalBookingDetail> {
       const found = await locate(viewer, bookingId);
-      const at = now();
       const byCustomer = found.via === 'customer' ? viewer.customerAccountId : null;
-      const result = await inTenant(found.tenantId, async (tx) => {
-        const booking = await tx.booking.findUniqueOrThrow({
+      const { sessions } = await inTenant(found.tenantId, async (tx) => {
+        const customer = await tx.booking.findUniqueOrThrow({
           where: { id: bookingId },
-          include: { tenantCustomer: true, invoice: true },
+          select: { tenantCustomer: { select: { name: true } } },
         });
-        const { count } = await tx.booking.updateMany({
-          where: { id: bookingId, status: 'pending_payment', holdExpiresAt: { gt: at } },
-          data: {
-            status: 'cancelled',
-            cancelledAt: at,
-            cancelledByType: byCustomer ? 'customer' : 'guest',
-            cancelledById: byCustomer,
-            cancelReason: 'Cancelled before payment',
-            holdExpiresAt: null,
-            version: { increment: 1 },
+        const name = customer.tenantCustomer.name;
+        return cancelBooking(tx, bookingId, {
+          now: now(),
+          actor: {
+            type: 'customer',
+            id: byCustomer,
+            label: byCustomer ? name : `${name} (guest)`,
+            ip,
           },
+          by: { type: byCustomer ? 'customer' : 'guest', id: byCustomer },
+          allowPaid: false,
+          reason: undefined,
+          notify: null,
         });
-        if (count === 0) throw notCancellable();
-
-        const open = await tx.payment.findMany({
-          where: { invoiceId: booking.invoice!.id, status: 'pending' },
-        });
-        await tx.invoice.update({
-          where: { id: booking.invoice!.id },
-          data: { status: 'void', voidedAt: at, voidReason: 'Booking cancelled before payment' },
-        });
-        await tx.payment.updateMany({
-          where: { invoiceId: booking.invoice!.id, status: 'pending' },
-          data: { status: 'expired' },
-        });
-        const actor: AuditActor = {
-          type: 'customer',
-          id: byCustomer,
-          label: byCustomer
-            ? booking.tenantCustomer.name
-            : `${booking.tenantCustomer.name} (guest)`,
-          ip,
-        };
-        await recordAudit(tx, actor, {
-          tenantId: booking.tenantId,
-          branchId: booking.branchId,
-          action: 'booking.cancelled',
-          entityType: 'booking',
-          entityId: booking.id,
-          before: { status: 'pending_payment' },
-          after: { status: 'cancelled' },
-          reason: 'Cancelled before payment',
-        });
-        return { sessions: open.map((p) => p.checkoutSessionId) };
       });
-
-      // After the commit: close the Checkout so it cannot be paid. If this fails, a payment that
-      // still arrives is flagged by the webhook's safety net (FSD 6.4) instead of confirming.
-      for (const sessionId of result.sessions) {
-        await payments.expireCheckout(sessionId).catch(() => undefined);
-      }
+      await closeCheckouts(payments, sessions);
       return detailOf(found);
     },
   };

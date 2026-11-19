@@ -133,24 +133,35 @@ Details: ${p.bookingUrl}`,
 
   'portal.booking_rescheduled': (p) => {
     const place = p.address ? `${p.branchName}, ${p.address}` : p.branchName;
+    const now = `${p.when} with ${p.therapist}`;
+    const was = `${p.previousWhen} with ${p.previousTherapist}`;
     return {
-      subject: `Booking moved: ${p.serviceName} at ${p.businessName}`,
-      text: `Hi ${p.name},
-
-Your booking has a new time.
-
-New: ${p.when}
-Was: ${p.previousWhen}
-
-${p.serviceName} with ${p.therapist}
-${place}
-
-Details: ${p.bookingUrl}`,
-      html: layout('Booking moved', [
+      subject: `Booking changed: ${p.serviceName} at ${p.businessName}`,
+      text: `Hi ${p.name},\n\nYour booking was changed.\n\nNew: ${now}\nWas: ${was}\n\n${p.serviceName}\n${place}\n\nDetails: ${p.bookingUrl}`,
+      html: layout('Booking changed', [
         `Hi ${escapeHtml(p.name)},`,
-        `Your booking at <strong>${escapeHtml(p.businessName)}</strong> has a new time.`,
-        `<strong>${escapeHtml(p.when)}</strong><br><span style="color:#5b6b75">was ${escapeHtml(p.previousWhen)}</span>`,
-        `${escapeHtml(p.serviceName)} with ${escapeHtml(p.therapist)}<br>${escapeHtml(place)}`,
+        `Your booking at <strong>${escapeHtml(p.businessName)}</strong> was changed.`,
+        `<strong>${escapeHtml(now)}</strong><br><span style="color:#5b6b75">was ${escapeHtml(was)}</span>`,
+        `${escapeHtml(p.serviceName)}<br>${escapeHtml(place)}`,
+        `<a href="${escapeHtml(p.bookingUrl)}" style="color:#2f5f78;font-weight:bold">View your booking</a>`,
+      ]),
+    };
+  },
+
+  'portal.booking_cancelled': (p) => {
+    const refund = p.refundByBusiness
+      ? `${p.businessName} will refund your payment directly.`
+      : 'Nothing was charged.';
+    const reason = p.reason ? `Reason: ${p.reason}` : null;
+    return {
+      subject: `Booking cancelled: ${p.serviceName} at ${p.businessName}`,
+      text: `Hi ${p.name},\n\n${p.businessName} cancelled your booking.\n\n${p.serviceName} with ${p.therapist}\n${p.when}\n${reason ? `${reason}\n` : ''}\n${refund}\n\nDetails: ${p.bookingUrl}`,
+      html: layout('Booking cancelled', [
+        `Hi ${escapeHtml(p.name)},`,
+        `<strong>${escapeHtml(p.businessName)}</strong> cancelled your booking.`,
+        `${escapeHtml(p.serviceName)} with ${escapeHtml(p.therapist)}<br>${escapeHtml(p.when)}`,
+        ...(reason ? [escapeHtml(reason)] : []),
+        escapeHtml(refund),
         `<a href="${escapeHtml(p.bookingUrl)}" style="color:#2f5f78;font-weight:bold">View your booking</a>`,
       ]),
     };

@@ -213,7 +213,8 @@ model Membership {
   workingHours       StaffWorkingHours[]
   timeOff            StaffTimeOff[]      @relation("TimeOffOf")
   timeOffCreated     StaffTimeOff[]      @relation("TimeOffCreatedBy")
-  bookings           Booking[]
+  bookings           Booking[]           @relation("BookingTherapist")
+  bookingsMarked     Booking[]           @relation("BookingMarkedBy")
 
   @@unique([teamAccountId, tenantId])
   @@index([tenantId])
@@ -496,6 +497,11 @@ model Booking {
   cancelledByType         String?       @map("cancelled_by_type") @db.VarChar(10)
   /// Customer account or membership that cancelled; null for a guest.
   cancelledById           String?       @map("cancelled_by_id") @db.Uuid
+  /// A paid booking cancelled by the team: the business refunds outside Tempora (FSD 6.7).
+  refundHandledExternally Boolean       @default(false) @map("refund_handled_externally")
+  /// When `completed` / `no_show` was set, and by whom (null: the auto-complete job).
+  markedAt                DateTime?     @map("marked_at") @db.Timestamptz(3)
+  markedByMembershipId    String?       @map("marked_by_membership_id") @db.Uuid
   version                 Int           @default(1)
   createdAt               DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -503,7 +509,8 @@ model Booking {
   tenant         Tenant               @relation(fields: [tenantId], references: [id])
   branch         Branch               @relation(fields: [branchId], references: [id])
   service        Service              @relation(fields: [serviceId], references: [id])
-  staff          Membership           @relation(fields: [staffMembershipId], references: [id])
+  staff          Membership           @relation("BookingTherapist", fields: [staffMembershipId], references: [id])
+  markedBy       Membership?          @relation("BookingMarkedBy", fields: [markedByMembershipId], references: [id])
   tenantCustomer TenantCustomer       @relation(fields: [tenantCustomerId], references: [id])
   invoice        Invoice?
   accessTokens   BookingAccessToken[]

@@ -13,6 +13,8 @@ import type {
 import { withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { recordAudit, type AuditActor } from '../../lib/audit.js';
+import { activeBookings, assertNoConflicts, onDays, outsideHours } from '../bookings/active.js';
+import { lockTherapists } from '../bookings/rules.js';
 import { canEditBranch, canSeeBranch, forbidden, notFound } from '../console-auth/access.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
 import { branchRepository as repo } from './repository.js';
@@ -63,11 +65,17 @@ export function auditActor(actor: ConsoleActor): AuditActor {
 
 export interface BranchServiceDeps {
   prisma: PrismaClient;
+  /** Platform time zone: opening hours and closures are in it. */
+  timeZone: string;
   now?: () => Date;
 }
 
 /** Branches, opening hours and closures (FSD 2.2 Branches, 5.4, 6.8). */
-export function createBranchService({ prisma, now = () => new Date() }: BranchServiceDeps) {
+export function createBranchService({
+  prisma,
+  timeZone,
+  now = () => new Date(),
+}: BranchServiceDeps) {
   const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId: actor.tenantId, teamAccountId: actor.teamAccountId }, work);
 
@@ -91,6 +99,12 @@ export function createBranchService({ prisma, now = () => new Date() }: BranchSe
       });
     }
     return branch;
+  }
+
+  /** Everyone who can be booked at the branch, for the booking lock (FSD 6.3 step 2). */
+  async function therapistsOf(tx: Tx, branchId: string): Promise<string[]> {
+    const rows = await tx.membership.findMany({ where: { branchId }, select: { id: true } });
+    return rows.map((row) => row.id);
   }
 
   async function detail(tx: Tx, branch: BranchRow): Promise<BranchDetail> {
@@ -185,6 +199,10 @@ export function createBranchService({ prisma, now = () => new Date() }: BranchSe
             detail: `${branch._count.memberships} active member(s) work at this branch. Move or deactivate them first.`,
           });
         }
+        assertNoConflicts(
+          await activeBookings(tx, { branchId: id }, now()),
+          'The branch has upcoming bookings.',
+        );
         const archived = await repo.archive(tx, id, now());
         await repo.revokeOpenInvitations(tx, id, now());
         await recordAudit(tx, auditActor(actor), {
@@ -203,6 +221,16 @@ export function createBranchService({ prisma, now = () => new Date() }: BranchSe
     replaceOpeningHours: (actor: ConsoleActor, id: string, hours: OpeningHours[]) =>
       inTenant(actor, async (tx) => {
         const branch = await editableBranch(tx, actor, id);
+        // FSD 6.8: no booking may be left outside the new hours (all therapists locked).
+        await lockTherapists(tx, await therapistsOf(tx, id));
+        assertNoConflicts(
+          outsideHours(
+            await activeBookings(tx, { branchId: id }, now()),
+            hours.map((h) => ({ weekday: h.weekday, start: h.opensAt, end: h.closesAt })),
+            timeZone,
+          ),
+          'Some bookings fall outside the new opening hours.',
+        );
         const before = toHours(await repo.openingHours(tx, id));
         await repo.replaceOpeningHours(
           tx,
@@ -230,6 +258,16 @@ export function createBranchService({ prisma, now = () => new Date() }: BranchSe
     addClosure: (actor: ConsoleActor, id: string, input: CreateClosureRequest) =>
       inTenant(actor, async (tx) => {
         await editableBranch(tx, actor, id);
+        await lockTherapists(tx, await therapistsOf(tx, id));
+        assertNoConflicts(
+          onDays(
+            await activeBookings(tx, { branchId: id }, now()),
+            input.startsOn,
+            input.endsOn,
+            timeZone,
+          ),
+          'The branch has bookings on these days.',
+        );
         const closure = await repo.createClosure(tx, {
           tenantId: actor.tenantId,
           branchId: id,

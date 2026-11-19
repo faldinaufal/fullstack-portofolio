@@ -34,6 +34,8 @@ export interface BookableBusiness {
   /** 30 min, no buffer: fits 18 sessions a day, for the numbering test. */
   quickServiceId: string;
   staffId: string;
+  /** Ines, logged in to the Console as staff of the branch. */
+  staff: TestBrowser;
 }
 
 /**
@@ -75,7 +77,12 @@ export async function bookableBusiness(
     bufferMinutes: 0,
     priceCents: 2500,
   });
-  const { membershipId } = await flows.addMember(owner, therapist, 'staff', branch.id);
+  const { membershipId, browser: staff } = await flows.addMember(
+    owner,
+    therapist,
+    'staff',
+    branch.id,
+  );
   await owner.request('PUT', `${C}/members/${membershipId}/working-hours`, {
     hours: weekdays.map((weekday) => ({ weekday, startsAt: '09:00', endsAt: '18:00' })),
   });
@@ -89,7 +96,29 @@ export async function bookableBusiness(
     serviceId,
     quickServiceId,
     staffId: membershipId,
+    staff,
   };
+}
+
+/** A guest booking paid through the demo checkout (confirmed), with its access token. */
+export async function paidBooking(
+  h: Harness,
+  b: BookableBusiness,
+  startsAt: string,
+  email = GUEST.email,
+) {
+  const created = await expectBooked(
+    portalBrowser(h),
+    bookingBody(b, startsAt, { guest: { ...GUEST, email } }),
+  );
+  const url = new URL(created.checkoutUrl);
+  const paid = await h.app.inject({
+    method: 'POST',
+    url: `/v1/payments/demo/${url.pathname.split('/').at(-1)}?tenant=${url.searchParams.get('tenant')}`,
+    payload: { outcome: 'paid' },
+  });
+  expect(paid.statusCode, paid.body).toBe(204);
+  return created;
 }
 
 export const GUEST = { name: 'Omar Haddad', email: 'omar@veloria.test', phone: '+15550147002' };

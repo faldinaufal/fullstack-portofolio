@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import { RequestError } from '../domain/request-error';
+import { RequestError, type BookingConflict } from '../domain/request-error';
 
 export interface RequestErrorView {
   code: string;
@@ -10,6 +10,8 @@ export interface RequestErrorView {
   fields: Record<string, string>;
   /** Request ID to quote to support, for unexpected errors only (FSD 8.5). */
   reference: string | undefined;
+  /** `HAS_ACTIVE_BOOKINGS`: the bookings to reassign or cancel first. */
+  conflicts: BookingConflict[];
 }
 
 const GENERIC: Record<string, string> = {
@@ -44,5 +46,6 @@ export function toRequestErrorView(
       (unexpected ? 'Something went wrong. Please try again.' : e.message),
     fields: Object.fromEntries(e.fields.map(({ field, message }) => [field, message])),
     reference: unexpected ? e.requestId : undefined,
+    conflicts: e.conflicts,
   };
 }

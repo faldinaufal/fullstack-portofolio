@@ -17,6 +17,8 @@ import type { ConsoleActor } from '../console-auth/guard.js';
 import { teamRepository } from '../team/repository.js';
 import { toMember } from '../team/service.js';
 import { hoursOutsideOpening, timeOffProblem } from './rules.js';
+import { activeBookings, assertNoConflicts, outsideHours } from '../bookings/active.js';
+import { lockTherapists } from '../bookings/rules.js';
 
 type MemberRow = NonNullable<Awaited<ReturnType<typeof teamRepository.findMember>>>;
 
@@ -43,9 +45,12 @@ const notATherapist = () =>
 /** Member detail, working hours, services performed and time off (FSD 2.2, 5.4 Team). */
 export function createScheduleService({
   prisma,
+  timeZone,
   now = () => new Date(),
 }: {
   prisma: PrismaClient;
+  /** Platform time zone: working hours are wall-clock times in it. */
+  timeZone: string;
   now?: () => Date;
 }) {
   const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
@@ -128,6 +133,16 @@ export function createScheduleService({
             })),
           });
         }
+        // FSD 6.8: no booking may be left outside the new hours.
+        await lockTherapists(tx, [member.id]);
+        assertNoConflicts(
+          outsideHours(
+            await activeBookings(tx, { staffMembershipId: member.id }, now()),
+            hours.map((h) => ({ weekday: h.weekday, start: h.startsAt, end: h.endsAt })),
+            timeZone,
+          ),
+          'Some bookings fall outside the new working hours.',
+        );
         const before = await detail(tx, member);
         await tx.staffWorkingHours.deleteMany({ where: { membershipId: id } });
         await tx.staffWorkingHours.createMany({
@@ -213,6 +228,20 @@ export function createScheduleService({
             errors: [{ path: 'endsAt', message: problem }],
           });
         }
+        // FSD 6.8: time off cannot overlap a booking (buffer included), under the booking lock.
+        await lockTherapists(tx, [member.id]);
+        assertNoConflicts(
+          await activeBookings(
+            tx,
+            {
+              staffMembershipId: member.id,
+              startsAt: { lt: endsAt },
+              blockedUntil: { gt: startsAt },
+            },
+            now(),
+          ),
+          'The time off overlaps bookings.',
+        );
         const created = await tx.staffTimeOff.create({
           data: {
             tenantId: actor.tenantId,
