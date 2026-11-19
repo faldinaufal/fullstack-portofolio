@@ -75,13 +75,13 @@ it('builds the shell view-model from the session', () => {
     id: 'm1',
     role: 'owner' as const,
     branchId: null,
-    tenant: { id: 't1', slug: 'lumen', name: 'Lumen Wellness Studio' },
+    tenant: { id: 't1', slug: 'lumen', name: 'Lumen Wellness Studio', suspension: null },
   };
   const harbor = {
     id: 'm2',
     role: 'staff' as const,
     branchId: 'b1',
-    tenant: { id: 't2', slug: 'harbor', name: 'Harbor Physio Clinic' },
+    tenant: { id: 't2', slug: 'harbor', name: 'Harbor Physio Clinic', suspension: null },
   };
   const session: ConsoleSession = {
     account: { id: 'a1', email: 'ines.halvorsen@veloria.test', name: 'Ines Halvorsen' },

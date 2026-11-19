@@ -33,6 +33,18 @@ export interface ConsoleGuard {
 }
 
 /**
+ * FSD 6.9: while the business is suspended, the Console is read only. Logging out and
+ * switching to another business still work (their routes do not use `require`, or are
+ * listed here).
+ */
+const STILL_ALLOWED = ['/v1/console/me/active-membership'];
+function isWrite(request: FastifyRequest): boolean {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return false;
+  const path = request.url.split('?')[0] ?? '';
+  return !path.startsWith('/v1/console/auth/') && !STILL_ALLOWED.includes(path);
+}
+
+/**
  * Installs the protections shared by every `/v1/console/*` route (CSRF, see lib/csrf.ts)
  * and returns the guard the feature modules use.
  */
@@ -57,6 +69,14 @@ export function installConsoleGuard(
             code: 'UNAUTHENTICATED',
             title: 'Authentication required',
             detail: 'Log in to continue.',
+          });
+        }
+        if (auth.tenantSuspended && isWrite(request)) {
+          throw new AppError({
+            status: 423,
+            code: 'TENANT_SUSPENDED',
+            title: 'Business suspended',
+            detail: 'This business is suspended, so the Console is read only. Contact Tempora.',
           });
         }
         if (roles.length > 0 && !roles.includes(auth.role)) {

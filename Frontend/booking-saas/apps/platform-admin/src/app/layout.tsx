@@ -6,7 +6,6 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { AppProviders } from '@/composition/app-providers';
 import { APP } from '@/ui/app-info';
-import { AdminShell } from '@/ui/shell/admin-shell';
 import './globals.css';
 
 const sans = Plus_Jakarta_Sans({
@@ -25,9 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     // next-themes sets the theme class before React hydrates.
     <html lang="en" className={sans.variable} suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <AppProviders>
-          <AdminShell>{children}</AdminShell>
-        </AppProviders>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

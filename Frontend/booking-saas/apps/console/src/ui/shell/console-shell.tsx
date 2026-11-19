@@ -4,6 +4,7 @@
 'use client';
 
 import {
+  Alert,
   Button,
   DashboardShell,
   Icon,
@@ -122,6 +123,12 @@ export function ConsoleShell({
         </>
       }
     >
+      {session.suspension && (
+        <Alert tone="danger" title={`${session.tenantName} is suspended`}>
+          {session.suspension.reason} Customers cannot book, and the Console is read only until
+          Tempora reactivates the business. Reply to the email you received to resolve it.
+        </Alert>
+      )}
       {children}
     </DashboardShell>
   );

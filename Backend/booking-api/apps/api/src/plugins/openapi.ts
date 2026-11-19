@@ -45,6 +45,8 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
         { name: 'console-customers', description: 'Customers of the business and their bookings' },
         { name: 'console-invoices', description: 'Invoices and payment attempts' },
         { name: 'console-reports', description: 'Dashboard reports' },
+        { name: 'admin-auth', description: 'Platform Admin login, step-up and session' },
+        { name: 'admin', description: 'Platform Admin: tenants, metrics, platform log' },
       ],
     },
     transform: jsonSchemaTransform,

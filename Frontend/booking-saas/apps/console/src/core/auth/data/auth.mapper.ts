@@ -21,7 +21,16 @@ export function toCodeChallenge(dto: OtpChallenge): CodeChallenge {
 }
 
 function toMembership(dto: ConsoleMembership): Membership {
-  return { id: dto.id, role: dto.role, branchId: dto.branchId, tenant: { ...dto.tenant } };
+  const { suspension } = dto.tenant;
+  return {
+    id: dto.id,
+    role: dto.role,
+    branchId: dto.branchId,
+    tenant: {
+      ...dto.tenant,
+      suspension: suspension && { since: new Date(suspension.since), reason: suspension.reason },
+    },
+  };
 }
 
 export function toSession(dto: ConsoleMeResponse): ConsoleSession {

@@ -132,7 +132,13 @@ export const ConsoleMembershipSchema = z
     id: z.uuid(),
     role: MembershipRoleSchema,
     branchId: z.uuid().nullable(),
-    tenant: z.object({ id: z.uuid(), slug: z.string(), name: z.string() }),
+    tenant: z.object({
+      id: z.uuid(),
+      slug: z.string(),
+      name: z.string(),
+      /** Set while a platform admin has suspended the business (FSD 6.9): read-only Console. */
+      suspension: z.object({ since: z.iso.datetime(), reason: z.string() }).nullable(),
+    }),
   })
   .meta({ id: 'ConsoleMembership' });
 export type ConsoleMembership = z.infer<typeof ConsoleMembershipSchema>;

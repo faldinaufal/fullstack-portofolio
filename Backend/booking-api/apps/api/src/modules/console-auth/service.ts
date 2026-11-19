@@ -53,6 +53,8 @@ export interface ConsoleAuth {
   tenantId: string;
   role: 'owner' | 'manager' | 'staff';
   branchId: string | null;
+  /** The business is suspended by a platform admin: the Console is read only (FSD 6.9). */
+  tenantSuspended: boolean;
 }
 
 export interface ConsoleAuthServiceDeps {
@@ -110,13 +112,32 @@ function toMembershipDto(membership: {
   id: string;
   role: ConsoleMembership['role'];
   branchId: string | null;
-  tenant: ConsoleMembership['tenant'];
+  tenant: {
+    id: string;
+    slug: string;
+    name: string;
+    status: 'active' | 'suspended';
+    suspendedAt: Date | null;
+    suspensionReason: string | null;
+  };
 }): ConsoleMembership {
+  const { tenant } = membership;
   return {
     id: membership.id,
     role: membership.role,
     branchId: membership.branchId,
-    tenant: membership.tenant,
+    tenant: {
+      id: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      suspension:
+        tenant.status === 'suspended'
+          ? {
+              since: (tenant.suspendedAt ?? new Date(0)).toISOString(),
+              reason: tenant.suspensionReason ?? '',
+            }
+          : null,
+    },
   };
 }
 
@@ -482,6 +503,7 @@ export function createConsoleAuthService({
           tenantId: membership.tenantId,
           role: membership.role,
           branchId: membership.branchId,
+          tenantSuspended: membership.tenant.status === 'suspended',
         };
       });
     },

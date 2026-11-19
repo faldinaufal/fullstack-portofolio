@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
+export * from './admin.js';
 export * from './console-auth.js';
 export * from './console-branches.js';
 export * from './console-catalogue.js';

@@ -22,7 +22,12 @@ describe('auth mapper', () => {
       id: 'fa1d0000-0000-4000-8000-000000000003',
       role: 'owner' as const,
       branchId: null,
-      tenant: { id: 'fa1d0000-0000-4000-8000-000000000004', slug: 'lumen', name: 'Lumen' },
+      tenant: {
+        id: 'fa1d0000-0000-4000-8000-000000000004',
+        slug: 'lumen',
+        name: 'Lumen',
+        suspension: null,
+      },
     };
     const session = toSession({
       account: {
