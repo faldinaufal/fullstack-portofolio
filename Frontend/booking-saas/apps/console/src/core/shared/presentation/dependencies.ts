@@ -8,7 +8,7 @@ import type { AuthUseCases } from '../../auth/domain/auth-use-cases';
 import type { BookingRepository } from '../../bookings/domain/booking';
 import type { BranchRepository } from '../../branches/domain/branch';
 import type { CatalogueRepository } from '../../catalogue/domain/catalogue';
-import type { GetDashboard } from '../../dashboard/domain/get-dashboard';
+import type { DashboardRepository } from '../../dashboard/domain/dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 import type { RecordsRepository } from '../../records/domain/records';
 import type { TeamRepository } from '../../team/domain/team';
@@ -26,7 +26,7 @@ export interface Dependencies {
   team: TeamRepository;
   records: RecordsRepository;
   getApiStatus: GetApiStatus;
-  getDashboard: GetDashboard;
+  dashboard: DashboardRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);

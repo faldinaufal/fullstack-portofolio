@@ -12,3 +12,4 @@ export * from './console-records.js';
 export * from './portal-bookings.js';
 export * from './problem.js';
 export * from './public.js';
+export * from './reports.js';

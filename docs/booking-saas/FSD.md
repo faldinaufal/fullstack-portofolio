@@ -572,10 +572,13 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 **Reporting & operations**
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/reports/revenue` | Revenue series (`from`, `to`, `interval` day/week/month, `branchId`) | owner, manager (own branch) |
+| GET | `/reports/overview` | Dashboard figures (6.14): bookings today vs. the same weekday last week, revenue this month vs. last month, utilization and no-show rate of the last 30 days, payments pending, active therapists, branches | owner, manager (own branch) |
+| GET | `/reports/revenue` | Revenue series (`from`, `to`, `interval` day/week/month, `branchId`), plus revenue per branch for the owner's comparison | owner, manager (own branch) |
 | GET | `/reports/bookings-by-service` | Counts and revenue per service | owner, manager (own branch) |
 | GET | `/reports/utilization` | Booked vs. available hours per branch and therapist | owner, manager (own branch) |
-| GET | `/reports/no-show-rate` | No-show rate over time | owner, manager (own branch) |
+| GET | `/reports/no-show-rate` | No-show rate over time (`interval` as for revenue) | owner, manager (own branch) |
+
+Every report takes `from`/`to` (calendar dates in the platform time zone, both included, at most 366 days; default the last 30 days) and `branchId` (owner; a manager always gets their own branch). Buckets start on the day, on Monday for weeks and on the 1st for months; empty buckets are included as zero so charts have no gaps.
 | GET | `/audit-logs` | Filters: actor, action, entity, date; cursor pagination; CSV | owner, manager (own branch entries) |
 | GET | `/emails` | Email delivery log; filter by status | owner, manager (own branch) |
 
@@ -775,6 +778,18 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `TENANT_SUSPENDED` | 423 | Rule 6.9 |
 | `RATE_LIMITED` | 429 | Rule 6.11 |
 | `PAYMENT_PROVIDER_UNAVAILABLE` | 503 | Rule 6.3 step 7 |
+
+### 6.14 Reports
+What the dashboard's numbers mean (FSD 2.2 Dashboard, PRD 5.6). All dates are in the platform time zone.
+
+| Figure | Definition |
+|---|---|
+| **Revenue** | Sum of `paid` invoices, by the day they were paid (cash basis). Bookings the business cancelled after payment (`refund_handled_externally`) are left out, because the money is returned. |
+| **Bookings** | Bookings that took or will take place: `confirmed`, `completed` and `no_show`, by the day the session starts. Unpaid holds, expired and cancelled bookings are not bookings. |
+| **Bookings per service** | The bookings above, grouped by service (the current service name), with their revenue as defined above. |
+| **Utilization** | Booked minutes ÷ available minutes. Available: each day of the range, the therapist's working hours intersected with the branch's opening hours, minus closure days and time off. Booked: the session length (without buffer) of the bookings above. Per therapist, and per branch as the sum of its therapists. A therapist counts at the branch they belong to now. |
+| **No-show rate** | `no_show` ÷ (`completed` + `no_show`) of sessions that started in the period. Sessions not marked yet are not counted. |
+| **Payments pending** | `pending_payment` bookings whose hold has not run out. |
 
 ## 7. Status / state flows
 

@@ -4,114 +4,277 @@
 'use client';
 
 import {
+  Alert,
   Badge,
   BarChart,
+  Button,
   buttonVariants,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  HBarList,
   KpiCard,
-  MonthCalendar,
+  LineChart,
+  SelectField,
 } from '@tempora/ui';
 import Link from 'next/link';
+import { useState, type ReactNode } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
+import { dateIn, STATUS, timeIn, useBookings } from '@/core/bookings/presentation/use-bookings';
+import { useBranches } from '@/core/branches/presentation/use-branches';
 import { useBusinessSettings } from '@/core/catalogue/presentation/use-catalogue';
-import { useDashboard } from '@/core/dashboard/presentation/use-dashboard';
-import type { DashboardViewModel } from '@/core/dashboard/presentation/dashboard.view-model';
+import {
+  toKpis,
+  toNoShowChart,
+  toRevenueChart,
+  toServiceBars,
+  toUtilizationBars,
+} from '@/core/dashboard/presentation/dashboard.view-model';
+import {
+  presetRange,
+  upNext,
+  useDashboardReports,
+  type DashboardPreset,
+} from '@/core/dashboard/presentation/use-dashboard';
+import { PLATFORM_TIME_ZONE } from '@/core/shared/presentation/time-zone';
 import { SetupChecklist } from '@/ui/onboarding/onboarding-screen';
 
+const PRESETS: { value: DashboardPreset; label: string }[] = [
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
+  { value: '12m', label: '12 months' },
+];
+
+/**
+ * FSD 2.2 Dashboard: figures, revenue, bookings per service, utilization and no-show rate for
+ * a period, all branches or one (owner) or the manager's branch. Every chart is drawn by our
+ * own components (PRD: no chart library) from the reports API (FSD 6.14).
+ */
 export function DashboardScreen() {
-  const state = useDashboard();
+  const member = useCurrentMember();
+  const branches = useBranches();
+  const [preset, setPreset] = useState<DashboardPreset>('30d');
+  const [branchId, setBranchId] = useState<string | undefined>(undefined);
+  const [today] = useState(() => dateIn(PLATFORM_TIME_ZONE, new Date()));
+  const range = { ...presetRange(preset, today), branchId };
+  const reports = useDashboardReports(range);
+  const allBranches = member.role === 'owner' && !branchId;
 
   return (
-    <>
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-extrabold">Dashboard</h1>
-          {state.status === 'ready' && (
-            <p className="mt-1 text-sm text-muted">
-              {state.dashboard.dateLabel} · {state.dashboard.scopeLabel}
-            </p>
+          <p className="mt-1 text-sm text-muted">
+            {member.tenantName} ·{' '}
+            {member.role === 'owner' ? 'all branches unless you pick one' : 'your branch'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex gap-1" role="group" aria-label="Period">
+            {PRESETS.map((p) => (
+              <Button
+                key={p.value}
+                variant={preset === p.value ? 'primary' : 'secondary'}
+                aria-pressed={preset === p.value}
+                onClick={() => setPreset(p.value)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          {member.role === 'owner' && (branches.data?.length ?? 0) > 1 && (
+            <div className="min-w-[180px]">
+              <SelectField
+                label="Branch"
+                options={[
+                  { value: '', label: 'All branches' },
+                  ...(branches.data ?? []).map((b) => ({ value: b.id, label: b.name })),
+                ]}
+                value={branchId ?? ''}
+                onChange={(e) => setBranchId(e.target.value || undefined)}
+              />
+            </div>
           )}
         </div>
       </div>
 
       <SetupCard />
-      {state.status === 'loading' && <DashboardSkeleton />}
-      {state.status === 'error' && (
-        <p role="alert" className="rounded-card bg-danger-soft p-5 text-sm text-danger">
-          The dashboard could not be loaded. Please refresh the page.
-        </p>
-      )}
-      {state.status === 'ready' && <DashboardContent dashboard={state.dashboard} />}
-    </>
-  );
-}
 
-function DashboardContent({ dashboard }: Readonly<{ dashboard: DashboardViewModel }>) {
-  return (
-    <>
       <div className="flex flex-wrap gap-[18px]">
-        <Card className="flex flex-[1_1_260px] flex-col items-center gap-3 p-5 text-center">
-          {dashboard.upNext ? (
-            <>
-              <h2 className="text-[15px] font-extrabold text-primary-text">
-                {dashboard.upNext.title}
-              </h2>
-              <span
-                aria-hidden="true"
-                className="flex size-[84px] items-center justify-center rounded-full bg-surface-muted text-[26px] font-extrabold text-primary-text ring-2 ring-primary ring-offset-4 ring-offset-surface"
-              >
-                {dashboard.upNext.initials}
-              </span>
-              <p className="text-base font-extrabold">{dashboard.upNext.customer}</p>
-              <p className="text-[13px] text-muted">{dashboard.upNext.detail}</p>
-              <Badge tone={dashboard.upNext.tone}>{dashboard.upNext.status}</Badge>
-            </>
-          ) : (
-            <>
-              <h2 className="text-[15px] font-extrabold text-primary-text">Up next</h2>
-              <p className="text-sm text-muted">No more bookings today.</p>
-            </>
-          )}
-        </Card>
-
+        <UpNextCard today={today} branchId={branchId} />
         <div className="grid min-w-0 flex-[999_1_520px] grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-[18px]">
-          {dashboard.kpis.map((kpi) => (
-            <KpiCard key={kpi.label} {...kpi} />
-          ))}
+          {reports.overview.data
+            ? toKpis(reports.overview.data).map((kpi) => <KpiCard key={kpi.label} {...kpi} />)
+            : Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="h-[118px] animate-pulse rounded-card bg-surface-muted" />
+              ))}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-[18px]">
-        <Card className="min-w-0 flex-[999_1_560px]">
-          <CardHeader>
-            <CardTitle>Bookings per month</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BarChart {...dashboard.chart} />
-          </CardContent>
-        </Card>
-
-        <Card className="flex-[1_1_300px]">
-          <CardHeader>
-            <CardTitle>Calendar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MonthCalendar {...dashboard.calendar} />
-          </CardContent>
-        </Card>
+        <ChartCard title="Revenue" query={reports.revenue} className="flex-[999_1_560px]">
+          {(revenue) => {
+            const chart = toRevenueChart(revenue);
+            return (
+              <div className="flex flex-col gap-3">
+                <p className="m-0 text-2xl font-extrabold">{chart.total}</p>
+                <BarChart {...chart} />
+              </div>
+            );
+          }}
+        </ChartCard>
+        {allBranches && (
+          <ChartCard title="Revenue by branch" query={reports.revenue} className="flex-[1_1_300px]">
+            {(revenue) => (
+              <HBarList
+                items={toRevenueChart(revenue).branches}
+                summary="Revenue of each branch in this period."
+              />
+            )}
+          </ChartCard>
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Today&apos;s bookings</CardTitle>
-          <Link href="/bookings" className="text-sm font-bold text-primary-text">
-            View all
+      <div className="flex flex-wrap gap-[18px]">
+        <ChartCard
+          title="Bookings per service"
+          query={reports.services}
+          className="flex-[1_1_340px]"
+        >
+          {(services) => (
+            <HBarList
+              items={toServiceBars(services)}
+              summary="Bookings and revenue of each service in this period."
+              empty="No bookings in this period."
+            />
+          )}
+        </ChartCard>
+        <ChartCard title="Utilization" query={reports.utilization} className="flex-[1_1_340px]">
+          {(use) => (
+            <div className="flex flex-col gap-5">
+              {allBranches && use.branches.length > 1 && (
+                <HBarList
+                  items={toUtilizationBars(use.branches)}
+                  max={1}
+                  summary="Booked share of the available hours per branch."
+                />
+              )}
+              <HBarList
+                items={toUtilizationBars(use.therapists)}
+                max={1}
+                summary="Booked share of the available hours per therapist."
+                empty="No therapists with working hours yet."
+              />
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      <ChartCard title="No-show rate" query={reports.noShows}>
+        {(series) => {
+          const chart = toNoShowChart(series);
+          return chart.empty ? (
+            <p className="text-sm text-muted">No sessions were marked in this period.</p>
+          ) : (
+            <LineChart {...chart} max={1} />
+          );
+        }}
+      </ChartCard>
+
+      <TodaysBookings today={today} branchId={branchId} />
+    </div>
+  );
+}
+
+/** A card that shows its own loading and error state, so one failing report does not hide the rest. */
+function ChartCard<T>({
+  title,
+  query,
+  className,
+  children,
+}: Readonly<{
+  title: string;
+  query: { data: T | undefined; isError: boolean };
+  className?: string;
+  children: (data: T) => ReactNode;
+}>) {
+  return (
+    <Card className={`min-w-0 ${className ?? ''}`}>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {query.isError && <Alert tone="danger">This report could not be loaded.</Alert>}
+        {!query.isError && query.data === undefined && (
+          <div className="h-48 animate-pulse rounded-xl bg-surface-muted" />
+        )}
+        {query.data !== undefined && children(query.data)}
+      </CardContent>
+    </Card>
+  );
+}
+
+function useToday(today: string, branchId: string | undefined) {
+  return useBookings({ from: today, to: today, branchId, sort: 'startsAt', page: 1 });
+}
+
+function UpNextCard({
+  today,
+  branchId,
+}: Readonly<{ today: string; branchId: string | undefined }>) {
+  const list = useToday(today, branchId);
+  const next = list.data ? upNext(list.data.items, new Date()) : null;
+  const tz = list.data?.timeZone ?? PLATFORM_TIME_ZONE;
+  return (
+    <Card className="flex flex-[1_1_260px] flex-col items-center gap-3 p-5 text-center">
+      <h2 className="text-[15px] font-extrabold text-primary-text">Up next</h2>
+      {next ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="flex size-[84px] items-center justify-center rounded-full bg-surface-muted text-[26px] font-extrabold text-primary-text ring-2 ring-primary ring-offset-4 ring-offset-surface"
+          >
+            {next.customer.name
+              .split(/\s+/)
+              .map((part) => part[0])
+              .slice(0, 2)
+              .join('')}
+          </span>
+          <Link href={`/bookings/${next.id}`} className="text-base font-extrabold">
+            {next.customer.name}
           </Link>
-        </CardHeader>
-        <CardContent>
+          <p className="text-[13px] text-muted">
+            {timeIn(next.startsAt, tz)} · {next.serviceName} · {next.therapist.name}
+          </p>
+          <Badge tone={STATUS[next.status].tone}>{STATUS[next.status].label}</Badge>
+        </>
+      ) : (
+        <p className="text-sm text-muted">No more bookings today.</p>
+      )}
+    </Card>
+  );
+}
+
+function TodaysBookings({
+  today,
+  branchId,
+}: Readonly<{ today: string; branchId: string | undefined }>) {
+  const list = useToday(today, branchId);
+  const tz = list.data?.timeZone ?? PLATFORM_TIME_ZONE;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Today&apos;s bookings</CardTitle>
+        <Link href="/bookings" className="text-sm font-bold text-primary-text">
+          View all
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {list.data?.items.length === 0 && <p className="text-sm text-muted">No bookings today.</p>}
+        {list.data && list.data.items.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
@@ -130,37 +293,29 @@ function DashboardContent({ dashboard }: Readonly<{ dashboard: DashboardViewMode
                 </tr>
               </thead>
               <tbody>
-                {dashboard.todaysBookings.map((row) => (
+                {list.data.items.map((row) => (
                   <tr key={row.id}>
-                    <td className="border-b border-border p-3 font-bold">{row.time}</td>
-                    <td className="border-b border-border p-3">{row.customer}</td>
-                    <td className="border-b border-border p-3">{row.service}</td>
-                    <td className="border-b border-border p-3">{row.therapist}</td>
-                    <td className="border-b border-border p-3 text-muted">{row.branch}</td>
+                    <td className="border-b border-border p-3 font-bold">
+                      <Link href={`/bookings/${row.id}`}>{timeIn(row.startsAt, tz)}</Link>
+                    </td>
+                    <td className="border-b border-border p-3">{row.customer.name}</td>
+                    <td className="border-b border-border p-3">{row.serviceName}</td>
+                    <td className="border-b border-border p-3">{row.therapist.name}</td>
+                    <td className="border-b border-border p-3 text-muted">{row.branch.name}</td>
                     <td className="border-b border-border p-3">
-                      <Badge tone={row.tone}>{row.status}</Badge>
+                      <Badge tone={STATUS[row.status].tone}>{STATUS[row.status].label}</Badge>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
-    </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div aria-busy="true" aria-label="Loading dashboard" className="grid gap-[18px]">
-      <div className="h-[220px] animate-pulse rounded-card bg-surface-muted" />
-      <div className="h-[320px] animate-pulse rounded-card bg-surface-muted" />
-    </div>
-  );
-}
-
-/** Shown to the owner until the business can take bookings (FSD 3.4 step 3). */
 function SetupCard() {
   const me = useCurrentMember();
   const settings = useBusinessSettings(me.role === 'owner');

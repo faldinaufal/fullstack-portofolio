@@ -2,7 +2,7 @@
 
 Frontends of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Backend: [`Backend/booking-api`](../../Backend/booking-api).
 
-**Status:** design system and app layouts in place; Console sign-up, login (with email code), onboarding, settings, branches, services, team management, schedules, bookings (table, detail with timeline and actions, calendar), customers, invoices, CSV exports and the staff "Today" page run against the real API. The Portal's whole booking flow uses the API: directory, business pages, the three booking steps (service and therapist, free time, details or guest), payment (Stripe Checkout or a demo checkout page), confirmation that waits for the payment webhook, My bookings, booking detail with pay, cancel and reschedule, invoices (printable), the guest link and customer accounts. Other screens use fictional demo data until their API endpoints exist.
+**Status:** design system and app layouts in place; Console sign-up, login (with email code), onboarding, settings, branches, services, team management, schedules, bookings (table, detail with timeline and actions, calendar), customers, invoices, CSV exports, the dashboard and the staff "Today" page run against the real API. The Portal's whole booking flow uses the API: directory, business pages, the three booking steps (service and therapist, free time, details or guest), payment (Stripe Checkout or a demo checkout page), confirmation that waits for the payment webhook, My bookings, booking detail with pay, cancel and reschedule, invoices (printable), the guest link and customer accounts. Other screens use fictional demo data until their API endpoints exist.
 
 | App | Users | Local URL |
 |---|---|---|
@@ -51,7 +51,7 @@ Reference implementations:
 | Portal | `account`: sign-up, log in, email verification, forgot / reset password, profile and security (details, password, sessions) | HTTP (`/v1/portal/*`) |
 | Console | `bookings`: bookings table with filters, booking detail (timeline, reschedule, another therapist, cancel with reason, completed / no-show), calendar (day columns per therapist, week list), staff "Today"; schedule changes show the bookings in the way | HTTP (`/v1/console/bookings*`, `/v1/console/calendar`) |
 | Console | `records`: customers (search, sort, detail with their bookings) and invoices (filters, detail with payment attempts); CSV export links for bookings, customers and invoices | HTTP (`/v1/console/customers*`, `/v1/console/invoices*`) |
-| Console | `dashboard`: KPIs, bookings chart, calendar, today's bookings | demo repository |
+| Console | `dashboard`: KPIs (bookings today, revenue this month, utilization, no-show rate, payments pending, therapists), revenue per day / week / month with the branch comparison, bookings per service, utilization per branch and therapist, no-show rate over time, up next and today's bookings; period presets and a branch filter | HTTP (`/v1/console/reports/*`, `/v1/console/bookings`) |
 | Platform Admin | `overview`: platform KPIs, system health, tenants | demo repository |
 
 Demo repositories (`core/<feature>/data/demo-*-repository.ts`) implement the same domain interface as the HTTP ones will. When an endpoint ships, only that file is replaced; domain rules, view-models and screens stay as they are.
@@ -60,7 +60,7 @@ Demo repositories (`core/<feature>/data/demo-*-repository.ts`) implement the sam
 
 | Package | Purpose |
 |---|---|
-| `packages/ui` | Design system: steel-blue theme tokens (light/dark), Button, Card, Badge, KPI card, bar chart and month calendar (no chart library), search field, icons, a mobile navigation drawer (native modal `<dialog>`), and the dashboard shell shared by Console and Platform Admin |
+| `packages/ui` | Design system: steel-blue theme tokens (light/dark), Button, Card, Badge, KPI card, bar chart, horizontal bar list, SVG line chart and month calendar (no chart library; every chart also renders its data as a table for screen readers), search field, icons, a mobile navigation drawer (native modal `<dialog>`), and the dashboard shell shared by Console and Platform Admin |
 | `packages/api-client` | `fetch` wrapper: sends cookies, adds the CSRF token to state-changing requests (refreshed once when it expires), validates every response against the API contract, converts failures into `ApiError` with a stable code |
 | `Backend/booking-api/packages/contracts` | API contract (Zod schemas and types), owned by the API |
 
