@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import { describe, expect, it, vi } from 'vitest';
-import { toReservation } from './data/http-reservation-repository';
+import { toInvoice, toReservation } from './data/http-reservation-repository';
 import { createSessionAccessStore } from './data/session-access-store';
 import {
   CONFIRMATION_WAIT_MS,
   formatCountdown,
   keepWaitingForPayment,
+  rescheduleNotice,
   reserve,
   timeLeft,
   type ReservationRepository,
@@ -37,7 +38,11 @@ const dto = {
     paidAt: null,
   },
   payBy: '2026-11-20T10:30:00.000Z',
-  actions: { pay: true, cancel: true },
+  actions: { pay: true, cancel: true, reschedule: false },
+  rescheduling: null,
+  branchId: 'fa1d0000-0000-4000-8000-000000000011',
+  serviceId: 'fa1d0000-0000-4000-8000-000000000012',
+  staffId: 'fa1d0000-0000-4000-8000-000000000013',
 };
 
 describe('booking and keeping the access token (FSD 3.1, 5.3)', () => {
@@ -111,3 +116,57 @@ describe('showing a booking', () => {
     expect(view).toMatchObject({ statusLabel: 'Payment pending', statusTone: 'warning' });
   });
 });
+
+describe('rescheduling notice (FSD 6.5)', () => {
+  const until = new Date('2026-11-22T15:00:00Z');
+
+  it('says how many changes are left, or why moving is not offered', () => {
+    expect(
+      rescheduleNotice({ rescheduling: { remaining: 2, until }, actions: allowed(true) }),
+    ).toEqual({ allowed: true, message: '2 changes left' });
+    expect(
+      rescheduleNotice({ rescheduling: { remaining: 1, until }, actions: allowed(true) })?.message,
+    ).toBe('1 change left');
+    expect(
+      rescheduleNotice({ rescheduling: { remaining: 0, until }, actions: allowed(false) })?.message,
+    ).toContain('as often as allowed');
+    expect(
+      rescheduleNotice({ rescheduling: { remaining: 2, until }, actions: allowed(false) })?.message,
+    ).toContain('too close to the session');
+    expect(rescheduleNotice({ rescheduling: null, actions: allowed(false) })).toBeNull();
+  });
+});
+
+describe('invoice', () => {
+  it('maps dates and keeps the line', () => {
+    const invoice = toInvoice({
+      bookingId: dto.id,
+      number: 'LUM-2026-000001',
+      status: 'void',
+      currency: 'usd',
+      amountCents: 4217,
+      issuedAt: '2026-11-20T10:00:00.000Z',
+      paidAt: null,
+      voidedAt: '2026-11-20T10:32:00.000Z',
+      voidReason: 'Payment hold expired',
+      business: { name: 'Lumen Wellness Studio', slug: 'lumen' },
+      branch: { name: 'Downtown', address: null },
+      billedTo: { name: 'Omar Haddad', email: 'omar@veloria.test' },
+      line: {
+        description: 'Deep Tissue Massage',
+        therapist: 'Ines H.',
+        startsAt: '2026-11-23T15:00:00.000Z',
+        durationMinutes: 60,
+      },
+      timeZone: 'America/New_York',
+    });
+    expect(invoice.reservationId).toBe(dto.id);
+    expect(invoice.paidAt).toBeNull();
+    expect(invoice.voidedAt).toEqual(new Date('2026-11-20T10:32:00.000Z'));
+    expect(invoice.line.startsAt).toEqual(new Date('2026-11-23T15:00:00.000Z'));
+  });
+});
+
+function allowed(reschedule: boolean) {
+  return { pay: false, cancel: false, reschedule };
+}

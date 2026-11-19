@@ -19,7 +19,14 @@ import {
   type ReservationSummary,
 } from '../domain/reservation';
 
-export type { Reservation, ReservationStatus, ReservationSummary } from '../domain/reservation';
+export type {
+  Invoice,
+  InvoiceSummary,
+  Reservation,
+  ReservationStatus,
+  ReservationSummary,
+} from '../domain/reservation';
+export { rescheduleNotice } from '../domain/reservation';
 
 type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
@@ -168,5 +175,64 @@ export function useCompleteDemoCheckout(sessionId: string, tenantId: string | nu
   return useMutation({
     mutationFn: (outcome: 'paid' | 'expired') =>
       demoCheckout.complete(sessionId, tenantId!, outcome),
+  });
+}
+
+/** Free times to move a booking to, shown in the business's time zone. */
+export function useRescheduleSlots(
+  id: string,
+  query: { date: string; staffId: string } | null,
+  timeZone: string | undefined,
+) {
+  const { reservations, bookingAccess } = useDependencies();
+  return useQuery({
+    queryKey: ['reservation', id, 'reschedule-slots', query],
+    queryFn: () => reservations.rescheduleSlots(id, bookingAccess.get(id), query!),
+    enabled: !!query && !!timeZone,
+    retry: false,
+    select: (slots) => {
+      const time = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone,
+      });
+      return slots.map((slot) => ({
+        key: slot.startsAt.toISOString(),
+        startsAt: slot.startsAt,
+        label: time.format(slot.startsAt),
+      }));
+    },
+  });
+}
+
+export function useReschedule(id: string) {
+  const { reservations, bookingAccess } = useDependencies();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { startsAt: Date; staffId: string }) =>
+      reservations.reschedule(id, bookingAccess.get(id), input),
+    onSuccess: (reservation: Reservation) => {
+      queryClient.setQueryData(key(id), reservation);
+      void queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      void queryClient.invalidateQueries({ queryKey: ['reservation', id, 'reschedule-slots'] });
+    },
+  });
+}
+
+export function useInvoice(id: string) {
+  const { reservations, bookingAccess } = useDependencies();
+  return useQuery({
+    queryKey: ['reservation', id, 'invoice'],
+    queryFn: () => reservations.invoice(id, bookingAccess.get(id)),
+    retry: false,
+  });
+}
+
+export function useMyInvoices(page: number) {
+  const { reservations } = useDependencies();
+  return useQuery({
+    queryKey: ['invoices', page],
+    queryFn: () => reservations.invoices(page),
+    placeholderData: keepPreviousData,
   });
 }

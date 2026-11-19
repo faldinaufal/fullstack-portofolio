@@ -139,6 +139,7 @@ export async function createHarness(): Promise<Harness> {
         payments,
         hashToken,
         timeZone: 'America/New_York',
+        portalUrl: 'http://localhost:3000',
         now,
       }),
     },

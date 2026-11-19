@@ -17,10 +17,17 @@ import { calendarDateOf, slotProblem } from '../availability/engine.js';
 import { loadAvailabilityInput } from '../availability/load.js';
 import { notFound } from '../console-auth/access.js';
 import type { CustomerAuth } from '../portal-auth/service.js';
-import { displayName } from '../public/service.js';
 import type { TokenHasher } from '../../lib/tokens.js';
 import { issueAccessToken } from './access.js';
+import { queueConfirmation } from './emails.js';
 import { formatInvoiceNumber } from './invoice-number.js';
+import {
+  expireBooking,
+  expireStaleHolds,
+  isOverlapViolation,
+  lockTherapists,
+  slotError,
+} from './rules.js';
 import { portalBooking } from './views.js';
 
 const MINUTE = 60_000;
@@ -31,31 +38,6 @@ export const BOOKING_POLICY = {
   checkoutMs: 30 * MINUTE,
   idempotencyTtlMs: 24 * 60 * MINUTE,
 } as const;
-
-const SLOT_MESSAGES: Record<string, string> = {
-  BRANCH_CLOSED: 'The branch is closed on this day.',
-  OUTSIDE_OPENING_HOURS: 'This time is outside the branch opening hours.',
-  OUTSIDE_WORKING_HOURS: 'The therapist does not work at this time.',
-  OFF_GRID: 'Sessions start on the hour or half hour.',
-  TOO_SOON: 'This time is too soon to book.',
-  TOO_FAR_AHEAD: 'This time is too far ahead to book.',
-  THERAPIST_TIME_OFF: 'The therapist is away at this time.',
-  SLOT_TAKEN: 'This time was just taken. Please choose another one.',
-};
-
-const slotError = (code: string) =>
-  new AppError({
-    status: 409,
-    code: code as 'SLOT_TAKEN',
-    title: 'Time not available',
-    detail: SLOT_MESSAGES[code] ?? 'This time cannot be booked.',
-  });
-
-/** PostgreSQL rejected an overlapping active booking (exclusion constraint, code 23P01). */
-function isOverlapViolation(error: unknown): boolean {
-  const text = `${String(error)} ${JSON.stringify(error, Object.getOwnPropertyNames(error ?? {}))}`;
-  return text.includes('23P01') || text.includes('bookings_no_overlap');
-}
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -89,6 +71,7 @@ export function createBookingService({
 }: BookingServiceDeps) {
   const inTenant = <T>(tenantId: string, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId }, work, { timeoutMs: 15_000 });
+  const emailContext = { hashToken, portalUrl, timeZone };
 
   /** A new access token for a booking created earlier (idempotent replay by the same sender). */
   async function reissueAccessToken(tenantSlug: string, bookingId: string): Promise<string> {
@@ -96,58 +79,6 @@ export function createBookingService({
     return inTenant(tenant.id, async (tx) => {
       const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
       return issueAccessToken(tx, hashToken, booking);
-    });
-  }
-
-  /**
-   * FSD 6.3 step 3: releases this therapist's unpaid holds that have run out, so they do not
-   * block the new booking. The worker does the same for everyone every minute.
-   */
-  async function expireStaleHolds(tx: Tx, staffId: string, actor: AuditActor) {
-    const stale = await tx.booking.findMany({
-      where: {
-        staffMembershipId: staffId,
-        status: 'pending_payment',
-        holdExpiresAt: { lte: now() },
-      },
-      select: { id: true, tenantId: true, branchId: true },
-    });
-    for (const booking of stale) {
-      await expireBooking(tx, booking, 'Payment hold expired', actor);
-    }
-  }
-
-  /** pending_payment → expired; open invoice → void; pending payments → expired (FSD 7.1–7.3). */
-  async function expireBooking(
-    tx: Tx,
-    booking: { id: string; tenantId: string; branchId: string },
-    reason: string,
-    actor: AuditActor,
-  ) {
-    const { count } = await tx.booking.updateMany({
-      where: { id: booking.id, status: 'pending_payment' },
-      data: { status: 'expired', version: { increment: 1 } },
-    });
-    if (count === 0) return;
-    const invoice = await tx.invoice.findUnique({ where: { bookingId: booking.id } });
-    if (invoice?.status === 'open') {
-      await tx.invoice.update({
-        where: { id: invoice.id },
-        data: { status: 'void', voidedAt: now(), voidReason: reason },
-      });
-      await tx.payment.updateMany({
-        where: { invoiceId: invoice.id, status: 'pending' },
-        data: { status: 'expired' },
-      });
-    }
-    await recordAudit(tx, actor, {
-      tenantId: booking.tenantId,
-      branchId: booking.branchId,
-      action: 'booking.expired',
-      entityType: 'booking',
-      entityId: booking.id,
-      after: { status: 'expired' },
-      reason,
     });
   }
 
@@ -184,8 +115,8 @@ export function createBookingService({
 
     return inTenant(tenant.id, async (tx) => {
       // Step 2: one booking at a time per therapist; other therapists are not affected.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.staffId}, 0))`;
-      await expireStaleHolds(tx, input.staffId, { type: 'system', id: null, label: 'Hold expiry' });
+      await lockTherapists(tx, [input.staffId]);
+      await expireStaleHolds(tx, input.staffId, now());
 
       // Step 4: the same rules and data the availability endpoint uses (FSD 6.2).
       const {
@@ -369,7 +300,7 @@ export function createBookingService({
         });
       } catch (error) {
         await inTenant(tenant.id, (tx) =>
-          expireBooking(tx, booking, 'Payment provider unavailable', actor),
+          expireBooking(tx, booking, 'Payment provider unavailable', actor, now()),
         );
         if (error instanceof PaymentProviderUnavailableError) {
           throw new AppError({
@@ -482,7 +413,7 @@ export function createBookingService({
               before: { status: 'pending_payment' },
               after: { status: 'confirmed' },
             });
-            await queueConfirmation(tx, booking.id);
+            await queueConfirmation(tx, booking.id, emailContext, now());
           } else {
             // Safety net (FSD 6.4): money arrived for a booking that no longer waits for it.
             await tx.payment.update({
@@ -505,7 +436,7 @@ export function createBookingService({
             where: { id: payment.id, status: 'pending' },
             data: { status: 'expired' },
           });
-          await expireBooking(tx, booking, 'Payment hold expired', actor);
+          await expireBooking(tx, booking, 'Payment hold expired', actor, now());
         }
         await tx.stripeEvent.update({ where: { id: event.id }, data: { processedAt: now() } });
       });
@@ -560,47 +491,6 @@ export function createBookingService({
   function demoOnly(): DemoPaymentProvider {
     if (payments.name !== 'demo') throw notFound('Checkout session');
     return payments as DemoPaymentProvider;
-  }
-
-  async function queueConfirmation(tx: Tx, bookingId: string) {
-    const booking = await tx.booking.findUniqueOrThrow({
-      where: { id: bookingId },
-      include: {
-        tenant: true,
-        branch: true,
-        tenantCustomer: true,
-        invoice: true,
-        staff: { include: { teamAccount: true } },
-      },
-    });
-    const when = new Intl.DateTimeFormat('en-GB', {
-      dateStyle: 'full',
-      timeStyle: 'short',
-      timeZone,
-    }).format(booking.startsAt);
-    await tx.emailMessage.createMany({
-      data: [
-        {
-          tenantId: booking.tenantId,
-          toEmail: booking.tenantCustomer.email,
-          template: 'portal.booking_confirmed',
-          payload: {
-            name: booking.tenantCustomer.name,
-            businessName: booking.tenant.name,
-            serviceName: booking.serviceName,
-            therapist: displayName(booking.staff.teamAccount.name),
-            when,
-            branchName: booking.branch.name,
-            address: booking.branch.address,
-            invoiceNumber: booking.invoice?.number ?? '',
-            priceCents: booking.priceCents,
-            bookingUrl: booking.tenantCustomer.customerAccountId
-              ? `${portalUrl}/account/bookings/${booking.id}`
-              : `${portalUrl}/manage/${await issueAccessToken(tx, hashToken, booking)}`,
-          },
-        },
-      ],
-    });
   }
 
   async function queueNeedsAttention(tx: Tx, tenantId: string, bookingId: string) {

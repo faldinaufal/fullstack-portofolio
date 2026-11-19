@@ -109,6 +109,53 @@ const RENDERERS: { [T in EmailTemplate]: Renderer<T> } = {
     };
   },
 
+  'portal.booking_reminder': (p) => {
+    const place = p.address ? `${p.branchName}, ${p.address}` : p.branchName;
+    return {
+      subject: `Reminder: ${p.serviceName} at ${p.businessName} tomorrow`,
+      text: `Hi ${p.name},
+
+A reminder of your booking.
+
+${p.serviceName} with ${p.therapist}
+${p.when}
+${place}
+
+Details: ${p.bookingUrl}`,
+      html: layout('Booking reminder', [
+        `Hi ${escapeHtml(p.name)},`,
+        `A reminder of your booking at <strong>${escapeHtml(p.businessName)}</strong>.`,
+        `<strong>${escapeHtml(p.serviceName)}</strong> with ${escapeHtml(p.therapist)}<br>${escapeHtml(p.when)}<br>${escapeHtml(place)}`,
+        `<a href="${escapeHtml(p.bookingUrl)}" style="color:#2f5f78;font-weight:bold">View your booking</a>`,
+      ]),
+    };
+  },
+
+  'portal.booking_rescheduled': (p) => {
+    const place = p.address ? `${p.branchName}, ${p.address}` : p.branchName;
+    return {
+      subject: `Booking moved: ${p.serviceName} at ${p.businessName}`,
+      text: `Hi ${p.name},
+
+Your booking has a new time.
+
+New: ${p.when}
+Was: ${p.previousWhen}
+
+${p.serviceName} with ${p.therapist}
+${place}
+
+Details: ${p.bookingUrl}`,
+      html: layout('Booking moved', [
+        `Hi ${escapeHtml(p.name)},`,
+        `Your booking at <strong>${escapeHtml(p.businessName)}</strong> has a new time.`,
+        `<strong>${escapeHtml(p.when)}</strong><br><span style="color:#5b6b75">was ${escapeHtml(p.previousWhen)}</span>`,
+        `${escapeHtml(p.serviceName)} with ${escapeHtml(p.therapist)}<br>${escapeHtml(place)}`,
+        `<a href="${escapeHtml(p.bookingUrl)}" style="color:#2f5f78;font-weight:bold">View your booking</a>`,
+      ]),
+    };
+  },
+
   'console.payment_needs_attention': ({ name, bookingId }) => ({
     subject: 'A payment needs your attention',
     text: `Hi ${name},\n\nA payment arrived for booking ${bookingId}, which was no longer waiting for payment (it expired or was cancelled). Please review it in the Console and refund the customer outside Tempora if needed.`,

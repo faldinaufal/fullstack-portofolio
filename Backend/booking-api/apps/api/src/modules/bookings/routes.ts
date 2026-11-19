@@ -9,6 +9,12 @@ import {
   PortalBookingDetailSchema,
   PortalBookingListQuerySchema,
   PortalBookingListSchema,
+  PortalInvoiceListQuerySchema,
+  PortalInvoiceListSchema,
+  PortalInvoiceSchema,
+  RescheduleRequestSchema,
+  RescheduleSlotsQuerySchema,
+  AvailabilitySchema,
 } from '@tempora/contracts';
 import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -143,6 +149,68 @@ export const bookingRoutes: FastifyPluginAsyncZod<{
       },
     },
     async (request) => portal.cancel(viewer(request), request.params.id, request.ip),
+  );
+
+  app.get(
+    '/bookings/:id/reschedule-slots',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'Free times to move this booking to (its own time is not counted as taken)',
+        params: BookingParams,
+        querystring: RescheduleSlotsQuerySchema,
+        headers: GuestHeader,
+        response: { 200: AvailabilitySchema, ...problems(400, 404, 409) },
+      },
+    },
+    async (request) => portal.rescheduleSlots(viewer(request), request.params.id, request.query),
+  );
+
+  app.post(
+    '/bookings/:id/reschedule',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'Move a confirmed booking (same branch and service; therapist may change)',
+        params: BookingParams,
+        headers: GuestHeader,
+        body: RescheduleRequestSchema,
+        response: { 200: PortalBookingDetailSchema, ...problems(400, 404, 409) },
+      },
+    },
+    async (request) =>
+      portal.reschedule(viewer(request), request.params.id, request.body, request.ip),
+  );
+
+  app.get(
+    '/bookings/:id/invoice',
+    {
+      preHandler: guard.optional,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: "The booking's invoice (same access as the booking)",
+        params: BookingParams,
+        headers: GuestHeader,
+        response: { 200: PortalInvoiceSchema, ...problems(404) },
+      },
+    },
+    async (request) => portal.invoice(viewer(request), request.params.id),
+  );
+
+  app.get(
+    '/invoices',
+    {
+      preHandler: guard.require,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'My invoices at every business, newest first',
+        querystring: PortalInvoiceListQuerySchema,
+        response: { 200: PortalInvoiceListSchema, ...problems(400, 401) },
+      },
+    },
+    async (request) => portal.invoices(guard.customer(request)!.customerAccountId, request.query),
   );
 };
 

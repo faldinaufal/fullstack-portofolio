@@ -36,12 +36,29 @@ export function retryDelayMs(attempt: number): number {
  * - `next_attempt_at` is pushed 5 minutes ahead as a lease: if this worker crashes mid-send,
  *   the message becomes due again and another worker retries it.
  */
+/** A scheduled booking email is still right: same booking, still confirmed, same time. */
+const STILL_MATCHES = `EXISTS (
+  SELECT 1 FROM bookings b
+  WHERE b.id = e.booking_id AND b.status = 'confirmed' AND b.starts_at = e.booking_starts_at)`;
+
+/**
+ * FSD 6.5: a reminder written for a booking that was cancelled or moved since is not sent.
+ * It is kept as `skipped` (the delivery log shows why) and its data is erased like any other.
+ */
+const SKIP_SQL = `
+  UPDATE email_messages AS e
+  SET status = 'skipped', payload = NULL, last_error = 'Booking changed before the email was due'
+  WHERE status = 'queued' AND next_attempt_at <= now()
+    AND booking_id IS NOT NULL AND NOT ${STILL_MATCHES}
+  RETURNING e.id`;
+
 const CLAIM_SQL = `
   UPDATE email_messages AS m
   SET attempts = m.attempts + 1, next_attempt_at = now() + interval '5 minutes'
   FROM (
-    SELECT id FROM email_messages
+    SELECT id FROM email_messages e
     WHERE status = 'queued' AND next_attempt_at <= now()
+      AND (e.booking_id IS NULL OR ${STILL_MATCHES})
     ORDER BY next_attempt_at
     LIMIT $1
     FOR UPDATE SKIP LOCKED
@@ -92,7 +109,8 @@ export function createOutboxProcessor({
 
   return {
     /** Processes one batch; returns how many messages were sent and failed. */
-    async processBatch(): Promise<{ sent: number; failed: number }> {
+    async processBatch(): Promise<{ sent: number; failed: number; skipped: number }> {
+      // Claim only messages that are still right; then mark the stale ones that are due.
       const { rows } = await db.query<ClaimedRow>(CLAIM_SQL, [batchSize]);
       let sent = 0;
       let failed = 0;
@@ -119,7 +137,8 @@ export function createOutboxProcessor({
           (final ? logger.error : logger.warn)({ ...context, err: message, final }, 'Email failed');
         }
       }
-      return { sent, failed };
+      const skipped = (await db.query(SKIP_SQL)).rows.length;
+      return { sent, failed, skipped };
     },
   };
 }

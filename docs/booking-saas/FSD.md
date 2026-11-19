@@ -153,8 +153,10 @@ Every screen supports light/dark mode and works from 360 px wide. List screens h
 | Verify email / reset password | `/verify-email`, `/forgot-password`, `/reset-password` | Account recovery | Customer |
 | My bookings | `/account/bookings` | Upcoming and past bookings across all businesses, with status | Customer |
 | Booking detail | `/account/bookings/[id]` | Details, reschedule (if allowed, shows remaining reschedules), cancel unpaid, invoice | Customer |
-| Reschedule | `/account/bookings/[id]/reschedule` | Pick a new slot (same branch and service) | Customer |
-| Invoices | `/account/invoices` | Invoice list and detail | Customer |
+| Booking | `/bookings/[id]` | Booking detail with pay, cancel, reschedule and invoice links, for the session or this tab's booking link | Customer, guest (link) |
+| Reschedule | `/bookings/[id]/reschedule` | Pick a new slot (same branch and service, therapist may change); shows how many reschedules are left | Customer, guest (link) |
+| Invoices | `/account/invoices` | Invoice list across businesses | Customer |
+| Invoice | `/bookings/[id]/invoice` | Invoice detail, printable | Customer, guest (link) |
 | Profile and security | `/account/profile` | Name, phone, password, active sessions with "log out everywhere" | Customer |
 | Guest booking | `/manage/[token]` | Booking detail, pay, reschedule, cancel unpaid for guests | Guest |
 | Demo inbox | `/demo-inbox` | Emails sent to `@demo.<domain>` accounts (OTP codes, booking emails); only when `DEMO_MODE` is on (10.3) | Everyone |
@@ -392,7 +394,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | Table | Key columns | Notes |
 |---|---|---|
 | `audit_logs` | `id`, `tenant_id` (null for platform events), `branch_id`, `actor_type`, `actor_id`, `actor_label`, `action` (e.g. `booking.cancelled`), `entity_type`, `entity_id`, `before`, `after` (jsonb), `reason`, `request_id`, `ip`, `created_at` | Append-only: the API's database role has no `UPDATE` or `DELETE` permission on this table. Written in the same transaction as the change it describes. |
-| `email_messages` | `id`, `tenant_id` (null for account emails), `booking_id`, `to_email`, `template`, `payload` (jsonb), `status` (`queued`/`sent`/`failed`), `attempts`, `next_attempt_at`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Outbox and delivery log in one table (0.2), shown to owners and managers. `payload` holds the template data (it can contain a code or a link) and is erased as soon as the message is sent or finally fails. The API cannot delete rows. |
+| `email_messages` | `id`, `tenant_id` (null for account emails), `booking_id`, `to_email`, `template`, `booking_starts_at`, `payload` (jsonb), `status` (`queued`/`sent`/`failed`/`skipped`), `attempts`, `next_attempt_at`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Outbox and delivery log in one table (0.2), shown to owners and managers. `payload` holds the template data (it can contain a code or a link) and is erased as soon as the message is sent or finally fails. The API cannot delete rows. Scheduled emails (the booking reminder) are queued with a future `next_attempt_at`; a row with `booking_id` is only sent while that booking is still `confirmed` and still starts at `booking_starts_at`, otherwise it becomes `skipped` (6.5). |
 | `rate_limit_hits` | `id`, `bucket`, `key_hash`, `created_at` | One row per counted event (8.2). The key (email, IP, account) is HMAC-hashed, so it is never stored in clear. |
 | `idempotency_keys` | `key`, `subject`, `request_hash`, `response_status`, `response_body`, `created_at`, `expires_at` | Replaying a request with the same key returns the stored response; the same key with a different body returns `422`. Kept for 24 h. |
 | `pgboss.*` | managed by pg-boss | Job queue tables. |
@@ -474,10 +476,11 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | GET | `/bookings/:id` | Booking detail with invoice, payment deadline and allowed actions | customer, guest token |
 | GET | `/guest/booking` | The booking a guest token belongs to (the `/manage/[token]` page) | guest token |
 | POST | `/bookings/:id/checkout` | Resume payment: return the active Checkout URL (nothing is created, so no `Idempotency-Key`) | customer, guest token |
+| GET | `/bookings/:id/reschedule-slots` | Free times for moving this booking (`date`, `staffId`): rules of 6.2, with the booking's own time not counted as taken | customer, guest token |
 | POST | `/bookings/:id/reschedule` | New `startsAt` (and optional `staffId`) | customer, guest token |
 | POST | `/bookings/:id/cancel` | Cancel an unpaid booking | customer, guest token |
-| GET | `/invoices` | My invoices | customer |
-| GET | `/invoices/:id` | Invoice detail (PDF later: `?format=pdf`) | customer, guest token |
+| GET | `/invoices` | My invoices across businesses (`page`, `pageSize`) | customer |
+| GET | `/bookings/:id/invoice` | Invoice detail: business, billed to, line, status and dates (PDF later: `?format=pdf`). Same access rules as the booking | customer, guest token |
 
 Guest token: the secret from `/manage/[token]`, or the `accessToken` returned when booking, sent as `Authorization: Guest <token>`; it only grants access to its own booking. The Portal keeps the booking's `accessToken` in the tab's `sessionStorage` so the payment and confirmation pages work for guests (and for customers whose email is not verified yet) without putting the token in a URL that Stripe would see.
 
@@ -646,13 +649,14 @@ While the hold is active, the customer can return to the same Checkout URL from 
 
 ### 6.4 Payment confirmation and expiry
 - **Webhook endpoint** `POST /v1/webhooks/stripe`: verifies the Stripe signature (over the raw request body), then inserts the event ID into `stripe_events` **in the same transaction as the event's effects**. If the ID already exists, the event was processed before and the endpoint returns `200` without doing anything (Stripe retries webhooks, so duplicates are expected). If processing fails, the transaction rolls back together with the event ID, so Stripe's retry processes it again. An invalid signature returns `400`.
-- `checkout.session.completed` with `payment_status = paid`, in one transaction: payment → `succeeded`, invoice → `paid`, booking → `confirmed`; queue the confirmation email and the reminder job; audit.
+- `checkout.session.completed` with `payment_status = paid`, in one transaction: payment → `succeeded`, invoice → `paid`, booking → `confirmed`; queue the confirmation email and the reminder (an outbox row sent at `starts_at − 24 h`, unless the booking was created less than 24 h before the session); audit.
 - `checkout.session.expired`: payment → `expired`; if the booking is still `pending_payment`, booking → `expired` and invoice → `void` (reason: payment hold expired); audit.
 - **Hold-expiry job** (worker, every minute): one SQL statement moves every `pending_payment` booking with `hold_expires_at ≤ now` to `expired`, voids its `open` invoice, expires its `pending` payment and writes an audit entry with the system as actor. Its conditions repeat the state checks, so running it twice, or at the same time as the API or a webhook releasing the same hold, changes nothing the second time. The Checkout session needs no separate call: it expires on its own at 30 minutes, before the hold. Together with step 3 of 6.3 and rule 5 of 6.2, an unpaid hold is released by whichever happens first.
 - **Safety net:** if a successful payment ever arrives for a booking that is no longer `pending_payment`, the booking is not changed; the payment is flagged `needs_attention`, the owner gets an email and an audit entry is written.
 - The success page after Checkout does not trust the redirect. It polls the booking until the webhook has confirmed it.
 
 ### 6.5 Reschedule
+- The booking's detail tells the Portal whether rescheduling is allowed, how many customer reschedules are left and until when (`starts_at − cancellation_cutoff_hours`), so the button is hidden with the reason instead of failing.
 - **Customer or guest:** only `confirmed` bookings, only while `now < starts_at − cancellation_cutoff_hours`, and only if `customer_reschedule_count < max_customer_reschedules`. Same branch and service; the therapist may change to another therapist of that branch who performs the service.
 - **Owner / manager:** any `confirmed` or `pending_payment` booking in their scope, at any time before the session starts; not counted against the customer's limit.
 - The new slot must pass every rule in 6.2. The transaction locks both the old and the new therapist, always in ID order so two reschedules can never deadlock each other.

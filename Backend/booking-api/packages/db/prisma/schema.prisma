@@ -507,6 +507,7 @@ model Booking {
   tenantCustomer TenantCustomer       @relation(fields: [tenantCustomerId], references: [id])
   invoice        Invoice?
   accessTokens   BookingAccessToken[]
+  emails         EmailMessage[]
 
   @@index([tenantId, startsAt])
   @@index([staffMembershipId, startsAt])
@@ -685,6 +686,8 @@ enum EmailStatus {
   queued
   sent
   failed
+  /// A booking email whose booking changed before it was due (FSD 6.5).
+  skipped
 
   @@map("email_status")
 }
@@ -706,11 +709,17 @@ model EmailMessage {
   providerMessageId String?     @map("provider_message_id") @db.VarChar(200)
   createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   sentAt            DateTime?   @map("sent_at") @db.Timestamptz(3)
+  /// Scheduled booking emails (reminder): sent only while the booking is still `confirmed`
+  /// and still starts at `bookingStartsAt`, otherwise `skipped` (FSD 6.5).
+  bookingId         String?     @map("booking_id") @db.Uuid
+  bookingStartsAt   DateTime?   @map("booking_starts_at") @db.Timestamptz(3)
 
-  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
 
   @@index([tenantId, createdAt])
   @@index([status, nextAttemptAt])
+  @@index([bookingId])
   @@map("email_messages")
 }
 

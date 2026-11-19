@@ -2,7 +2,7 @@
 
 Frontends of **Tempora**, a multi-tenant booking and invoicing platform (fictional product, fictional data). Specs: [PRD](../../docs/booking-saas/PRD.md) · [FSD](../../docs/booking-saas/FSD.md). Backend: [`Backend/booking-api`](../../Backend/booking-api).
 
-**Status:** design system and app layouts in place; Console sign-up, login (with email code), onboarding, settings, branches, services, team management and schedules run against the real API. The Portal's whole booking flow uses the API: directory, business pages, the three booking steps (service and therapist, free time, details or guest), payment (Stripe Checkout or a demo checkout page), confirmation that waits for the payment webhook, My bookings, booking detail with pay and cancel, the guest link and customer accounts. Other screens use fictional demo data until their API endpoints exist.
+**Status:** design system and app layouts in place; Console sign-up, login (with email code), onboarding, settings, branches, services, team management and schedules run against the real API. The Portal's whole booking flow uses the API: directory, business pages, the three booking steps (service and therapist, free time, details or guest), payment (Stripe Checkout or a demo checkout page), confirmation that waits for the payment webhook, My bookings, booking detail with pay, cancel and reschedule, invoices (printable), the guest link and customer accounts. Other screens use fictional demo data until their API endpoints exist.
 
 | App | Users | Local URL |
 |---|---|---|
@@ -47,7 +47,7 @@ Reference implementations:
 | Console | `catalogue`: business settings, service catalogue, onboarding wizard, setup checklist | HTTP (`/v1/console/tenant`, `/v1/console/services/*`) |
 | Portal | `directory`: businesses on the home page, search | HTTP (`/v1/public/tenants`) |
 | Portal | `booking`: business page, branch page, choose service and therapist, choose a free time | HTTP (`/v1/public/tenants/:slug/*`) |
-| Portal | `reservation`: book and pay (keeps the booking's access token in the tab's `sessionStorage`), payment countdown, confirmation polling, My bookings, booking detail, cancel unpaid, guest link `/manage/[token]`, demo checkout | HTTP (`/v1/portal/bookings*`, `/v1/payments/demo/*`) |
+| Portal | `reservation`: book and pay (keeps the booking's access token in the tab's `sessionStorage`), payment countdown, confirmation polling, My bookings, booking detail, cancel unpaid, guest link `/manage/[token]`, demo checkout, reschedule (therapist, day, time), invoices list and printable invoice | HTTP (`/v1/portal/bookings*`, `/v1/payments/demo/*`) |
 | Portal | `account`: sign-up, log in, email verification, forgot / reset password, profile and security (details, password, sessions) | HTTP (`/v1/portal/*`) |
 | Console | `dashboard`: KPIs, bookings chart, calendar, today's bookings | demo repository |
 | Platform Admin | `overview`: platform KPIs, system health, tenants | demo repository |
