@@ -12,6 +12,7 @@ import { createSessionStorageChallengeStore } from '@/core/auth/data/session-sto
 import { createAuthUseCases } from '@/core/auth/domain/auth-use-cases';
 import { createHttpBookingRepository } from '@/core/bookings/data/http-booking-repository';
 import { createHttpBranchRepository } from '@/core/branches/data/http-branch-repository';
+import { createHttpRecordsRepository } from '@/core/records/data/http-records-repository';
 import { createHttpCatalogueRepository } from '@/core/catalogue/data/http-catalogue-repository';
 import {
   createDemoDashboardRepository,
@@ -29,10 +30,8 @@ import { createHttpTeamRepository } from '@/core/team/data/http-team-repository'
  * and hands them to the presentation layer through context.
  */
 function createDependencies(): Dependencies {
-  const apiClient = createApiClient({
-    baseUrl: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000',
-    csrfPath: '/v1/console/auth/csrf',
-  });
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+  const apiClient = createApiClient({ baseUrl: apiUrl, csrfPath: '/v1/console/auth/csrf' });
   return {
     auth: createAuthUseCases(
       createHttpAuthRepository(apiClient),
@@ -40,7 +39,9 @@ function createDependencies(): Dependencies {
     ),
     // Simple CRUD features use their repository directly; a use-case layer is added when a
     // feature has rules of its own beyond the API's.
-    bookings: createHttpBookingRepository(apiClient),
+    // CSV downloads are plain links to the API, so these repositories also get its URL.
+    bookings: createHttpBookingRepository(apiClient, apiUrl),
+    records: createHttpRecordsRepository(apiClient, apiUrl),
     branches: createHttpBranchRepository(apiClient),
     catalogue: createHttpCatalogueRepository(apiClient),
     team: createHttpTeamRepository(apiClient),

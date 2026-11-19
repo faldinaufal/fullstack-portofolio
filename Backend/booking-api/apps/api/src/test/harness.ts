@@ -19,6 +19,7 @@ import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
 import { createConsoleBookingService } from '../modules/console-bookings/service.js';
+import { createConsoleRecordsService } from '../modules/console-records/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
 import { createServiceCatalogue } from '../modules/services/service.js';
 import { createTeamService } from '../modules/team/service.js';
@@ -168,6 +169,7 @@ export async function createHarness(): Promise<Harness> {
         timeZone: 'America/New_York',
         now,
       }),
+      records: createConsoleRecordsService({ prisma, timeZone: 'America/New_York', now }),
       team: createTeamService({
         prisma,
         passwords,

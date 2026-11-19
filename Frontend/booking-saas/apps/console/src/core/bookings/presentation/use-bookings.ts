@@ -70,6 +70,12 @@ export function useBookings(filters: BookingFilters) {
   });
 }
 
+/** CSV download link for the current filters (FSD 5.1). */
+export function useBookingsExportUrl(filters: BookingFilters) {
+  const { bookings } = useDependencies();
+  return bookings.exportUrl(filters);
+}
+
 export function useBooking(id: string) {
   const { bookings } = useDependencies();
   return useQuery({ queryKey: ['booking', id], queryFn: () => bookings.get(id), retry: false });

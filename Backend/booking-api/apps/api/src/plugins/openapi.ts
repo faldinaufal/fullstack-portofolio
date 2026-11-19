@@ -42,6 +42,8 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
           name: 'console-bookings',
           description: 'Bookings table, calendar and booking operations',
         },
+        { name: 'console-customers', description: 'Customers of the business and their bookings' },
+        { name: 'console-invoices', description: 'Invoices and payment attempts' },
       ],
     },
     transform: jsonSchemaTransform,

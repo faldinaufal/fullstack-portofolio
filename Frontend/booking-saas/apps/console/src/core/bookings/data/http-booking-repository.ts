@@ -11,7 +11,12 @@ import {
   type ConsoleBookingDetail,
 } from '@tempora/contracts';
 import { request } from '../../shared/data/to-request-error';
-import type { BookingDetail, BookingRepository, BookingRow } from '../domain/booking';
+import type {
+  BookingDetail,
+  BookingFilters,
+  BookingRepository,
+  BookingRow,
+} from '../domain/booking';
 
 const C = '/v1/console';
 
@@ -41,7 +46,17 @@ export const toBookingDetail = (dto: ConsoleBookingDetail): BookingDetail => ({
 });
 
 /** `/v1/console/bookings*` and `/v1/console/calendar` (FSD 5.4). */
-export function createHttpBookingRepository(client: ApiClient): BookingRepository {
+/** Query string of the table filters (pagination left to the caller). */
+function filterParams(filters: BookingFilters): URLSearchParams {
+  const params = new URLSearchParams({ sort: filters.sort });
+  for (const key of ['status', 'branchId', 'from', 'to', 'q'] as const) {
+    const value = filters[key];
+    if (value) params.set(key, value);
+  }
+  return params;
+}
+
+export function createHttpBookingRepository(client: ApiClient, apiUrl: string): BookingRepository {
   const post = (id: string, action: string, body?: object) =>
     request(async () =>
       toBookingDetail(
@@ -55,20 +70,20 @@ export function createHttpBookingRepository(client: ApiClient): BookingRepositor
   return {
     list: (filters) =>
       request(async () => {
-        const params = new URLSearchParams({
-          sort: filters.sort,
-          page: String(filters.page),
-          pageSize: '25',
-        });
-        for (const key of ['status', 'branchId', 'from', 'to', 'q'] as const) {
-          const value = filters[key];
-          if (value) params.set(key, value);
-        }
+        const params = filterParams(filters);
+        params.set('page', String(filters.page));
+        params.set('pageSize', '25');
         const dto = await client.get(`${C}/bookings?${params}`, {
           schema: ConsoleBookingListSchema,
         });
         return { ...dto, items: dto.items.map(toBookingRow) };
       }),
+
+    exportUrl: (filters) => {
+      const params = filterParams(filters);
+      params.set('format', 'csv');
+      return `${apiUrl}${C}/bookings?${params}`;
+    },
 
     get: (id) =>
       request(async () =>

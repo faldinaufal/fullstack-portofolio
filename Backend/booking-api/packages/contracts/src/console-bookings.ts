@@ -7,6 +7,9 @@ import { BookingStatusSchema } from './portal-bookings.js';
 
 /** Booking operations in the Console (FSD 2.2, 3.7, 3.8, 5.4, 6.5–6.7). */
 
+/** `json` (the page) or `csv` (every page, as a download; FSD 5.1). */
+export const ExportFormatSchema = z.enum(['json', 'csv']).default('json');
+
 export const ConsoleBookingListQuerySchema = z.object({
   status: BookingStatusSchema.optional(),
   branchId: z.uuid().optional(),
@@ -20,6 +23,7 @@ export const ConsoleBookingListQuerySchema = z.object({
   sort: z.enum(['startsAt', '-startsAt']).default('startsAt'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  format: ExportFormatSchema,
 });
 export type ConsoleBookingListQuery = z.infer<typeof ConsoleBookingListQuerySchema>;
 
@@ -35,7 +39,11 @@ export const ConsoleBookingSchema = z
     therapist: z.object({ id: z.uuid(), name: z.string() }),
     /** Email is left out for staff (FSD 1.2: name and notes only). */
     customer: z.object({ name: z.string(), email: z.string().nullable() }),
-    invoice: z.object({ number: z.string(), status: z.enum(['open', 'paid', 'void']) }),
+    invoice: z.object({
+      id: z.uuid(),
+      number: z.string(),
+      status: z.enum(['open', 'paid', 'void']),
+    }),
   })
   .meta({ id: 'ConsoleBooking' });
 export type ConsoleBooking = z.infer<typeof ConsoleBookingSchema>;

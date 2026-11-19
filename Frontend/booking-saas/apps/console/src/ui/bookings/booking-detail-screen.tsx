@@ -30,6 +30,7 @@ import {
   useMoveSlots,
   type BookingDetail,
 } from '@/core/bookings/presentation/use-bookings';
+import { useCurrentMember } from '@/core/auth/presentation/use-auth';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
@@ -63,6 +64,8 @@ export function BookingDetailScreen({ id }: Readonly<{ id: string }>) {
 }
 
 function Detail({ booking }: Readonly<{ booking: BookingDetail }>) {
+  // Customer and invoice pages are for the owner and managers (FSD 2.2).
+  const lead = useCurrentMember().role !== 'staff';
   const status = STATUS[booking.status];
   const tz = booking.timeZone;
   return (
@@ -84,7 +87,16 @@ function Detail({ booking }: Readonly<{ booking: BookingDetail }>) {
             <CardTitle>Customer</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">{booking.customer.name}</span>
+            {lead ? (
+              <Link
+                href={`/customers/${booking.customer.id}`}
+                className="font-semibold text-primary-text"
+              >
+                {booking.customer.name}
+              </Link>
+            ) : (
+              <span className="font-semibold">{booking.customer.name}</span>
+            )}
             {booking.customer.email && <span>{booking.customer.email}</span>}
             {booking.customer.phone && <span>{booking.customer.phone}</span>}
             {booking.notes && (
@@ -100,8 +112,15 @@ function Detail({ booking }: Readonly<{ booking: BookingDetail }>) {
           </CardHeader>
           <CardContent className="flex flex-col gap-1 text-sm">
             <span>
-              Invoice {booking.invoice.number} · {formatPrice(booking.priceCents)} ·{' '}
-              {booking.invoice.status}
+              Invoice{' '}
+              {lead ? (
+                <Link href={`/invoices/${booking.invoice.id}`} className="text-primary-text">
+                  {booking.invoice.number}
+                </Link>
+              ) : (
+                booking.invoice.number
+              )}{' '}
+              · {formatPrice(booking.priceCents)} · {booking.invoice.status}
             </span>
             {booking.holdExpiresAt && (
               <span className="text-muted">

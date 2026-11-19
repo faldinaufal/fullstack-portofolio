@@ -17,6 +17,8 @@ import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import { consoleBookingRoutes } from './modules/console-bookings/routes.js';
 import type { ConsoleBookingService } from './modules/console-bookings/service.js';
+import { consoleRecordRoutes } from './modules/console-records/routes.js';
+import type { ConsoleRecordsService } from './modules/console-records/service.js';
 import type { BranchService } from './modules/branches/service.js';
 import { installPortalGuard } from './modules/portal-auth/guard.js';
 import { portalAuthRoutes } from './modules/portal-auth/routes.js';
@@ -67,6 +69,7 @@ export interface AppDependencies {
     team: TeamService;
     schedules: ScheduleService;
     bookings: ConsoleBookingService;
+    records: ConsoleRecordsService;
   };
 }
 
@@ -159,6 +162,7 @@ export async function buildApp({
           await scope.register(teamRoutes, { service: consoleModules.team, guard });
           await scope.register(scheduleRoutes, { service: consoleModules.schedules, guard });
           await scope.register(consoleBookingRoutes, { service: consoleModules.bookings, guard });
+          await scope.register(consoleRecordRoutes, { service: consoleModules.records, guard });
         }
       },
       { prefix: '/v1/console' },
