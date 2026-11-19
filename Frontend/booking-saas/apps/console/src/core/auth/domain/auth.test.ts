@@ -110,7 +110,7 @@ describe('auth rules', () => {
   });
 
   it('describes the scope of each role', () => {
-    const tenant = { id: 't', slug: 'lumen', name: 'Lumen' };
+    const tenant = { id: 't', slug: 'lumen', name: 'Lumen', suspension: null };
     expect(scopeLabel({ id: 'm', role: 'owner', branchId: null, tenant })).toBe('All branches');
     expect(scopeLabel({ id: 'm', role: 'manager', branchId: 'b', tenant })).toBe('Own branch');
     expect(scopeLabel({ id: 'm', role: 'staff', branchId: 'b', tenant })).toBe('Own schedule');

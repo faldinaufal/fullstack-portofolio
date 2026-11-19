@@ -14,6 +14,8 @@ import { createPrismaHealthRepository } from './modules/health/repository.js';
 import { createHmac } from 'node:crypto';
 import { createDemoPaymentProvider } from './lib/payments/demo-provider.js';
 import { createStripePaymentProvider } from './lib/payments/stripe-provider.js';
+import { createAdminAuthService } from './modules/admin-auth/service.js';
+import { createAdminService } from './modules/admin/service.js';
 import { createPortalBookingService } from './modules/bookings/portal-service.js';
 import { createBookingService } from './modules/bookings/service.js';
 import { createPortalAuthService } from './modules/portal-auth/service.js';
@@ -74,6 +76,16 @@ const app = await buildApp({
       timeZone: env.APP_TIME_ZONE,
       portalUrl: env.PORTAL_URL,
     }),
+  },
+  admin: {
+    auth: createAdminAuthService({ prisma, passwords, hashToken, rateLimiter }),
+    service: createAdminService({
+      prisma,
+      hashToken,
+      consoleUrl: env.CONSOLE_URL,
+      timeZone: env.APP_TIME_ZONE,
+    }),
+    cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
   portalAuth: {
     service: createPortalAuthService({

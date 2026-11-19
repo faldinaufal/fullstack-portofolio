@@ -193,7 +193,7 @@ The sidebar shows only what the active role may use. A tenant switcher appears w
 |---|---|---|---|
 | Log in | `/login` | Platform admin access | Platform admin |
 | Verify code | `/login/verify` | 6-digit email code at every login; also shown as a dialog before sensitive actions (step-up) | Platform admin |
-| Overview | `/` | Tenants count, bookings and payments per day, error rate, job queue health | Platform admin |
+| Overview | `/` | Tenants by status (active, onboarding, suspended), bookings and payments per day, payments needing attention, email queue health (queued, failed). The request error rate comes with error tracking (observability stage) | Platform admin |
 | Tenants | `/tenants` | List with status, usage (bookings, members), created date; search | Platform admin |
 | Create tenant | `/tenants/new` | Assisted onboarding: tenant details + owner invitation | Platform admin |
 | Tenant detail | `/tenants/[id]` | Metadata, usage, suspend/reactivate (reason required), support grant status | Platform admin |
@@ -333,7 +333,7 @@ erDiagram
 #### Platform & identity
 | Table | Key columns | Notes |
 |---|---|---|
-| `platform_admins` | `id`, `email` (unique), `password_hash`, `name`, `disabled_at` | Created only by a server-side command. |
+| `platform_admins` | `id`, `email` (unique, lowercased), `password_hash`, `name`, `disabled_at`, `password_changed_at` | Created only by a server-side command (`pnpm --filter @tempora/api admin:create`), never through the API. Not tenant-owned, so not RLS-scoped; the API role reads it only to log in. |
 | `team_accounts` | `id`, `email` (unique, lowercased), `password_hash`, `name`, `email_verified_at`, `password_changed_at` | One login for the Console; access comes from memberships. Trusted devices created before `password_changed_at` are ignored. |
 | `customer_accounts` | `id`, `email` (unique), `password_hash`, `name`, `phone`, `email_verified_at` | Platform-wide customer login for the Portal. |
 | `sessions` | `id`, `token_hash` (unique), `app` (`portal`/`console`/`admin`), `customer_account_id` \| `team_account_id` \| `platform_admin_id`, `membership_id` (Console only), `expires_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` | Exactly one subject column is set and it matches the app (check constraints). Revoking = setting `revoked_at`. Each app has its own cookie name and the API also checks the session's `app`, so a session never works in another app. |
@@ -346,7 +346,7 @@ erDiagram
 #### Tenancy & team
 | Table | Key columns | Notes |
 |---|---|---|
-| `tenants` | `id`, `slug` (unique), `name`, `logo_url`, `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
+| `tenants` | `id`, `slug` (unique), `name`, `logo_url`, `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), `suspended_at`, `suspension_reason`, booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
 | `memberships` | `id`, `tenant_id`, `team_account_id`, `role` (`owner`/`manager`/`staff`), `branch_id` (null for owner), `status` (`active`/`deactivated`), `created_at` | Unique (`team_account_id`, `tenant_id`). Partial unique indexes: one active `owner` per tenant; one active `manager` per branch. Check: managers and staff must have a branch. |
 | `invitations` | `id`, `tenant_id`, `email`, `role`, `branch_id`, `token_hash`, `invited_by_membership_id`, `created_at`, `expires_at`, `accepted_at`, `revoked_at` | Valid for 7 days. Accepting creates (or reuses) the team account and the membership. Status is derived (pending, expired, accepted, revoked). Partial unique index: at most one open invitation per tenant and email. |
 | `support_grants` | `id`, `tenant_id`, `granted_by_membership_id`, `starts_at`, `expires_at`, `revoked_at` | At most one active grant per tenant. |
@@ -408,6 +408,8 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
   - `app.team_account_id`: the signed-in team account, so it can read **its own** memberships in every tenant (login, tenant switcher).
   - `app.invitation_token_hash`: the HMAC of an invitation link token, before any login.
   - `app.support_grant`: set for read-only platform admin access.
+  - `app.platform_admin_id`: the signed-in platform admin; lets them write and read **platform-level** audit entries (`tenant_id` null) and nothing else.
+- **Platform metrics** (Platform Admin overview and tenant usage) need counts across tenants. `SECURITY DEFINER` functions (`platform_tenant_usage`, `platform_daily_activity`) return numbers only, never rows of tenant-owned tables, like the public directory functions.
 - Policies on every tenant-owned table:
   - **tenant policy:** `tenant_id = current_setting('app.tenant_id')::uuid`
   - **customer policy** (`tenant_customers`, `bookings`, `invoices`, `payments`, read only): the row belongs to a `tenant_customer` whose `customer_account_id = current_setting('app.customer_account_id')::uuid`.
@@ -590,14 +592,17 @@ Every report takes `from`/`to` (calendar dates in the platform time zone, both i
 | POST | `/auth/step-up` | Start a step-up challenge for the current session | platform admin |
 | POST | `/auth/step-up/verify` | Verify the code; sets `step_up_at` | platform admin |
 | POST | `/auth/logout` | End session | platform admin |
-| GET | `/overview` | Platform metrics: tenants, bookings and payments per day, error rate, queue health | platform admin |
-| GET | `/tenants` | List and search | platform admin |
+| GET | `/auth/csrf`, `/me` | CSRF token; the signed-in admin and whether a step-up is still fresh | none / platform admin |
+| GET | `/overview` | Platform metrics (2.3 Overview): tenants by status, bookings and payments per day (14 days), payments needing attention, email queue | platform admin |
+| GET | `/tenants` | List and search (`q` name or slug, `status`, pagination) with usage: members, bookings in the last 30 days, setup complete | platform admin |
 | POST | `/tenants` | Assisted onboarding: create tenant + owner invitation | platform admin · step-up |
 | GET | `/tenants/:id` | Metadata, usage, support grant status | platform admin |
 | POST | `/tenants/:id/suspend` | Suspend (`reason` required) | platform admin · step-up |
 | POST | `/tenants/:id/reactivate` | Reactivate | platform admin · step-up |
 | GET | `/tenants/:id/support/bookings`, `/customers`, `/invoices` (and `/:recordId`) | Read-only tenant data; requires an active grant; every call audited in the tenant's log | platform admin · step-up |
-| GET | `/audit-logs` | Platform-level events | platform admin |
+| GET | `/audit-logs` | Platform-level events (`tenant_id` null), newest first, pagination | platform admin |
+
+Login always answers with a `challengeId`, also for an unknown email or a wrong password (the code then never arrives and cannot be verified), so the login form does not reveal which addresses are platform admins. Failed attempts are rate-limited like the Console's. A sensitive action without a fresh step-up answers `403 STEP_UP_REQUIRED`; the app then asks for a code and retries. Creating a tenant, suspending and reactivating write one entry to the platform log and one to the tenant's log.
 
 ### 5.6 Webhooks & system (`/v1/webhooks`, root)
 | Method | Endpoint | Description | Auth |
@@ -698,7 +703,8 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 ### 6.9 Tenant suspension
 - The Portal shows the tenant as unavailable; availability search and new bookings return `423 TENANT_SUSPENDED`.
 - Existing bookings stay as they are; webhooks and scheduled jobs keep working so pending payments and reminders resolve correctly.
-- The Console becomes read only for the tenant's members, with a banner explaining the suspension.
+- The Console becomes read only for the tenant's members, with a banner explaining the suspension: every state-changing request answers `423 TENANT_SUSPENDED`, except logging in and out and switching to another business.
+- Suspending requires a reason (shown to the owner in the email and the banner); suspending a tenant that is already suspended, or reactivating an active one, changes nothing and answers `200` with the current state.
 
 ### 6.10 Invoices
 - Number format `<invoice_prefix>-<year>-<6-digit sequence>`, e.g. `LUM-2026-000123`, sequential per tenant and year without gaps (row lock on `invoice_counters`, taken by an `INSERT … ON CONFLICT DO UPDATE` inside the booking transaction, so a rolled-back booking also rolls back its number). Void invoices keep their number. The year is the calendar year in the platform time zone.
@@ -775,7 +781,8 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `NOT_A_THERAPIST` | 409 | Schedule change for a member without a branch (owner) or deactivated |
 | `INVITATION_EXPIRED` | 410 | Rule 6.8 |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
-| `TENANT_SUSPENDED` | 423 | Rule 6.9 |
+| `TENANT_SUSPENDED` | 423 | Rule 6.9; also any Console write while the member's business is suspended |
+| `STEP_UP_REQUIRED` | 403 | Platform Admin action without a step-up in the last 10 minutes (6.11) |
 | `RATE_LIMITED` | 429 | Rule 6.11 |
 | `PAYMENT_PROVIDER_UNAVAILABLE` | 503 | Rule 6.3 step 7 |
 

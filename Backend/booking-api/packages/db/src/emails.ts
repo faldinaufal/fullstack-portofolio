@@ -43,6 +43,9 @@ export interface EmailPayloads {
     refundByBusiness: boolean;
   };
   'console.payment_needs_attention': { name: string; bookingId: string };
+  'admin.login_code': { name: string; code: string; expiresInMinutes: number };
+  'console.tenant_suspended': { name: string; businessName: string; reason: string };
+  'console.tenant_reactivated': { name: string; businessName: string; consoleUrl: string };
   'console.invitation': {
     businessName: string;
     inviterName: string;

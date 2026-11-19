@@ -4,19 +4,20 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { AdminAuthRepository } from '../../auth/domain/admin-auth';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
-import type { GetPlatformOverview } from '../../overview/domain/get-platform-overview';
+import type { OverviewRepository } from '../../overview/domain/overview';
+import type { TenantRepository } from '../../tenants/domain/tenant';
 
 /**
- * Use cases available to the presentation layer. Presentation depends on these
- * domain contracts only; the composition root decides which implementations to inject
- * (HTTP or demo repositories in the app, fakes in tests).
+ * Use cases available to the presentation layer. Presentation depends on these domain
+ * contracts only; the composition root decides which implementations to inject.
  */
 export interface Dependencies {
   getApiStatus: GetApiStatus;
-  getPlatformOverview: GetPlatformOverview;
-  /** Clock, injectable so time-based labels are testable and stable in the demo. */
-  now: () => Date;
+  auth: AdminAuthRepository;
+  overview: OverviewRepository;
+  tenants: TenantRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);

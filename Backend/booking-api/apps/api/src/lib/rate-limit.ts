@@ -19,6 +19,8 @@ export const RATE_LIMITS = {
   consoleOtpResend: { bucket: 'console.otp.resend', max: 5, windowMs: 15 * 60_000 },
   /** Password-reset requests per email + IP. */
   consolePasswordReset: { bucket: 'console.password.reset', max: 5, windowMs: 15 * 60_000 },
+  /** Failed Platform Admin logins per email + IP (FSD 6.11). */
+  adminLoginFailure: { bucket: 'admin.login.failure', max: 5, windowMs: 15 * 60_000 },
   /** Business sign-ups per IP (FSD 10.3). */
   consoleSignup: { bucket: 'console.signup', max: 5, windowMs: 60 * 60_000 },
 } satisfies Record<string, RateLimitRule>;

@@ -5,6 +5,8 @@ import type { ConsoleSession, MemberRole } from '../domain/auth';
 import { roleLabel, scopeLabel } from '../domain/auth-rules';
 
 export interface SessionViewModel {
+  /** The business is suspended (FSD 6.9): show the banner, expect read-only. */
+  suspension: { since: Date; reason: string } | null;
   /** Active membership: what the screens use to show or hide actions. */
   membershipId: string;
   role: MemberRole;
@@ -45,6 +47,7 @@ export function toSessionViewModel(session: ConsoleSession): SessionViewModel {
     email: session.account.email,
     roleLabel: roleLabel(active.role),
     tenantName: active.tenant.name,
+    suspension: active.tenant.suspension,
     subtitle: `${roleLabel(active.role)} · ${scopeLabel(active)}`,
     businesses: session.memberships.map((membership) => ({
       id: membership.id,

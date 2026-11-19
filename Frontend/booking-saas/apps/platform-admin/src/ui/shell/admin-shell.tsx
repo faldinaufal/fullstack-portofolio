@@ -4,23 +4,28 @@
 'use client';
 
 import {
+  Alert,
   Badge,
   DashboardShell,
   Icon,
-  SearchField,
+  TemporaMark,
   ThemeToggle,
   type ShellNavItem,
 } from '@tempora/ui';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, type ReactNode } from 'react';
+import {
+  useAdminSession,
+  useStepUpLabel,
+  type Admin,
+} from '@/core/auth/presentation/use-admin-auth';
 import { ApiStatusBadge } from '@/ui/health/api-status-badge';
 
 const NAV: Omit<ShellNavItem, 'active'>[] = [
   { href: '/', label: 'Overview', icon: 'dashboard' },
   { href: '/tenants', label: 'Tenants', icon: 'tenants' },
   { href: '/tenants/new', label: 'Create tenant', icon: 'plus-circle' },
-  { href: '/support', label: 'Support access', icon: 'shield-check' },
   { href: '/audit', label: 'Platform audit', icon: 'audit' },
   { href: '/account', label: 'Account', icon: 'customers' },
 ];
@@ -34,9 +39,46 @@ function activeHref(pathname: string): string {
   );
 }
 
-/** Platform Admin layout (dashboard design). Demo account until auth exists. */
-export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
+/**
+ * Platform Admin pages need a live session. A convenience for the browser, not the
+ * security boundary: every API request checks the session itself (FSD 1.3).
+ */
+export function AdminFrame({ children }: Readonly<{ children: ReactNode }>) {
+  const router = useRouter();
+  const session = useAdminSession();
+  useEffect(() => {
+    if (session.status === 'signed-out') router.replace('/login');
+  }, [session.status, router]);
+
+  if (session.status === 'signed-in') {
+    return (
+      <AdminShell admin={session.admin} initials={session.initials}>
+        {children}
+      </AdminShell>
+    );
+  }
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background p-6">
+      {session.status === 'error' ? (
+        <Alert tone="danger" title="Tempora cannot be reached">
+          Check your connection and reload the page.
+        </Alert>
+      ) : (
+        <p role="status" className="flex items-center gap-3 font-semibold text-muted">
+          <TemporaMark className="animate-pulse text-primary-text" /> Loading…
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AdminShell({
+  admin,
+  initials,
+  children,
+}: Readonly<{ admin: Admin; initials: string; children: ReactNode }>) {
   const active = activeHref(usePathname());
+  const stepUp = useStepUpLabel(admin);
 
   return (
     <DashboardShell
@@ -52,42 +94,40 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
           content: { icon: 'tenants' },
           active: active === '/tenants',
         },
-        { href: '/health', label: 'System health', content: { icon: 'pulse' } },
+        {
+          href: '/audit',
+          label: 'Platform audit',
+          content: { icon: 'audit' },
+          active: active === '/audit',
+        },
       ]}
       navLabel="Platform Admin"
       navItems={NAV.map((item) => ({ ...item, active: item.href === active }))}
       header={
         <>
-          <SearchField label="Search tenants by name or slug" />
+          <span className="text-sm font-semibold text-muted">Tempora operations</span>
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Secondary status; hidden on phones to keep the top bar to one row. */}
             <div className="hidden items-center gap-2.5 md:flex">
               <ApiStatusBadge />
-              <span className="rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-bold text-muted">
-                Demo data
-              </span>
-              {/* Step-up 2FA status (FSD 6.11): sensitive actions need a code from the last 10 min. */}
-              <Badge tone="success" className="py-1.5">
+              {/* Step-up status (FSD 6.11): sensitive actions need a code from the last 10 min. */}
+              <Badge tone={stepUp.fresh ? 'success' : 'neutral'} className="py-1.5">
                 <Icon name="shield" size={14} strokeWidth={2} />
-                Code verified 4 min ago
+                {stepUp.label}
               </Badge>
             </div>
             <ThemeToggle />
-            <button
-              type="button"
-              className="flex min-h-11 items-center gap-2.5 rounded-full px-1 text-left"
-            >
+            <Link href="/account" className="flex min-h-11 items-center gap-2.5 rounded-full px-1">
               <span
                 aria-hidden="true"
                 className="flex size-9 items-center justify-center rounded-full bg-surface-muted text-[13px] font-extrabold text-primary-text"
               >
-                SO
+                {initials}
               </span>
               <span className="hidden sm:block">
-                <span className="block text-sm font-bold">Sam O.</span>
+                <span className="block text-sm font-bold">{admin.name}</span>
                 <span className="block text-xs text-muted">Platform admin</span>
               </span>
-            </button>
+            </Link>
           </div>
         </>
       }

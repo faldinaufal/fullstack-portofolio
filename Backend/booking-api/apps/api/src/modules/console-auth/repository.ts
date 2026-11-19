@@ -62,7 +62,16 @@ export const consoleAuthRepository = {
     tx.membership.findMany({
       where: { teamAccountId, status: 'active', tenant: { archivedAt: null } },
       include: {
-        tenant: { select: { id: true, slug: true, name: true } },
+        tenant: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            status: true,
+            suspendedAt: true,
+            suspensionReason: true,
+          },
+        },
         teamAccount: { select: { name: true } },
       },
       orderBy: { createdAt: 'asc' },

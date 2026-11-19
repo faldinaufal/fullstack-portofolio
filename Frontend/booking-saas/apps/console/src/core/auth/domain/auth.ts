@@ -10,7 +10,13 @@ export interface Membership {
   role: MemberRole;
   /** Null for owners (whole business). */
   branchId: string | null;
-  tenant: { id: string; slug: string; name: string };
+  tenant: {
+    id: string;
+    slug: string;
+    name: string;
+    /** Set while Tempora has suspended the business (FSD 6.9): the Console is read only. */
+    suspension: { since: Date; reason: string } | null;
+  };
 }
 
 export interface ConsoleSession {

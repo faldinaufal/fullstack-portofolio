@@ -167,6 +167,52 @@ Details: ${p.bookingUrl}`,
     };
   },
 
+  'admin.login_code': ({ name, code, expiresInMinutes }) => ({
+    subject: `${code} is your Tempora Platform Admin code`,
+    text: `Hi ${name},
+
+Your Platform Admin code is ${code}. It expires in ${expiresInMinutes} minutes.
+
+If you did not try to sign in, tell the team at once.`,
+    html: layout('Your Platform Admin code', [
+      `Hi ${escapeHtml(name)},`,
+      'Your Tempora Platform Admin code is:',
+      `<strong style="font-size:28px;letter-spacing:6px">${code}</strong>`,
+      `It expires in ${expiresInMinutes} minutes. If you did not try to sign in, tell the team at once.`,
+    ]),
+  }),
+
+  'console.tenant_suspended': ({ name, businessName, reason }) => ({
+    subject: `${businessName} is suspended on Tempora`,
+    text: `Hi ${name},
+
+${businessName} has been suspended on Tempora.
+
+Reason: ${reason}
+
+Customers cannot book while it is suspended; existing bookings stay as they are. The Console stays open in read-only mode. Reply to this email to resolve it.`,
+    html: layout('Business suspended', [
+      `Hi ${escapeHtml(name)},`,
+      `<strong>${escapeHtml(businessName)}</strong> has been suspended on Tempora.`,
+      `Reason: ${escapeHtml(reason)}`,
+      'Customers cannot book while it is suspended; existing bookings stay as they are. The Console stays open in read-only mode. Reply to this email to resolve it.',
+    ]),
+  }),
+
+  'console.tenant_reactivated': ({ name, businessName, consoleUrl }) => ({
+    subject: `${businessName} is active again on Tempora`,
+    text: `Hi ${name},
+
+${businessName} is active again: customers can book and the Console works as usual.
+
+${consoleUrl}`,
+    html: layout('Business active again', [
+      `Hi ${escapeHtml(name)},`,
+      `<strong>${escapeHtml(businessName)}</strong> is active again: customers can book and the Console works as usual.`,
+      `<a href="${escapeHtml(consoleUrl)}" style="color:#2f5f78;font-weight:bold">Open the Console</a>`,
+    ]),
+  }),
+
   'console.payment_needs_attention': ({ name, bookingId }) => ({
     subject: 'A payment needs your attention',
     text: `Hi ${name},\n\nA payment arrived for booking ${bookingId}, which was no longer waiting for payment (it expired or was cancelled). Please review it in the Console and refund the customer outside Tempora if needed.`,

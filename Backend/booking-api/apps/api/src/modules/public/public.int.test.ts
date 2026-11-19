@@ -211,7 +211,10 @@ describe('availability (FSD 6.2)', () => {
 
   it('a suspended business shows as unavailable and takes no bookings (FSD 6.9)', async () => {
     const b = await bookableBusiness();
-    await h.owner.tenant.update({ where: { slug: 'lumen' }, data: { status: 'suspended' } });
+    await h.owner.tenant.update({
+      where: { slug: 'lumen' },
+      data: { status: 'suspended', suspendedAt: new Date(), suspensionReason: 'Review' },
+    });
 
     expect((await visitor().get(`${P}/tenants/lumen`)).json()).toMatchObject({ available: false });
     expect((await visitor().get(`${P}/tenants`)).json()).toEqual({ items: [] });

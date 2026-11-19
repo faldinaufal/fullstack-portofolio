@@ -21,6 +21,8 @@ export interface DbContext {
   customerAccountId?: string;
   /** HMAC of a booking access token (guest link): reveals that one token row. */
   bookingTokenHash?: string;
+  /** Signed-in platform admin: platform-level audit entries (no tenant). */
+  platformAdminId?: string;
 }
 
 export interface TransactionOptions {
@@ -61,6 +63,7 @@ export async function setDbContext(tx: Tx, context: DbContext): Promise<void> {
       set_config('app.team_account_id', ${context.teamAccountId ?? ''}, true),
       set_config('app.invitation_token_hash', ${context.invitationTokenHash ?? ''}, true),
       set_config('app.customer_account_id', ${context.customerAccountId ?? ''}, true),
-      set_config('app.booking_token_hash', ${context.bookingTokenHash ?? ''}, true)
+      set_config('app.booking_token_hash', ${context.bookingTokenHash ?? ''}, true),
+      set_config('app.platform_admin_id', ${context.platformAdminId ?? ''}, true)
   `;
 }

@@ -14,6 +14,11 @@ import type { CookieSettings } from './modules/console-auth/cookies.js';
 import { installConsoleGuard } from './modules/console-auth/guard.js';
 import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
+import { installAdminGuard } from './modules/admin-auth/guard.js';
+import { adminAuthRoutes } from './modules/admin-auth/routes.js';
+import type { AdminAuthService } from './modules/admin-auth/service.js';
+import { adminRoutes } from './modules/admin/routes.js';
+import type { AdminService } from './modules/admin/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import { consoleBookingRoutes } from './modules/console-bookings/routes.js';
 import type { ConsoleBookingService } from './modules/console-bookings/service.js';
@@ -61,6 +66,8 @@ export interface AppDependencies {
   portalAuth?: { service: PortalAuthService; cookies: CookieSettings };
   /** Booking, payments and webhooks, and the Portal's booking pages; need `portalAuth`. */
   bookings?: { service: BookingService; portal: PortalBookingService };
+  /** Platform Admin (`/v1/admin`). */
+  admin?: { auth: AdminAuthService; service: AdminService; cookies: CookieSettings };
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
@@ -86,6 +93,7 @@ export async function buildApp({
   publicCatalogue,
   portalAuth,
   bookings,
+  admin,
 }: AppDependencies) {
   const app = Fastify({
     trustProxy: env.TRUST_PROXY,
@@ -133,6 +141,22 @@ export async function buildApp({
 
   if (publicCatalogue) {
     await app.register(publicRoutes, { prefix: '/v1/public', service: publicCatalogue });
+  }
+
+  if (admin) {
+    // Its own scope: Platform Admin CSRF and session checks, nothing shared with the apps.
+    await app.register(
+      async (scope) => {
+        const guard = installAdminGuard(scope, { service: admin.auth, cookies: admin.cookies });
+        await scope.register(adminAuthRoutes, {
+          service: admin.auth,
+          guard,
+          cookies: admin.cookies,
+        });
+        await scope.register(adminRoutes, { service: admin.service, guard });
+      },
+      { prefix: '/v1/admin' },
+    );
   }
 
   if (portalAuth) {

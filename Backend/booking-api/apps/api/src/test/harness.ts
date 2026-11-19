@@ -14,6 +14,8 @@ import {
   createDemoPaymentProvider,
   type DemoPaymentProvider,
 } from '../lib/payments/demo-provider.js';
+import { createAdminAuthService } from '../modules/admin-auth/service.js';
+import { createAdminService } from '../modules/admin/service.js';
 import { createPortalBookingService } from '../modules/bookings/portal-service.js';
 import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
@@ -39,6 +41,7 @@ function requireEnv(name: string): string {
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
   'idempotency_keys',
+  'platform_admins',
   'booking_access_tokens',
   'stripe_events',
   'payments',
@@ -145,6 +148,17 @@ export async function createHarness(): Promise<Harness> {
         portalUrl: 'http://localhost:3000',
         now,
       }),
+    },
+    admin: {
+      auth: createAdminAuthService({ prisma, passwords, hashToken, rateLimiter, now }),
+      service: createAdminService({
+        prisma,
+        hashToken,
+        consoleUrl: 'http://localhost:3001',
+        timeZone: 'America/New_York',
+        now,
+      }),
+      cookies: { secure: false, domain: undefined },
     },
     portalAuth: {
       service: createPortalAuthService({

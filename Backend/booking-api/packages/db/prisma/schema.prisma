@@ -37,6 +37,9 @@ model Tenant {
   slug                    String       @unique @db.VarChar(40)
   name                    String       @db.VarChar(100)
   status                  TenantStatus @default(active)
+  /// Set by a platform admin (FSD 3.11, 6.9); the reason is shown to the owner.
+  suspendedAt             DateTime?    @map("suspended_at") @db.Timestamptz(3)
+  suspensionReason        String?      @map("suspension_reason") @db.VarChar(500)
   /// Booking settings (FSD 6.1), configurable by the owner.
   minLeadHours            Int          @default(4) @map("min_lead_hours") @db.SmallInt
   maxAdvanceDays          Int          @default(30) @map("max_advance_days") @db.SmallInt
@@ -245,15 +248,40 @@ model Session {
   revokedAt         DateTime?  @map("revoked_at") @db.Timestamptz(3)
   ip                String?    @db.VarChar(45)
   userAgent         String?    @map("user_agent") @db.VarChar(300)
+  platformAdminId   String?    @map("platform_admin_id") @db.Uuid
+  /// Platform Admin: last successful step-up verification (FSD 6.11).
+  stepUpAt          DateTime?  @map("step_up_at") @db.Timestamptz(3)
 
   teamAccount     TeamAccount?     @relation(fields: [teamAccountId], references: [id])
   customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id])
   membership      Membership?      @relation(fields: [membershipId], references: [id])
+  platformAdmin   PlatformAdmin?   @relation(fields: [platformAdminId], references: [id])
+  stepUps         OtpChallenge[]
 
   @@index([teamAccountId])
   @@index([customerAccountId])
   @@index([membershipId])
+  @@index([platformAdminId])
   @@map("sessions")
+}
+
+/// Tempora's own operators (FSD 1.1 `platform_admin`). Created only by a server-side command.
+/// Not tenant-owned, so not RLS-scoped.
+model PlatformAdmin {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  /// Stored lowercased.
+  email             String    @unique @db.VarChar(254)
+  passwordHash      String    @map("password_hash")
+  name              String    @db.VarChar(100)
+  passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  disabledAt        DateTime? @map("disabled_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions      Session[]
+  otpChallenges OtpChallenge[]
+
+  @@map("platform_admins")
 }
 
 enum OtpPurpose {
@@ -265,20 +293,27 @@ enum OtpPurpose {
 
 /// Created after a correct password. The 6-digit code is never stored, only its HMAC.
 model OtpChallenge {
-  id            String     @id @default(uuid(7)) @db.Uuid
-  purpose       OtpPurpose
-  teamAccountId String?    @map("team_account_id") @db.Uuid
-  codeHash      String     @map("code_hash") @db.Char(64)
-  attempts      Int        @default(0)
-  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  lastSentAt    DateTime   @default(now()) @map("last_sent_at") @db.Timestamptz(3)
-  expiresAt     DateTime   @map("expires_at") @db.Timestamptz(3)
-  consumedAt    DateTime?  @map("consumed_at") @db.Timestamptz(3)
-  ip            String?    @db.VarChar(45)
+  id              String     @id @default(uuid(7)) @db.Uuid
+  purpose         OtpPurpose
+  teamAccountId   String?    @map("team_account_id") @db.Uuid
+  codeHash        String     @map("code_hash") @db.Char(64)
+  attempts        Int        @default(0)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSentAt      DateTime   @default(now()) @map("last_sent_at") @db.Timestamptz(3)
+  expiresAt       DateTime   @map("expires_at") @db.Timestamptz(3)
+  consumedAt      DateTime?  @map("consumed_at") @db.Timestamptz(3)
+  ip              String?    @db.VarChar(45)
+  platformAdminId String?    @map("platform_admin_id") @db.Uuid
+  /// Step-up only: the session the code re-verifies.
+  sessionId       String?    @map("session_id") @db.Uuid
 
-  teamAccount TeamAccount? @relation(fields: [teamAccountId], references: [id])
+  teamAccount   TeamAccount?   @relation(fields: [teamAccountId], references: [id])
+  platformAdmin PlatformAdmin? @relation(fields: [platformAdminId], references: [id])
+  session       Session?       @relation(fields: [sessionId], references: [id])
 
   @@index([teamAccountId])
+  @@index([platformAdminId])
+  @@index([sessionId])
   @@map("otp_challenges")
 }
 
