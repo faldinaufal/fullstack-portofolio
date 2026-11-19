@@ -5,11 +5,12 @@
 
 import { Alert, Button, buttonVariants, TextField } from '@tempora/ui';
 import Link from 'next/link';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { useAcceptInvitation, useInvitationPreview } from '@/core/team/presentation/use-team';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 import { AuthLayout } from './auth-layout';
+import { formText } from '@/ui/common/form-values';
 
 /** FSD 2.2 `/invite/[token]`: join a business from the emailed link. */
 export function AcceptInvitationScreen({ token }: Readonly<{ token: string }>) {
@@ -56,12 +57,12 @@ export function AcceptInvitationScreen({ token }: Readonly<{ token: string }>) {
     );
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     accept.mutate({
-      ...(!invitation.accountExists && { name: String(form.get('name')).trim() }),
-      password: String(form.get('password')),
+      ...(!invitation.accountExists && { name: formText(form, 'name').trim() }),
+      password: formText(form, 'password'),
     });
   }
 

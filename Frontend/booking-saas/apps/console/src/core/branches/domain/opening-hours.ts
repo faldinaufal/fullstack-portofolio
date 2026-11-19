@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
+import { weekHoursProblems } from '../../shared/domain/week-hours';
 import type { OpeningHours } from './branch';
 
 export const WEEKDAYS = [
@@ -17,20 +18,12 @@ const SHORT = WEEKDAYS.map((day) => day.slice(0, 3));
 /** The week as shown in the editor: Monday first, Sunday last. */
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-/** `HH:MM` in 15-minute steps, the same rule as the API. */
-export const isWallTime = (value: string) => /^([01]\d|2[0-3]):(00|15|30|45)$/.test(value);
-
 /** Problems in a week of opening hours, keyed by weekday; empty when valid. */
 export function openingHoursProblems(hours: OpeningHours[]): Record<number, string> {
-  const problems: Record<number, string> = {};
-  for (const day of hours) {
-    if (!isWallTime(day.opensAt) || !isWallTime(day.closesAt)) {
-      problems[day.weekday] = 'Use HH:MM in 15-minute steps.';
-    } else if (day.opensAt >= day.closesAt) {
-      problems[day.weekday] = 'Closing time must be after opening time.';
-    }
-  }
-  return problems;
+  return weekHoursProblems(
+    hours.map((h) => ({ weekday: h.weekday, start: h.opensAt, end: h.closesAt })),
+    'Closing time must be after opening time.',
+  );
 }
 
 /**

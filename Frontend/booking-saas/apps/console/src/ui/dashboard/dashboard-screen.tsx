@@ -6,6 +6,7 @@
 import {
   Badge,
   BarChart,
+  buttonVariants,
   Card,
   CardContent,
   CardHeader,
@@ -14,8 +15,11 @@ import {
   MonthCalendar,
 } from '@tempora/ui';
 import Link from 'next/link';
+import { useCurrentMember } from '@/core/auth/presentation/use-auth';
+import { useBusinessSettings } from '@/core/catalogue/presentation/use-catalogue';
 import { useDashboard } from '@/core/dashboard/presentation/use-dashboard';
 import type { DashboardViewModel } from '@/core/dashboard/presentation/dashboard.view-model';
+import { SetupChecklist } from '@/ui/onboarding/onboarding-screen';
 
 export function DashboardScreen() {
   const state = useDashboard();
@@ -33,6 +37,7 @@ export function DashboardScreen() {
         </div>
       </div>
 
+      <SetupCard />
       {state.status === 'loading' && <DashboardSkeleton />}
       {state.status === 'error' && (
         <p role="alert" className="rounded-card bg-danger-soft p-5 text-sm text-danger">
@@ -152,5 +157,23 @@ function DashboardSkeleton() {
       <div className="h-[220px] animate-pulse rounded-card bg-surface-muted" />
       <div className="h-[320px] animate-pulse rounded-card bg-surface-muted" />
     </div>
+  );
+}
+
+/** Shown to the owner until the business can take bookings (FSD 3.4 step 3). */
+function SetupCard() {
+  const me = useCurrentMember();
+  const settings = useBusinessSettings(me.role === 'owner');
+  if (me.role !== 'owner' || !settings.data || settings.data.setup.complete) return null;
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-5 border-primary/40 p-5">
+      <div className="flex flex-col gap-3">
+        <p className="text-lg font-extrabold">Finish setting up {settings.data.name}</p>
+        <SetupChecklist setup={settings.data.setup} />
+      </div>
+      <Link href="/onboarding" className={buttonVariants()}>
+        Continue setup
+      </Link>
+    </Card>
   );
 }

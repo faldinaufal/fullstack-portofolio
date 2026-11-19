@@ -44,8 +44,37 @@ export interface InvitationPreview {
   expiresAt: Date;
 }
 
+/** Weekly working interval, `HH:MM` in the platform time zone (0 = Sunday). */
+export interface WorkingHours {
+  weekday: number;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface TimeOff {
+  id: string;
+  startsAt: Date;
+  endsAt: Date;
+  reason: string | null;
+}
+
+/** A member with their schedule (FSD 2.2 Team member detail, My schedule). */
+export interface MemberDetail extends Member {
+  workingHours: WorkingHours[];
+  services: { id: string; name: string }[];
+  timeOff: TimeOff[];
+}
+
 export interface TeamRepository {
   listMembers(): Promise<Member[]>;
+  getMember(id: string): Promise<MemberDetail>;
+  replaceWorkingHours(id: string, hours: WorkingHours[]): Promise<MemberDetail>;
+  replaceServices(id: string, serviceIds: string[]): Promise<MemberDetail>;
+  addTimeOff(
+    id: string,
+    input: { startsAt: Date; endsAt: Date; reason?: string },
+  ): Promise<TimeOff>;
+  removeTimeOff(id: string, timeOffId: string): Promise<void>;
   updateMember(id: string, change: MemberChange): Promise<Member>;
   deactivate(id: string): Promise<Member>;
   reactivate(id: string): Promise<Member>;
@@ -67,6 +96,15 @@ export function invitableRoles(role: Role): AssignableRole[] {
 }
 
 /** Mirrors the API's rule; the API remains the authority. */
+/** Mirrors the API: owner for anyone, a manager for members of their branch. */
+export function canEditSchedule(
+  actor: { role: Role; branchId: string | null },
+  member: Pick<Member, 'branch'>,
+): boolean {
+  if (actor.role === 'owner') return true;
+  return actor.role === 'manager' && member.branch?.id === actor.branchId;
+}
+
 export function canManage(
   actor: { role: Role; membershipId: string; branchId: string | null },
   member: Member,

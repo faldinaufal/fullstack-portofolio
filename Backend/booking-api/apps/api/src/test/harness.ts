@@ -10,7 +10,10 @@ import { createPostgresRateLimiter } from '../lib/rate-limit.js';
 import { createTokenHasher } from '../lib/tokens.js';
 import { createBranchService } from '../modules/branches/service.js';
 import { createConsoleAuthService } from '../modules/console-auth/service.js';
+import { createScheduleService } from '../modules/schedules/service.js';
+import { createServiceCatalogue } from '../modules/services/service.js';
 import { createTeamService } from '../modules/team/service.js';
+import { createTenantService } from '../modules/tenant/service.js';
 import { createPrismaHealthRepository } from '../modules/health/repository.js';
 
 function requireEnv(name: string): string {
@@ -24,6 +27,10 @@ function requireEnv(name: string): string {
 
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
+  'staff_time_off',
+  'staff_working_hours',
+  'staff_services',
+  'services',
   'audit_logs',
   'invitations',
   'branch_closures',
@@ -93,7 +100,10 @@ export async function createHarness(): Promise<Harness> {
       cookies: { secure: false, domain: undefined },
     },
     consoleModules: {
+      tenant: createTenantService({ prisma }),
       branches: createBranchService({ prisma, now }),
+      services: createServiceCatalogue({ prisma }),
+      schedules: createScheduleService({ prisma, now }),
       team: createTeamService({
         prisma,
         passwords,

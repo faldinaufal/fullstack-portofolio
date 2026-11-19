@@ -248,7 +248,7 @@ Alternative paths:
 
 ### 3.4 Business sign-up and onboarding
 1. Console `/signup`: name, email, password, business name, slug → creates team account, tenant and owner membership in one transaction, then emails a 6-digit code exactly like a login. Entering the code proves the address (`email_verified_at` is set) and starts the session; no separate verification link is needed for team accounts.
-2. Onboarding wizard: business profile and logo → first branch with opening hours → services (duration, buffer, price) → invite team (optional, can skip).
+2. Onboarding wizard: business profile and logo → first branch with opening hours → services (duration, buffer, price) → invite team (optional, can skip). Each step saves through the regular endpoints, so leaving halfway loses nothing; until setup is complete the owner's dashboard shows a checklist of what is missing. (The logo upload is added together with object storage.)
 3. The tenant appears in the Portal directory once it has at least one branch, one service and one therapist with working hours.
 
 ### 3.5 Assisted onboarding (platform admin)
@@ -356,8 +356,8 @@ erDiagram
 | `branch_closures` | `id`, `tenant_id`, `branch_id`, `starts_on`, `ends_on`, `reason` | Holidays and one-off closures. |
 | `services` | `id`, `tenant_id`, `name`, `description`, `duration_minutes`, `buffer_minutes`, `price_cents`, `version`, `archived_at` | Tenant-wide catalogue. |
 | `staff_services` | `tenant_id`, `membership_id`, `service_id` | Which therapist performs which service. |
-| `staff_working_hours` | `id`, `tenant_id`, `membership_id`, `weekday`, `starts_at`, `ends_at` | Must lie within the branch opening hours. |
-| `staff_time_off` | `id`, `tenant_id`, `membership_id`, `starts_at`, `ends_at`, `reason`, `created_by_membership_id` | Cannot overlap an active booking (see 6). |
+| `staff_working_hours` | `id`, `tenant_id`, `membership_id`, `weekday`, `starts_at`, `ends_at` | One interval per weekday. Must lie within the branch opening hours of the same weekday (`409 OUTSIDE_BRANCH_HOURS`). Only active managers and staff at a branch have working hours (`409 NOT_A_THERAPIST` for owners). |
+| `staff_time_off` | `id`, `tenant_id`, `membership_id`, `starts_at`, `ends_at`, `reason`, `created_by_membership_id` | Cannot overlap an active booking (see 6). Must end in the future and last at most 90 days per entry. |
 
 #### Customers & bookings
 | Table | Key columns | Notes |
@@ -602,6 +602,8 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 | Payment hold | 30 min | Platform (constant) | Unpaid bookings expire after this (see 6.3). |
 | Cancellation / reschedule cut-off | 24 h | Owner (`cancellation_cutoff_hours`) | Customers can reschedule only until this long before the session. |
 | Customer reschedules per booking | 2 | Owner (`max_customer_reschedules`) | After that, only owner or manager can move the booking. |
+
+Allowed values for the owner's settings: minimum lead time 0–72 h, booking horizon 1–180 days, cut-off 0–168 h, reschedules 0–10. The API and a database check constraint enforce the same ranges.
 | Reminder | 24 h before | Platform (constant) | Not sent if the booking is created less than 24 h before the session. |
 
 ### 6.2 Availability
@@ -663,6 +665,7 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 ### 6.8 Schedules, team and catalogue changes
 - **Time off** cannot overlap an active booking of that therapist; the API returns `409 HAS_ACTIVE_BOOKINGS` with the conflicting bookings. Same advisory lock as bookings.
 - **Working hours** and **opening hours** changes are rejected if they would leave an active future booking outside the new hours (same error and list).
+- **Archiving a service** removes it from every therapist's services; past bookings keep their snapshot.
 - **Blocking rule (deactivate, move branch, archive service or branch):** rejected with `409 HAS_ACTIVE_BOOKINGS` and the list of future `pending_payment`/`confirmed` bookings until each one is reassigned (6.6) or cancelled (6.7).
 - **Deactivating or demoting** a member, or changing their branch, revokes all their Console sessions for that tenant immediately.
 - **Ownership transfer** requires the owner's password; in one transaction the new owner's membership becomes `owner` and the old owner becomes `manager` of a branch without a manager, or is deactivated. The partial unique indexes guarantee exactly one owner at every moment.
@@ -742,6 +745,8 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `ALREADY_MEMBER` / `INVITATION_PENDING` | 409 | Invitation for someone who is already a member / already invited (6.8) |
 | `BRANCH_HAS_MANAGER` | 409 | The branch already has an active manager; choose what happens to them (6.8) |
 | `HAS_ACTIVE_MEMBERS` | 409 | Archiving a branch where active members still work (6.8) |
+| `OUTSIDE_BRANCH_HOURS` | 409 | Working hours outside the branch opening hours of that weekday (field errors per entry) |
+| `NOT_A_THERAPIST` | 409 | Schedule change for a member without a branch (owner) or deactivated |
 | `INVITATION_EXPIRED` | 410 | Rule 6.8 |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
 | `TENANT_SUSPENDED` | 423 | Rule 6.9 |

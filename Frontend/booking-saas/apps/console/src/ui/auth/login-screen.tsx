@@ -6,11 +6,12 @@
 import { Button, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, type FormEvent } from 'react';
+import { useEffect, type SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import { useLogin, useSession } from '@/core/auth/presentation/use-auth';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
+import { formText } from '@/ui/common/form-values';
 
 export function LoginScreen() {
   const router = useRouter();
@@ -22,11 +23,11 @@ export function LoginScreen() {
     if (session.status === 'signed-in') router.replace('/');
   }, [session.status, router]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     login.mutate(
-      { email: String(form.get('email')), password: String(form.get('password')) },
+      { email: formText(form, 'email'), password: formText(form, 'password') },
       {
         onSuccess: (outcome) => router.push(outcome.kind === 'signed-in' ? '/' : '/login/verify'),
       },

@@ -4,8 +4,16 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AssignableRole, Invitation, Member, MemberChange } from '../domain/team';
-import { canManage, invitableRoles } from '../domain/team';
+import type {
+  AssignableRole,
+  Invitation,
+  Member,
+  MemberChange,
+  MemberDetail,
+  WorkingHours,
+} from '../domain/team';
+import { canEditSchedule, canManage, invitableRoles } from '../domain/team';
+import { weekHoursProblems, type DayInterval } from '../../shared/domain/week-hours';
 import { useDependencies } from '../../shared/presentation/dependencies';
 
 const MEMBERS = ['team', 'members'] as const;
@@ -141,6 +149,86 @@ export function useSetMemberActive() {
   );
 }
 
+const memberKey = (id: string) => ['team', 'member', id] as const;
+const timeFormat = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+export interface TimeOffRow {
+  id: string;
+  period: string;
+  reason: string;
+}
+
+export function toTimeOffRows(member: MemberDetail): TimeOffRow[] {
+  return member.timeOff.map((entry) => ({
+    id: entry.id,
+    period: `${timeFormat.format(entry.startsAt)} – ${timeFormat.format(entry.endsAt)}`,
+    reason: entry.reason ?? 'Time off',
+  }));
+}
+
+/** A member and their schedule, plus what the signed-in member may change. */
+export function useMember(id: string, actor: Actor) {
+  const { team } = useDependencies();
+  return useQuery({
+    queryKey: memberKey(id),
+    queryFn: () => team.getMember(id),
+    select: (member) => {
+      const therapist = member.status === 'active' && member.branch !== null;
+      return {
+        ...member,
+        row: toMemberRow(member, actor),
+        timeOffRows: toTimeOffRows(member),
+        therapist,
+        canEditSchedule: therapist && canEditSchedule(actor, member),
+        canManageTimeOff:
+          therapist && (canEditSchedule(actor, member) || member.id === actor.membershipId),
+      };
+    },
+  });
+}
+
+/** Schedule changes refresh the member and the setup status (FSD 3.4). */
+function useScheduleMutation<TInput, TResult>(
+  id: string,
+  run: (input: TInput) => Promise<TResult>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: memberKey(id) });
+      await queryClient.invalidateQueries({ queryKey: ['catalogue'] });
+    },
+  });
+}
+
+export function useReplaceWorkingHours(id: string) {
+  const { team } = useDependencies();
+  return useScheduleMutation(id, (hours: WorkingHours[]) => team.replaceWorkingHours(id, hours));
+}
+
+export function useReplaceMemberServices(id: string) {
+  const { team } = useDependencies();
+  return useScheduleMutation(id, (serviceIds: string[]) => team.replaceServices(id, serviceIds));
+}
+
+export function useAddTimeOff(id: string) {
+  const { team } = useDependencies();
+  return useScheduleMutation(id, (input: { startsAt: Date; endsAt: Date; reason?: string }) =>
+    team.addTimeOff(id, input),
+  );
+}
+
+export function useRemoveTimeOff(id: string) {
+  const { team } = useDependencies();
+  return useScheduleMutation(id, (timeOffId: string) => team.removeTimeOff(id, timeOffId));
+}
+
 export function useInvitationPreview(token: string) {
   const { team } = useDependencies();
   return useQuery({
@@ -163,3 +251,8 @@ export function useAcceptInvitation(token: string) {
 }
 
 export { invitableRoles };
+
+/** Instant check of a week of working hours (the API also checks the branch hours). */
+export function workingHoursProblems(hours: DayInterval[]): Record<number, string> {
+  return weekHoursProblems(hours, 'The end of the working day must be after its start.');
+}

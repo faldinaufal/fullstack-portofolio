@@ -6,6 +6,7 @@
 import { createContext, useContext } from 'react';
 import type { AuthUseCases } from '../../auth/domain/auth-use-cases';
 import type { BranchRepository } from '../../branches/domain/branch';
+import type { CatalogueRepository } from '../../catalogue/domain/catalogue';
 import type { GetDashboard } from '../../dashboard/domain/get-dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 import type { TeamRepository } from '../../team/domain/team';
@@ -18,6 +19,7 @@ import type { TeamRepository } from '../../team/domain/team';
 export interface Dependencies {
   auth: AuthUseCases;
   branches: BranchRepository;
+  catalogue: CatalogueRepository;
   team: TeamRepository;
   getApiStatus: GetApiStatus;
   getDashboard: GetDashboard;

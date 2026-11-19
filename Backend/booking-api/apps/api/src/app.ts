@@ -16,8 +16,14 @@ import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import type { BranchService } from './modules/branches/service.js';
+import { scheduleRoutes } from './modules/schedules/routes.js';
+import type { ScheduleService } from './modules/schedules/service.js';
+import { serviceRoutes } from './modules/services/routes.js';
+import type { ServiceCatalogue } from './modules/services/service.js';
 import { teamRoutes } from './modules/team/routes.js';
 import type { TeamService } from './modules/team/service.js';
+import { tenantRoutes } from './modules/tenant/routes.js';
+import type { TenantService } from './modules/tenant/service.js';
 import type { HealthRepository } from './modules/health/repository.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { createHealthService } from './modules/health/service.js';
@@ -38,7 +44,13 @@ export interface AppDependencies {
   /** Console authentication. Left out by tests that only exercise the app shell. */
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
   /** Console business modules; need `consoleAuth`. */
-  consoleModules?: { branches: BranchService; team: TeamService };
+  consoleModules?: {
+    tenant: TenantService;
+    branches: BranchService;
+    services: ServiceCatalogue;
+    team: TeamService;
+    schedules: ScheduleService;
+  };
 }
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
@@ -102,7 +114,10 @@ export async function buildApp({
         await scope.register(consoleAuthRoutes, { ...consoleAuth, guard });
         if (consoleModules) {
           await scope.register(branchRoutes, { service: consoleModules.branches, guard });
+          await scope.register(tenantRoutes, { service: consoleModules.tenant, guard });
+          await scope.register(serviceRoutes, { service: consoleModules.services, guard });
           await scope.register(teamRoutes, { service: consoleModules.team, guard });
+          await scope.register(scheduleRoutes, { service: consoleModules.schedules, guard });
         }
       },
       { prefix: '/v1/console' },

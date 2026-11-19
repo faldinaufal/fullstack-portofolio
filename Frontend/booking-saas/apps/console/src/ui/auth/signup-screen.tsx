@@ -6,7 +6,7 @@
 import { Button, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import {
   PASSWORD_MIN_LENGTH,
@@ -17,6 +17,7 @@ import {
 import { useSignup } from '@/core/auth/presentation/use-auth';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
+import { formText } from '@/ui/common/form-values';
 
 /** FSD 3.4 step 1: create the team account and the business, then confirm the email code. */
 export function SignupScreen() {
@@ -29,13 +30,13 @@ export function SignupScreen() {
   const apiError = toErrorView(signup.error);
   const fieldError = (field: string) => localErrors[field] ?? apiError?.fields[field];
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const values = {
-      name: String(form.get('name')),
-      email: String(form.get('email')),
-      password: String(form.get('password')),
+      name: formText(form, 'name'),
+      email: formText(form, 'email'),
+      password: formText(form, 'password'),
       businessName,
       slug,
     };
