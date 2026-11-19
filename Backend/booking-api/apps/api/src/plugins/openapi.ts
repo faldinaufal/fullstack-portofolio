@@ -31,6 +31,8 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
           name: 'portal-auth',
           description: 'Customer accounts: sign-up, login, profile, sessions',
         },
+        { name: 'portal-bookings', description: 'Booking and paying (customers and guests)' },
+        { name: 'payments', description: 'Payment webhooks and the demo checkout' },
         { name: 'console-auth', description: 'Console sign-up, login with email code, sessions' },
         { name: 'console-branches', description: 'Branches, opening hours and closures' },
         { name: 'console-settings', description: 'Business profile and booking settings' },

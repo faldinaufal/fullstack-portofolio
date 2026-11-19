@@ -3,6 +3,7 @@
 
 import type { Tx } from '@tempora/db';
 import type { OutboxEmail } from '@tempora/db/emails';
+import { invoicePrefixBase, nextInvoicePrefix } from '../bookings/invoice-number.js';
 
 /**
  * Prisma queries for Console authentication. Every function receives the transaction it runs
@@ -34,7 +35,23 @@ export const consoleAuthRepository = {
   // --- tenants and memberships ----------------------------------------------
   slugExists: async (tx: Tx, slug: string) => (await tx.tenant.count({ where: { slug } })) > 0,
 
-  createTenant: (tx: Tx, data: { slug: string; name: string }) => tx.tenant.create({ data }),
+  /**
+   * Creates the tenant with the first free invoice prefix derived from its slug (FSD 6.10).
+   * A concurrent sign-up taking the same prefix fails on the unique index and is retried
+   * by the caller.
+   */
+  createTenant: async (tx: Tx, data: { slug: string; name: string }) => {
+    const base = invoicePrefixBase(data.slug);
+    const taken = await tx.tenant.findMany({
+      where: { invoicePrefix: { startsWith: base } },
+      select: { invoicePrefix: true },
+    });
+    const invoicePrefix = nextInvoicePrefix(
+      base,
+      taken.map((t) => t.invoicePrefix),
+    );
+    return tx.tenant.create({ data: { ...data, invoicePrefix } });
+  },
 
   /** Requires the RLS context of the new tenant (tenant policy WITH CHECK). */
   createOwnerMembership: (tx: Tx, data: { tenantId: string; teamAccountId: string }) =>

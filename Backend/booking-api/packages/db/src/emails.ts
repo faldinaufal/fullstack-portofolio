@@ -14,6 +14,19 @@ export interface EmailPayloads {
   'portal.verify_email': { name: string; verifyUrl: string; expiresInHours: number };
   'portal.password_reset': { name: string; resetUrl: string; expiresInMinutes: number };
   'portal.password_changed': { name: string };
+  'portal.booking_confirmed': {
+    name: string;
+    businessName: string;
+    serviceName: string;
+    therapist: string;
+    when: string;
+    branchName: string;
+    address: string | null;
+    invoiceNumber: string;
+    priceCents: number;
+    bookingUrl: string;
+  };
+  'console.payment_needs_attention': { name: string; bookingId: string };
   'console.invitation': {
     businessName: string;
     inviterName: string;

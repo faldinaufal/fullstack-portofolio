@@ -8,6 +8,7 @@
  */
 export const QUEUES = {
   heartbeat: 'system.heartbeat',
+  expireHolds: 'bookings.expire-holds',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

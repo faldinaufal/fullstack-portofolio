@@ -11,8 +11,9 @@ import type {
 import { withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { toDateOnly, toWallTime } from '../branches/service.js';
+import { loadAvailabilityInput } from '../availability/load.js';
 import { notFound } from '../console-auth/access.js';
-import { availableSlots, todayIn, wallTimeToInstant, weekdayOf } from '../availability/engine.js';
+import { availableSlots, todayIn } from '../availability/engine.js';
 
 /** "Daniel Kim" → "Daniel K.": enough for customers to choose, without the full name. */
 export function displayName(name: string): string {
@@ -197,67 +198,12 @@ export function createPublicCatalogue({
       if (tenant.status !== 'active') throw tenantSuspended();
 
       return inTenant(tenant.id, async (tx) => {
-        // Rule 1: branch and service active, therapist active at the branch and performs it.
-        const [branch, service, therapist] = await Promise.all([
-          tx.branch.findFirst({ where: { id: query.branchId, archivedAt: null } }),
-          tx.service.findFirst({ where: { id: query.serviceId, archivedAt: null } }),
-          tx.membership.findFirst({
-            where: { id: query.staffId, branchId: query.branchId, status: 'active' },
-            include: { services: { where: { serviceId: query.serviceId } } },
-          }),
-        ]);
-        if (!branch || !service || !therapist) throw notFound('Branch, service or therapist');
-        if (therapist.services.length === 0) {
-          throw new AppError({
-            status: 409,
-            code: 'SERVICE_NOT_OFFERED',
-            title: 'Service not offered',
-            detail: 'This therapist does not perform this service.',
-          });
-        }
-
-        const weekday = weekdayOf(query.date);
-        const day = new Date(`${query.date}T00:00:00.000Z`);
-        const dayStart = wallTimeToInstant(query.date, 0, timeZone) ?? day;
-        const nextDay = new Date(day.getTime() + 24 * 60 * 60_000).toISOString().slice(0, 10);
-        const dayEnd =
-          wallTimeToInstant(nextDay, 0, timeZone) ??
-          new Date(dayStart.getTime() + 24 * 60 * 60_000);
-
-        const [opening, working, closure, timeOff] = await Promise.all([
-          tx.branchOpeningHours.findFirst({ where: { branchId: branch.id, weekday } }),
-          tx.staffWorkingHours.findFirst({ where: { membershipId: therapist.id, weekday } }),
-          tx.branchClosure.findFirst({
-            where: { branchId: branch.id, startsOn: { lte: day }, endsOn: { gte: day } },
-          }),
-          tx.staffTimeOff.findMany({
-            where: {
-              membershipId: therapist.id,
-              startsAt: { lt: new Date(dayEnd.getTime() + service.bufferMinutes * 60_000) },
-              endsAt: { gt: dayStart },
-            },
-          }),
-        ]);
-
-        const slots = availableSlots({
-          date: query.date,
+        const { input } = await loadAvailabilityInput(tx, query, {
           timeZone,
           now: now(),
           settings: { minLeadHours: tenant.minLeadHours, maxAdvanceDays: tenant.maxAdvanceDays },
-          service: {
-            durationMinutes: service.durationMinutes,
-            bufferMinutes: service.bufferMinutes,
-          },
-          opening: opening
-            ? { start: toWallTime(opening.opensAt), end: toWallTime(opening.closesAt) }
-            : null,
-          working: working
-            ? { start: toWallTime(working.startsAt), end: toWallTime(working.endsAt) }
-            : null,
-          closed: closure !== null,
-          // Active bookings join this list in stage 5 (FSD 6.2 rule 5).
-          busy: timeOff.map((t) => ({ start: t.startsAt, end: t.endsAt })),
         });
+        const slots = availableSlots(input);
 
         return {
           date: query.date,

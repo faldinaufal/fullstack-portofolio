@@ -91,6 +91,34 @@ const RENDERERS: { [T in EmailTemplate]: Renderer<T> } = {
     ]),
   }),
 
+  'portal.booking_confirmed': (p) => {
+    const price = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+      p.priceCents / 100,
+    );
+    const place = p.address ? `${p.branchName}, ${p.address}` : p.branchName;
+    return {
+      subject: `Booking confirmed: ${p.serviceName} at ${p.businessName}`,
+      text: `Hi ${p.name},\n\nYour booking is confirmed.\n\n${p.serviceName} with ${p.therapist}\n${p.when}\n${place}\nPaid: ${price} (invoice ${p.invoiceNumber})\n\nDetails: ${p.bookingUrl}`,
+      html: layout('Booking confirmed', [
+        `Hi ${escapeHtml(p.name)},`,
+        `Your booking at <strong>${escapeHtml(p.businessName)}</strong> is confirmed.`,
+        `<strong>${escapeHtml(p.serviceName)}</strong> with ${escapeHtml(p.therapist)}<br>${escapeHtml(p.when)}<br>${escapeHtml(place)}`,
+        `Paid: ${price} (invoice ${escapeHtml(p.invoiceNumber)})`,
+        `<a href="${escapeHtml(p.bookingUrl)}" style="color:#2f5f78;font-weight:bold">View your booking</a>`,
+      ]),
+    };
+  },
+
+  'console.payment_needs_attention': ({ name, bookingId }) => ({
+    subject: 'A payment needs your attention',
+    text: `Hi ${name},\n\nA payment arrived for booking ${bookingId}, which was no longer waiting for payment (it expired or was cancelled). Please review it in the Console and refund the customer outside Tempora if needed.`,
+    html: layout('A payment needs your attention', [
+      `Hi ${escapeHtml(name)},`,
+      `A payment arrived for booking <code>${escapeHtml(bookingId)}</code>, which was no longer waiting for payment (it expired or was cancelled).`,
+      'Please review it in the Console and refund the customer outside Tempora if needed.',
+    ]),
+  }),
+
   'console.invitation': ({
     businessName,
     inviterName,

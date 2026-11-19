@@ -71,21 +71,20 @@ export function createScheduleService({
   }
 
   async function detail(tx: Tx, member: MemberRow): Promise<MemberDetail> {
-    const [hours, services, timeOff] = await Promise.all([
-      tx.staffWorkingHours.findMany({
-        where: { membershipId: member.id },
-        orderBy: { weekday: 'asc' },
-      }),
-      tx.staffService.findMany({
-        where: { membershipId: member.id, service: { archivedAt: null } },
-        include: { service: { select: { id: true, name: true } } },
-        orderBy: { service: { name: 'asc' } },
-      }),
-      tx.staffTimeOff.findMany({
-        where: { membershipId: member.id, endsAt: { gte: now() } },
-        orderBy: { startsAt: 'asc' },
-      }),
-    ]);
+    // Sequential: a transaction has one connection, so parallel queries gain nothing.
+    const hours = await tx.staffWorkingHours.findMany({
+      where: { membershipId: member.id },
+      orderBy: { weekday: 'asc' },
+    });
+    const services = await tx.staffService.findMany({
+      where: { membershipId: member.id, service: { archivedAt: null } },
+      include: { service: { select: { id: true, name: true } } },
+      orderBy: { service: { name: 'asc' } },
+    });
+    const timeOff = await tx.staffTimeOff.findMany({
+      where: { membershipId: member.id, endsAt: { gte: now() } },
+      orderBy: { startsAt: 'asc' },
+    });
     return {
       ...toMember(member),
       workingHours: hours.map((h) => ({
