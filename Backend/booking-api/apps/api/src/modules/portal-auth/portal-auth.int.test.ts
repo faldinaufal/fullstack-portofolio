@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { consoleFlows, OWNER } from '../../test/console-flows.js';
 import { createHarness, TestBrowser, type Harness } from '../../test/harness.js';
-import { PORTAL_COOKIES } from './routes.js';
+import { PORTAL_COOKIES } from './guard.js';
 import { PORTAL_AUTH_POLICY } from './service.js';
 
 let h: Harness;

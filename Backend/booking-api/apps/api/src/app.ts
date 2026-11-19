@@ -16,7 +16,10 @@ import { consoleAuthRoutes } from './modules/console-auth/routes.js';
 import type { ConsoleAuthService } from './modules/console-auth/service.js';
 import { branchRoutes } from './modules/branches/routes.js';
 import type { BranchService } from './modules/branches/service.js';
+import { installPortalGuard } from './modules/portal-auth/guard.js';
 import { portalAuthRoutes } from './modules/portal-auth/routes.js';
+import { bookingRoutes, paymentRoutes } from './modules/bookings/routes.js';
+import type { BookingService } from './modules/bookings/service.js';
 import type { PortalAuthService } from './modules/portal-auth/service.js';
 import { publicRoutes } from './modules/public/routes.js';
 import type { PublicCatalogue } from './modules/public/service.js';
@@ -49,6 +52,8 @@ export interface AppDependencies {
   consoleAuth?: { service: ConsoleAuthService; cookies: CookieSettings };
   /** Customer accounts (`/v1/portal`). */
   portalAuth?: { service: PortalAuthService; cookies: CookieSettings };
+  /** Booking, payments and webhooks; needs `portalAuth`. */
+  bookings?: BookingService;
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
@@ -70,6 +75,7 @@ export async function buildApp({
   consoleModules,
   publicCatalogue,
   portalAuth,
+  bookings,
 }: AppDependencies) {
   const app = Fastify({
     trustProxy: env.TRUST_PROXY,
@@ -120,7 +126,19 @@ export async function buildApp({
   }
 
   if (portalAuth) {
-    await app.register(portalAuthRoutes, { prefix: '/v1/portal', ...portalAuth });
+    // One encapsulated scope for /v1/portal: CSRF and the customer session check apply to
+    // every Portal module inside it (accounts, bookings), and to nothing outside.
+    await app.register(
+      async (scope) => {
+        const guard = installPortalGuard(scope, portalAuth);
+        await scope.register(portalAuthRoutes, { ...portalAuth, guard });
+        if (bookings) await scope.register(bookingRoutes, { service: bookings, guard });
+      },
+      { prefix: '/v1/portal' },
+    );
+  }
+  if (bookings) {
+    await app.register(paymentRoutes, { service: bookings });
   }
 
   if (consoleAuth) {

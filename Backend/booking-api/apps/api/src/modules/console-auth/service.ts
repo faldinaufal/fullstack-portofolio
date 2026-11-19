@@ -201,8 +201,8 @@ export function createConsoleAuthService({
       // Hashing is slow on purpose; do it before opening the transaction.
       const passwordHash = await passwords.hash(input.password);
 
-      try {
-        return await withDbContext(prisma, {}, async (tx) => {
+      const attempt = () =>
+        withDbContext(prisma, {}, async (tx) => {
           if (await repo.findAccountByEmail(tx, input.email)) throw emailTaken();
           if (await repo.slugExists(tx, input.slug)) throw slugTaken();
 
@@ -221,13 +221,24 @@ export function createConsoleAuthService({
 
           return issueLoginCode(tx, account, meta.ip);
         });
-      } catch (error) {
-        // Two sign-ups racing for the same email or slug: the unique index decides.
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          const taken = await withDbContext(prisma, {}, (tx) => repo.slugExists(tx, input.slug));
-          throw taken ? slugTaken() : emailTaken();
+
+      // Concurrent sign-ups: the unique indexes decide. A clash on the email or the slug is
+      // reported; a clash on the generated invoice prefix only needs another try.
+      for (let tries = 1; ; tries += 1) {
+        try {
+          return await attempt();
+        } catch (error) {
+          if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+            throw error;
+          }
+          const [slug, email] = await withDbContext(prisma, {}, async (tx) => [
+            await repo.slugExists(tx, input.slug),
+            (await repo.findAccountByEmail(tx, input.email)) !== null,
+          ]);
+          if (slug) throw slugTaken();
+          if (email) throw emailTaken();
+          if (tries >= 3) throw error;
         }
-        throw error;
       }
     },
 

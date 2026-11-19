@@ -95,10 +95,9 @@ export function createBranchService({ prisma, now = () => new Date() }: BranchSe
 
   async function detail(tx: Tx, branch: BranchRow): Promise<BranchDetail> {
     const today = new Date(`${now().toISOString().slice(0, 10)}T00:00:00.000Z`);
-    const [hours, closures] = await Promise.all([
-      repo.openingHours(tx, branch.id),
-      repo.upcomingClosures(tx, branch.id, today),
-    ]);
+    // Sequential: a transaction has one connection, so parallel queries gain nothing.
+    const hours = await repo.openingHours(tx, branch.id);
+    const closures = await repo.upcomingClosures(tx, branch.id, today);
     return {
       ...toSummary(branch),
       openingHours: toHours(hours),

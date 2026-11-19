@@ -16,24 +16,12 @@ import {
 } from '@tempora/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { AppError } from '../../lib/app-error.js';
 import { cookieOptions, type CookieSettings } from '../../lib/cookies.js';
-import { installCsrfProtection, issueCsrfToken } from '../../lib/csrf.js';
+import { issueCsrfToken } from '../../lib/csrf.js';
 import { IdParams, NoContent, problems } from '../../lib/route-schemas.js';
 import type { IssuedToken, RequestMeta } from '../console-auth/service.js';
+import { PORTAL_COOKIES, type PortalGuard } from './guard.js';
 import type { CustomerAuth, PortalAuthService } from './service.js';
-
-/** Portal cookies: separate names, so a Console session never works here and vice versa. */
-export const PORTAL_COOKIES = {
-  session: 'tempora_portal_session',
-  csrf: 'tempora_portal_csrf',
-} as const;
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    customerAuth: CustomerAuth | null;
-  }
-}
 
 const tags = ['portal-auth'];
 const meta = (request: FastifyRequest): RequestMeta => ({
@@ -45,10 +33,8 @@ const meta = (request: FastifyRequest): RequestMeta => ({
 export const portalAuthRoutes: FastifyPluginAsyncZod<{
   service: PortalAuthService;
   cookies: CookieSettings;
-}> = async (app, { service, cookies }) => {
-  app.decorateRequest('customerAuth', null);
-  installCsrfProtection(app, PORTAL_COOKIES.csrf, '/v1/portal/auth/csrf');
-
+  guard: PortalGuard;
+}> = async (app, { service, cookies, guard }) => {
   const setSession = (reply: FastifyReply, session: IssuedToken) =>
     reply.setCookie(
       PORTAL_COOKIES.session,
@@ -58,22 +44,8 @@ export const portalAuthRoutes: FastifyPluginAsyncZod<{
   const clearSession = (reply: FastifyReply) =>
     reply.clearCookie(PORTAL_COOKIES.session, cookieOptions(cookies));
 
-  /** 401 unless the request carries a live Portal session. */
-  const requireCustomer = async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = request.cookies[PORTAL_COOKIES.session];
-    const auth = token ? await service.authenticate(token) : null;
-    if (!auth) {
-      clearSession(reply);
-      throw new AppError({
-        status: 401,
-        code: 'UNAUTHENTICATED',
-        title: 'Authentication required',
-        detail: 'Log in to continue.',
-      });
-    }
-    request.customerAuth = auth;
-  };
-  const authOf = (request: FastifyRequest) => request.customerAuth as CustomerAuth;
+  const requireCustomer = guard.require;
+  const authOf = (request: FastifyRequest) => guard.customer(request) as CustomerAuth;
 
   app.get(
     '/auth/csrf',

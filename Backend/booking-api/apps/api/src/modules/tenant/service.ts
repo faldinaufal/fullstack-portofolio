@@ -14,19 +14,18 @@ import type { ConsoleActor } from '../console-auth/guard.js';
  * performs an active service. Derived on every read, never stored (FSD 7.5).
  */
 export async function setupStatus(tx: Tx, tenantId: string): Promise<SetupStatus> {
-  const [branches, services, therapists] = await Promise.all([
-    tx.branch.count({ where: { tenantId, archivedAt: null } }),
-    tx.service.count({ where: { tenantId, archivedAt: null } }),
-    tx.membership.count({
-      where: {
-        tenantId,
-        status: 'active',
-        branch: { archivedAt: null },
-        workingHours: { some: {} },
-        services: { some: { service: { archivedAt: null } } },
-      },
-    }),
-  ]);
+  // Sequential: a transaction has one connection, so parallel queries gain nothing.
+  const branches = await tx.branch.count({ where: { tenantId, archivedAt: null } });
+  const services = await tx.service.count({ where: { tenantId, archivedAt: null } });
+  const therapists = await tx.membership.count({
+    where: {
+      tenantId,
+      status: 'active',
+      branch: { archivedAt: null },
+      workingHours: { some: {} },
+      services: { some: { service: { archivedAt: null } } },
+    },
+  });
   const status = {
     hasBranch: branches > 0,
     hasService: services > 0,

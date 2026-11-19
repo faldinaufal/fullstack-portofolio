@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   availableSlots,
+  slotProblem,
   todayIn,
   wallTimeToInstant,
   weekdayOf,
@@ -22,7 +23,8 @@ const base: AvailabilityInput = {
   opening: { start: '09:00', end: '13:00' },
   working: { start: '09:00', end: '13:00' },
   closed: false,
-  busy: [],
+  timeOff: [],
+  bookings: [],
 };
 
 /** Slot start times as New York wall-clock `HH:MM`. */
@@ -75,14 +77,14 @@ describe('availableSlots (FSD 6.2)', () => {
       { start: new Date('2026-11-20T16:00:00Z'), end: new Date('2026-11-20T16:30:00Z') },
     ];
     // 09:30 + 60 min + 15 min buffer ends 10:45: still free. 10:00, 10:30, 11:00 are blocked.
-    expect(wall({ ...base, busy })).toEqual(['09:00', '09:30', '11:30', '12:00']);
+    expect(wall({ ...base, timeOff: busy })).toEqual(['09:00', '09:30', '11:30', '12:00']);
   });
 
   it('a range ending exactly at a start does not block it ([) ranges)', () => {
     const busy = [
       { start: new Date('2026-11-20T14:00:00Z'), end: new Date('2026-11-20T15:00:00Z') },
     ];
-    expect(wall({ ...base, busy })[0]).toBe('10:00');
+    expect(wall({ ...base, bookings: busy })[0]).toBe('10:00');
   });
 });
 
@@ -118,5 +120,37 @@ describe('time zone handling', () => {
     // 03:00 UTC on the 19th is still the 18th in New York.
     expect(todayIn(NY, new Date('2026-11-19T03:00:00Z'))).toBe('2026-11-18');
     expect(weekdayOf('2026-11-18')).toBe(3);
+  });
+});
+
+describe('slotProblem: the reason a start cannot be booked (FSD 6.13)', () => {
+  /** 2026-11-20 at HH:MM New York (standard time, UTC−5). */
+  const at = (time: string) => new Date(`2026-11-20T${time}:00-05:00`);
+
+  it('accepts a valid start', () => {
+    expect(slotProblem(base, at('10:00'))).toBeNull();
+  });
+
+  it('reports each rule with its own code', () => {
+    expect(slotProblem({ ...base, closed: true }, at('10:00'))).toBe('BRANCH_CLOSED');
+    expect(slotProblem({ ...base, opening: null }, at('10:00'))).toBe('OUTSIDE_OPENING_HOURS');
+    expect(slotProblem(base, at('10:15'))).toBe('OFF_GRID');
+    expect(slotProblem({ ...base, now: new Date('2026-11-20T13:00:00Z') }, at('10:00'))).toBe(
+      'TOO_SOON',
+    );
+    expect(
+      slotProblem({ ...base, date: '2026-12-31' }, new Date('2026-12-31T10:00:00-05:00')),
+    ).toBe('TOO_FAR_AHEAD');
+    expect(slotProblem(base, at('12:30'))).toBe('OUTSIDE_OPENING_HOURS'); // ends 13:30
+    expect(slotProblem({ ...base, working: { start: '10:00', end: '11:00' } }, at('11:00'))).toBe(
+      'OUTSIDE_WORKING_HOURS',
+    );
+    const range = [{ start: at('10:30'), end: at('11:00') }];
+    expect(slotProblem({ ...base, timeOff: range }, at('10:00'))).toBe('THERAPIST_TIME_OFF');
+    expect(slotProblem({ ...base, bookings: range }, at('10:00'))).toBe('SLOT_TAKEN');
+  });
+
+  it('rejects a start whose date is not the requested day', () => {
+    expect(slotProblem(base, new Date('2026-11-21T10:00:00-05:00'))).toBe('OFF_GRID');
   });
 });

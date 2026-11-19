@@ -36,9 +36,25 @@ export interface AvailabilityInput {
   working: WallInterval | null;
   /** The branch has a closure covering the date. */
   closed: boolean;
-  /** Ranges the therapist is unavailable: time off, and (from FSD stage 5) active bookings. */
-  busy: Instant[];
+  /** The therapist's time off. */
+  timeOff: Instant[];
+  /**
+   * Blocked ranges (session + buffer) of the therapist's active bookings: `confirmed`, or
+   * `pending_payment` with a hold that has not expired (FSD 6.2 rule 5).
+   */
+  bookings: Instant[];
 }
+
+/** Why a start time cannot be booked (FSD 6.13 codes). */
+export type SlotProblem =
+  | 'BRANCH_CLOSED'
+  | 'OUTSIDE_OPENING_HOURS'
+  | 'OUTSIDE_WORKING_HOURS'
+  | 'OFF_GRID'
+  | 'TOO_SOON'
+  | 'TOO_FAR_AHEAD'
+  | 'THERAPIST_TIME_OFF'
+  | 'SLOT_TAKEN';
 
 export interface Slot {
   startsAt: Date;
@@ -88,23 +104,70 @@ export function wallTimeToInstant(date: string, minutes: number, timeZone: strin
 
 const overlaps = (a: Instant, b: Instant) => a.start < b.end && b.start < a.end;
 
+/** Calendar date `YYYY-MM-DD` of an instant in the time zone. */
+export function calendarDateOf(instant: Date, timeZone: string): string {
+  return localParts(instant, timeZone).date;
+}
+
+/** Wall-clock date and minute of day of an instant in the time zone. */
+function localParts(instant: Date, timeZone: string) {
+  const local = new TZDate(instant, timeZone);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`,
+    minute: local.getHours() * 60 + local.getMinutes(),
+    onTheMinute: local.getSeconds() === 0 && local.getMilliseconds() === 0,
+  };
+}
+
 /**
- * Bookable start times for one therapist, service and day. A start time S is returned only if:
- * 1. the day is not a closure, and the branch is open and the therapist works that weekday;
- * 2. S is on the 30-minute grid, at least `minLeadHours` from now and on or before
- *    today + `maxAdvanceDays`;
- * 3–4. the session [S, S + duration) lies within both the opening and the working hours
- *    (the buffer may extend past closing time);
- * 5. the blocked range [S, S + duration + buffer) overlaps no busy range.
+ * Why `start` cannot be booked, or null when it can (FSD 6.2). `input.date` must be the
+ * start's calendar date in the platform zone. Checked in the order the rules are listed,
+ * so the customer sees the most fundamental reason first:
+ * 1. the branch is closed that day (closure, or no opening hours that weekday);
+ * 2. on the 30-minute grid, at least `minLeadHours` ahead, within `maxAdvanceDays`;
+ * 3. the session [S, S + duration) lies within the opening hours;
+ * 4. ...and within the therapist's working hours (the buffer may extend past closing);
+ * 5. the blocked range [S, S + duration + buffer) overlaps no time off and no active booking.
  * Rule 1's tenant, branch, service and therapist checks happen before, in the service layer.
  */
-export function availableSlots(input: AvailabilityInput): Slot[] {
-  const { date, timeZone, now, settings, service, opening, working } = input;
-  if (input.closed || !opening || !working) return [];
+export function slotProblem(input: AvailabilityInput, start: Date): SlotProblem | null {
+  const { timeZone, now, settings, service, opening, working } = input;
+  if (input.closed) return 'BRANCH_CLOSED';
+  if (!opening) return 'OUTSIDE_OPENING_HOURS';
+
+  const local = localParts(start, timeZone);
+  if (local.date !== input.date) return 'OFF_GRID';
+  if (!local.onTheMinute || local.minute % SLOT_INTERVAL_MINUTES !== 0) return 'OFF_GRID';
 
   const today = todayIn(timeZone, now);
-  if (date < today || date > addDays(today, settings.maxAdvanceDays)) return [];
-  const earliest = new Date(now.getTime() + settings.minLeadHours * 60 * 60_000);
+  const earliest = now.getTime() + settings.minLeadHours * 60 * 60_000;
+  if (input.date < today || start.getTime() < earliest) return 'TOO_SOON';
+  if (input.date > addDays(today, settings.maxAdvanceDays)) return 'TOO_FAR_AHEAD';
+
+  const sessionEnd = local.minute + service.durationMinutes;
+  if (local.minute < toMinutes(opening.start) || sessionEnd > toMinutes(opening.end)) {
+    return 'OUTSIDE_OPENING_HOURS';
+  }
+  if (!working || local.minute < toMinutes(working.start) || sessionEnd > toMinutes(working.end)) {
+    return 'OUTSIDE_WORKING_HOURS';
+  }
+
+  const end = start.getTime() + (service.durationMinutes + service.bufferMinutes) * 60_000;
+  const blocked = { start, end: new Date(end) };
+  if (input.timeOff.some((range) => overlaps(blocked, range))) return 'THERAPIST_TIME_OFF';
+  if (input.bookings.some((range) => overlaps(blocked, range))) return 'SLOT_TAKEN';
+  return null;
+}
+
+/**
+ * Bookable start times for one therapist, service and day: every 30-minute start inside the
+ * opening and working hours for which `slotProblem` finds nothing. Using the same function
+ * for listing and for booking guarantees both apply exactly the same rules.
+ */
+export function availableSlots(input: AvailabilityInput): Slot[] {
+  const { date, timeZone, opening, working, service } = input;
+  if (input.closed || !opening || !working) return [];
 
   const windowStart = Math.max(toMinutes(opening.start), toMinutes(working.start));
   const windowEnd = Math.min(toMinutes(opening.end), toMinutes(working.end));
@@ -117,11 +180,11 @@ export function availableSlots(input: AvailabilityInput): Slot[] {
     minute += SLOT_INTERVAL_MINUTES
   ) {
     const start = wallTimeToInstant(date, minute, timeZone);
-    if (!start || start < earliest) continue;
-    const end = new Date(start.getTime() + service.durationMinutes * 60_000);
-    const blocked = { start, end: new Date(end.getTime() + service.bufferMinutes * 60_000) };
-    if (input.busy.some((range) => overlaps(blocked, range))) continue;
-    slots.push({ startsAt: start, endsAt: end });
+    if (!start || slotProblem(input, start) !== null) continue;
+    slots.push({
+      startsAt: start,
+      endsAt: new Date(start.getTime() + service.durationMinutes * 60_000),
+    });
   }
   return slots;
 }

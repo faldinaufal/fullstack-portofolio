@@ -55,9 +55,9 @@ All apps live under one purchased domain, so session cookies are first-party and
 | Branch scoping | Enforced in the API authorization layer from the manager's assigned branch; covered by tests | Branch is a permission boundary inside a tenant rather than a data-isolation boundary, so it lives in the authorization code. |
 | Double-booking prevention | Layer 1: API checks opening hours, working hours, time off and overlaps and returns specific errors. Layer 2: a PostgreSQL `EXCLUSION` constraint (with `btree_gist`) on the therapist and the time range including the buffer, for active bookings only (`pending_payment`, `confirmed`) | The database rejects the second of two overlapping bookings atomically, so two simultaneous requests can never both succeed, even if both passed the API checks. The API translates the rejection into a "slot no longer available" error. |
 | Background jobs | pg-boss (job queue stored in PostgreSQL, in its own `pgboss` schema), run by a separate worker process, for delayed and scheduled jobs (hold expiry, reminders, cron). Emails use a **transactional outbox**: the API inserts a row into `email_messages` in the same transaction as the change that caused it, and the worker polls the table (`FOR UPDATE SKIP LOCKED`), sends and records the result | Jobs and emails are created in the same transaction as the booking or payment that caused them: if the booking is not saved, no email is queued, and if it is saved, the email is guaranteed to be sent (with retries). The outbox table doubles as the email delivery log, and the worker's role needs no rights outside it. No extra infrastructure. |
-| Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. |
+| Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently. Behind a small `PaymentProvider` interface: without `STRIPE_SECRET_KEY` the API uses a **demo provider** whose checkout page is part of the Portal and whose "Pay" button emits a webhook signed in Stripe's format (HMAC-SHA256, `t=…,v1=…`) | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. The demo provider lets local development, CI and the public demo run the full flow (including signature checks, duplicates and late payments) without Stripe keys; both providers go through the same webhook handler. |
 | File storage | S3-compatible object storage: Cloudflare R2 in production and an S3-compatible server in Docker Compose locally (added with the first upload feature). Uploads use short-lived presigned URLs; the API validates type and size and stores only the object key | Files never pass through the API process, storage scales independently of the database, and the same code works against R2 and MinIO because both speak the S3 API. |
-| Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema. Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
+| Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema, delivers the email outbox and, for hold expiry, may update `bookings`, `invoices` and `payments` and append to `audit_logs` (no read access to the audit log). Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
 | Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the purchased domain in production (chosen during implementation) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS; shared UI package with the design system (light/dark) | One framework for all three apps; server rendering for the public Portal pages, rich client interactions for the Console. |
 | Frontend code organization | Each app separates `core` from `ui`. `core/<feature>/` has three layers: **domain** (entities, pure rules, repository interfaces, use cases; plain TypeScript), **data** (repository implementations calling the API, DTOs from `contracts`, DTO ⇄ entity mappers), **presentation** (hooks and view-models, no JSX). `ui` holds routes and components and only talks to `presentation`. Each app has its own `core`; shared code lives in packages (`ui`, `api-client`, `contracts`) | Business rules on the client can be unit-tested without rendering, the UI can change (e.g. after the Figma designs) without touching logic, and each app only contains the use cases it actually needs. |
@@ -411,6 +411,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
 - **Invitation-link policy** (`invitations`, read only): the one row whose `token_hash` matches `app.invitation_token_hash`. Once found, the API switches to that invitation's tenant context.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
+- **Hold expiry** (`bookings`, `invoices`, `payments`): the worker role has a cross-tenant policy with `SELECT`/`UPDATE` only (no insert, no delete) and may `INSERT` into `audit_logs`. `DELETE` is revoked from the API role on these tables: bookings and invoices change status, they are never removed.
 - **Public directory:** whether a tenant is bookable needs rows of several tenant-owned tables across tenants. Two `SECURITY DEFINER` functions (`tenant_is_bookable`, `public_directory`) run as the table owner and return only public facts (yes/no, names, slugs), never protected rows; their `search_path` is pinned and only `tempora_app` may execute them.
 - If no context is set, policies match nothing, so a forgotten context fails closed (no rows) instead of leaking.
 - Tests run queries with a deliberately wrong or missing context and assert that zero rows of other tenants are returned.
@@ -474,6 +475,8 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | GET | `/invoices/:id` | Invoice detail (PDF later: `?format=pdf`) | customer, guest token |
 
 Guest token: the secret from `/manage/[token]`, sent as `Authorization: Guest <token>`; it only grants access to its own booking.
+
+`POST /bookings`: a logged-in customer books with their account's contact details; otherwise the body must include `guest` (`name`, `email`, optional `phone`), or the API returns `400 GUEST_DETAILS_REQUIRED`. Idempotency keys are scoped to the sender (customer account, or guest email), so two people can never collide on a key.
 
 ### 5.4 Console (`/v1/console`)
 All routes below act on the tenant of the session's active membership; scope rules from 1.2 apply to every one of them.
@@ -588,7 +591,9 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 ### 5.6 Webhooks & system (`/v1/webhooks`, root)
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| POST | `/v1/webhooks/stripe` | Stripe events (6.4) | Stripe signature |
+| POST | `/v1/webhooks/stripe` | Stripe events (6.4); with the demo provider, the demo events in the same format | Stripe (or demo) signature |
+| GET | `/v1/payments/demo/:sessionId?tenant=` | Demo checkout page details: business, description, amount, status, expiry. `404` when Stripe is configured | none (session ID) |
+| POST | `/v1/payments/demo/:sessionId?tenant=` | Demo checkout outcome `paid` or `expired`: emits a signed event to the webhook handler. `404` when Stripe is configured | none (session ID) |
 | GET | `/health` | Liveness: process is up | none |
 | GET | `/health/ready` | Readiness: database reachable, migrations applied | none |
 | GET | `/metrics` | Prometheus metrics | bearer token (internal) |
@@ -626,7 +631,7 @@ All steps from 2 to 6 run in **one database transaction**:
 2. Set the RLS context and take a **transaction-level advisory lock for therapist `T`** (`pg_advisory_xact_lock`). Every write that changes `T`'s schedule (booking, reschedule, time off, working hours) takes the same lock, so these writes for one therapist happen one at a time while other therapists are unaffected.
 3. Expire `T`'s stale holds (`pending_payment` with `hold_expires_at ≤ now` → `expired`).
 4. Re-check every rule in 6.2; on failure return the specific error code (6.13).
-5. Find or create the `tenant_customer`; insert the booking as `pending_payment` with `hold_expires_at = now + 32 min`; insert the `open` invoice with the next invoice number; schedule the hold-expiry job at `hold_expires_at`; write audit entries.
+5. Find or create the `tenant_customer`; insert the booking as `pending_payment` with `hold_expires_at = now + 32 min`; insert the `open` invoice with the next invoice number; write audit entries. (The hold-expiry job in 6.4 sweeps every minute, so nothing is scheduled per booking.)
 6. Commit. If the exclusion constraint still rejects the insert (PostgreSQL error `23P01`), return `409 SLOT_TAKEN`. With step 2 this should never happen; the constraint is the last line of defence.
 7. After commit, create the Stripe Checkout session with `expires_at = now + 30 min` and `tenant_id`, `booking_id`, `invoice_id` in its metadata; insert the `payments` row and return the Checkout URL. If Stripe is unreachable, the booking is expired immediately (slot released) and the API returns `503 PAYMENT_PROVIDER_UNAVAILABLE`.
 
@@ -635,10 +640,10 @@ All steps from 2 to 6 run in **one database transaction**:
 While the hold is active, the customer can return to the same Checkout URL from "My bookings" or the guest link.
 
 ### 6.4 Payment confirmation and expiry
-- **Webhook endpoint** `POST /v1/webhooks/stripe`: verifies the Stripe signature, then inserts the event ID into `stripe_events`. If the ID already exists, the event was processed before and the endpoint returns `200` without doing anything (Stripe retries webhooks, so duplicates are expected).
+- **Webhook endpoint** `POST /v1/webhooks/stripe`: verifies the Stripe signature (over the raw request body), then inserts the event ID into `stripe_events` **in the same transaction as the event's effects**. If the ID already exists, the event was processed before and the endpoint returns `200` without doing anything (Stripe retries webhooks, so duplicates are expected). If processing fails, the transaction rolls back together with the event ID, so Stripe's retry processes it again. An invalid signature returns `400`.
 - `checkout.session.completed` with `payment_status = paid`, in one transaction: payment → `succeeded`, invoice → `paid`, booking → `confirmed`; queue the confirmation email and the reminder job; audit.
 - `checkout.session.expired`: payment → `expired`; if the booking is still `pending_payment`, booking → `expired` and invoice → `void` (reason: payment hold expired); audit.
-- **Hold-expiry job** at `hold_expires_at`: does the same as the expired event if the booking is still `pending_payment`, and asks Stripe to expire the Checkout session. Together with step 3 of 6.3 and rule 5 of 6.2, an unpaid hold is released by whichever happens first.
+- **Hold-expiry job** (worker, every minute): one SQL statement moves every `pending_payment` booking with `hold_expires_at ≤ now` to `expired`, voids its `open` invoice, expires its `pending` payment and writes an audit entry with the system as actor. Its conditions repeat the state checks, so running it twice, or at the same time as the API or a webhook releasing the same hold, changes nothing the second time. The Checkout session needs no separate call: it expires on its own at 30 minutes, before the hold. Together with step 3 of 6.3 and rule 5 of 6.2, an unpaid hold is released by whichever happens first.
 - **Safety net:** if a successful payment ever arrives for a booking that is no longer `pending_payment`, the booking is not changed; the payment is flagged `needs_attention`, the owner gets an email and an audit entry is written.
 - The success page after Checkout does not trust the redirect. It polls the booking until the webhook has confirmed it.
 
@@ -682,7 +687,8 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 - The Console becomes read only for the tenant's members, with a banner explaining the suspension.
 
 ### 6.10 Invoices
-- Number format `<invoice_prefix>-<year>-<6-digit sequence>`, e.g. `LUM-2026-000123`, sequential per tenant and year without gaps (row lock on `invoice_counters`). Void invoices keep their number.
+- Number format `<invoice_prefix>-<year>-<6-digit sequence>`, e.g. `LUM-2026-000123`, sequential per tenant and year without gaps (row lock on `invoice_counters`, taken by an `INSERT … ON CONFLICT DO UPDATE` inside the booking transaction, so a rolled-back booking also rolls back its number). Void invoices keep their number. The year is the calendar year in the platform time zone.
+- `invoice_prefix` is assigned once at sign-up and never changes: the first three letters of the slug, upper case, padded with `X` (`lumen` → `LUM`, `h2o` → `HOX`); if taken, the smallest free number is appended (`LUM2`). Unique across tenants; format `^[A-Z]{3}[0-9]{0,3}$`.
 - Amount = booking price snapshot; tax-exclusive; currency USD.
 
 ### 6.11 Accounts and security
@@ -726,6 +732,7 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | Code | HTTP | When |
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | Body or query does not match the schema (field errors included) |
+| `GUEST_DETAILS_REQUIRED` | 400 | Booking without a Portal session and without `guest` contact details (5.3) |
 | `UNAUTHENTICATED` | 401 | No or invalid session |
 | `INVALID_CREDENTIALS` | 401 | Wrong email or password (same answer for both, 6.11) |
 | `CODE_INVALID` | 401 | Wrong email code; the detail says how many attempts are left |
@@ -886,7 +893,7 @@ Latest two versions of Chrome, Edge, Firefox and Safari (desktop and mobile). La
 | Preview smoke | Playwright against the PR preview deployment | Log in per app, real Stripe test Checkout once | Every PR (after deploy) |
 | Load (Should) | k6 | Availability and booking endpoints under concurrent load; verifies 8.1 | Manually / before releases |
 
-Stripe in automated tests: integration tests send **signed** test webhook events built with the test webhook secret, so the webhook handler is tested without calling Stripe; one smoke test per PR goes through the real Stripe test-mode Checkout page.
+Stripe in automated tests: integration tests use the demo payment provider (0.2) and send **signed** webhook events through the real HTTP endpoint, so signature checks, duplicates and late payments are tested without calling Stripe; one smoke test per PR goes through the real Stripe test-mode Checkout page once the deployment has Stripe keys.
 
 ### 9.2 Critical test suites
 These prove the PRD's core promises and are required to pass before merge.

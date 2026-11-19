@@ -9,6 +9,7 @@ import { pino } from 'pino';
 import { loadEnv } from './config/env.js';
 import { createSmtpMailer } from './email/mailer.js';
 import { createOutboxProcessor } from './email/outbox.js';
+import { createExpireHoldsHandler } from './jobs/expire-holds.js';
 import { createHeartbeatHandler } from './jobs/heartbeat.js';
 import { QUEUES } from './queues.js';
 
@@ -31,6 +32,17 @@ await boss.start();
 await boss.createQueue(QUEUES.heartbeat, { retryLimit: 0 });
 await boss.schedule(QUEUES.heartbeat, '*/5 * * * *', { scheduledBy: 'cron' });
 await boss.work(QUEUES.heartbeat, createHeartbeatHandler(logger));
+
+// Unpaid holds are released every minute (FSD 6.4). The availability rules already ignore
+// holds whose time has passed, so this only makes the status and invoice catch up.
+const jobsPool = new pg.Pool({
+  connectionString: env.JOBS_DATABASE_URL,
+  max: 2,
+  application_name: 'tempora-worker-jobs',
+});
+await boss.createQueue(QUEUES.expireHolds, { retryLimit: 0 });
+await boss.schedule(QUEUES.expireHolds, '* * * * *');
+await boss.work(QUEUES.expireHolds, createExpireHoldsHandler(jobsPool, logger));
 
 // Email outbox (FSD 0.2): the API queues emails in `email_messages` inside its own
 // transactions; this loop sends them. A full batch means more may be waiting, so the next
@@ -70,4 +82,5 @@ closeWithGrace({ delay: 30_000 }, async ({ err, signal }) => {
   await boss.stop({ graceful: true, timeout: 25_000 });
   await outboxLoop;
   await outboxPool.end();
+  await jobsPool.end();
 });

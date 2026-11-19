@@ -10,6 +10,11 @@ import { createPostgresRateLimiter } from '../lib/rate-limit.js';
 import { createTokenHasher } from '../lib/tokens.js';
 import { createBranchService } from '../modules/branches/service.js';
 import { createConsoleAuthService } from '../modules/console-auth/service.js';
+import {
+  createDemoPaymentProvider,
+  type DemoPaymentProvider,
+} from '../lib/payments/demo-provider.js';
+import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
@@ -29,6 +34,13 @@ function requireEnv(name: string): string {
 
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
+  'idempotency_keys',
+  'stripe_events',
+  'payments',
+  'invoices',
+  'invoice_counters',
+  'bookings',
+  'tenant_customers',
   'staff_time_off',
   'staff_working_hours',
   'staff_services',
@@ -61,6 +73,8 @@ export interface Harness {
   /** Owner-role client: bypasses RLS. For setup and assertions only. */
   owner: PrismaClient;
   clock: { advance(ms: number): void; reset(): void };
+  /** The demo payment provider, to build signed webhook events. */
+  payments: DemoPaymentProvider;
   reset(): Promise<void>;
   close(): Promise<void>;
   /** Latest queued email of a template sent to an address. */
@@ -79,6 +93,11 @@ export async function createHarness(): Promise<Harness> {
   const hashToken = createTokenHasher('integration-test-secret-0123456789abcdef');
 
   const passwords = createArgon2PasswordHasher();
+  const payments = createDemoPaymentProvider({
+    secret: 'integration-test-demo-payments',
+    portalUrl: 'http://localhost:3000',
+    now,
+  });
   const rateLimiter = createPostgresRateLimiter(prisma, hashToken, now);
 
   const app = await buildApp({
@@ -104,6 +123,13 @@ export async function createHarness(): Promise<Harness> {
     },
     // New York observes daylight saving time, so the tests cover DST (FSD 9.2).
     publicCatalogue: createPublicCatalogue({ prisma, timeZone: 'America/New_York', now }),
+    bookings: createBookingService({
+      prisma,
+      payments,
+      timeZone: 'America/New_York',
+      portalUrl: 'http://localhost:3000',
+      now,
+    }),
     portalAuth: {
       service: createPortalAuthService({
         prisma,
@@ -135,6 +161,7 @@ export async function createHarness(): Promise<Harness> {
     app,
     prisma,
     owner,
+    payments,
     clock: {
       advance: (ms) => {
         offsetMs += ms;

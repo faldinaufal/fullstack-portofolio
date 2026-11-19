@@ -11,6 +11,10 @@ import { createTokenHasher } from './lib/tokens.js';
 import { createBranchService } from './modules/branches/service.js';
 import { createConsoleAuthService } from './modules/console-auth/service.js';
 import { createPrismaHealthRepository } from './modules/health/repository.js';
+import { createHmac } from 'node:crypto';
+import { createDemoPaymentProvider } from './lib/payments/demo-provider.js';
+import { createStripePaymentProvider } from './lib/payments/stripe-provider.js';
+import { createBookingService } from './modules/bookings/service.js';
 import { createPortalAuthService } from './modules/portal-auth/service.js';
 import { createPublicCatalogue } from './modules/public/service.js';
 import { createScheduleService } from './modules/schedules/service.js';
@@ -23,6 +27,18 @@ const prisma = createPrismaClient({ connectionString: env.DATABASE_URL });
 
 const hashToken = createTokenHasher(env.TOKEN_HASH_SECRET);
 const passwords = createArgon2PasswordHasher();
+
+// Stripe when keys are configured, otherwise the demo provider (FSD 0.2, README).
+const payments =
+  env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
+    ? createStripePaymentProvider({
+        secretKey: env.STRIPE_SECRET_KEY,
+        webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+      })
+    : createDemoPaymentProvider({
+        secret: createHmac('sha256', env.TOKEN_HASH_SECRET).update('demo-payments').digest('hex'),
+        portalUrl: env.PORTAL_URL,
+      });
 const rateLimiter = createPostgresRateLimiter(prisma, hashToken);
 
 const app = await buildApp({
@@ -39,6 +55,12 @@ const app = await buildApp({
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
   publicCatalogue: createPublicCatalogue({ prisma, timeZone: env.APP_TIME_ZONE }),
+  bookings: createBookingService({
+    prisma,
+    payments,
+    timeZone: env.APP_TIME_ZONE,
+    portalUrl: env.PORTAL_URL,
+  }),
   portalAuth: {
     service: createPortalAuthService({
       prisma,

@@ -7,5 +7,6 @@ export * from './console-catalogue.js';
 export * from './console-team.js';
 export * from './health.js';
 export * from './portal-auth.js';
+export * from './portal-bookings.js';
 export * from './problem.js';
 export * from './public.js';
