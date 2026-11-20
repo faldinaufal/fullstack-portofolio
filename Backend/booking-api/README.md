@@ -107,6 +107,30 @@ pnpm --filter @tempora/db migrate:deploy
 pnpm --filter @tempora/api dev
 ```
 
+### Database on a new machine without Docker
+
+No dump is needed: the schema, row-level security and functions all come from the migrations, and every record is demo data. Any PostgreSQL 17 server works (the official installer, Postgres.app, a package manager):
+
+```bash
+# 1. As a superuser: the owner role and the database. Local development only: the owner is a
+#    superuser here, like the Docker image's POSTGRES_USER (it creates the other roles).
+psql -U postgres -c "CREATE ROLE tempora LOGIN SUPERUSER PASSWORD 'local-owner'" \
+                 -c "CREATE DATABASE tempora OWNER tempora"
+
+# 2. The API and worker roles, with the same script the Docker image runs (needs `sh` and `psql`).
+TEMPORA_APP_PASSWORD=local-app TEMPORA_JOBS_PASSWORD=local-jobs \
+POSTGRES_USER=tempora POSTGRES_DB=tempora PGHOST=localhost PGPASSWORD=local-owner \
+  sh Backend/booking-api/docker/postgres/init/01-roles.sh
+
+# 3. Schema and RLS, then a platform admin.
+DATABASE_MIGRATION_URL=postgresql://tempora:local-owner@localhost:5432/tempora \
+  pnpm --filter @tempora/db migrate:deploy
+DATABASE_URL=postgresql://tempora_app:local-app@localhost:5432/tempora \
+  pnpm --filter @tempora/api admin:create --email you@example.com --name "Your Name"
+```
+
+Then put the same URLs in `packages/db/.env` and `apps/api/.env`. For the integration tests, set `TEST_DATABASE_URL` (the `tempora_app` URL), `TEST_DATABASE_OWNER_URL` (the owner URL) and `TEST_JOBS_DATABASE_URL` (`tempora_jobs`); the tests empty the tables they use, so keep a separate database for data you want to keep.
+
 ### Create a platform admin
 
 Platform admins are created only by a server command, never through the API:
