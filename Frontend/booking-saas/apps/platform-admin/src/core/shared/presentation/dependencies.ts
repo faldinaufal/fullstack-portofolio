@@ -7,6 +7,7 @@ import { createContext, useContext } from 'react';
 import type { AdminAuthRepository } from '../../auth/domain/admin-auth';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 import type { OverviewRepository } from '../../overview/domain/overview';
+import type { SupportRepository } from '../../support/domain/support';
 import type { TenantRepository } from '../../tenants/domain/tenant';
 
 /**
@@ -18,6 +19,7 @@ export interface Dependencies {
   auth: AdminAuthRepository;
   overview: OverviewRepository;
   tenants: TenantRepository;
+  support: SupportRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);

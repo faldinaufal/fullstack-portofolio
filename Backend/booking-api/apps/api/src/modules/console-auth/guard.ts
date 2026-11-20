@@ -33,15 +33,19 @@ export interface ConsoleGuard {
 }
 
 /**
- * FSD 6.9: while the business is suspended, the Console is read only. Logging out and
- * switching to another business still work (their routes do not use `require`, or are
- * listed here).
+ * FSD 6.9: while the business is suspended, the Console is read only. Logging out, switching
+ * to another business and support access (so Tempora can help sort the suspension out) still
+ * work (their routes do not use `require`, or are listed here).
  */
 const STILL_ALLOWED = ['/v1/console/me/active-membership'];
+const STILL_ALLOWED_PREFIXES = ['/v1/console/auth/', '/v1/console/support-grants'];
 function isWrite(request: FastifyRequest): boolean {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return false;
   const path = request.url.split('?')[0] ?? '';
-  return !path.startsWith('/v1/console/auth/') && !STILL_ALLOWED.includes(path);
+  return (
+    !STILL_ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix)) &&
+    !STILL_ALLOWED.includes(path)
+  );
 }
 
 /**

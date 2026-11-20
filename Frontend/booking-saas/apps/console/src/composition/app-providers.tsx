@@ -13,6 +13,7 @@ import { createAuthUseCases } from '@/core/auth/domain/auth-use-cases';
 import { createHttpBookingRepository } from '@/core/bookings/data/http-booking-repository';
 import { createHttpBranchRepository } from '@/core/branches/data/http-branch-repository';
 import { createHttpRecordsRepository } from '@/core/records/data/http-records-repository';
+import { createHttpSupportRepository } from '@/core/support/data/http-support-repository';
 import { createHttpCatalogueRepository } from '@/core/catalogue/data/http-catalogue-repository';
 import { createHttpDashboardRepository } from '@/core/dashboard/data/http-dashboard-repository';
 import { createHttpApiStatusRepository } from '@/core/health/data/http-api-status-repository';
@@ -38,6 +39,7 @@ function createDependencies(): Dependencies {
     // CSV downloads are plain links to the API, so these repositories also get its URL.
     bookings: createHttpBookingRepository(apiClient, apiUrl),
     records: createHttpRecordsRepository(apiClient, apiUrl),
+    support: createHttpSupportRepository(apiClient),
     branches: createHttpBranchRepository(apiClient),
     catalogue: createHttpCatalogueRepository(apiClient),
     team: createHttpTeamRepository(apiClient),

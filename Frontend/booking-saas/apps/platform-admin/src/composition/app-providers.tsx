@@ -12,6 +12,7 @@ import { createHttpApiStatusRepository } from '@/core/health/data/http-api-statu
 import { createGetApiStatus } from '@/core/health/domain/get-api-status';
 import { createHttpOverviewRepository } from '@/core/overview/data/http-overview-repository';
 import { DependenciesContext, type Dependencies } from '@/core/shared/presentation/dependencies';
+import { createHttpSupportRepository } from '@/core/support/data/http-support-repository';
 import { createHttpTenantRepository } from '@/core/tenants/data/http-tenant-repository';
 
 /**
@@ -28,6 +29,7 @@ function createDependencies(): Dependencies {
     auth: createHttpAdminAuthRepository(apiClient),
     overview: createHttpOverviewRepository(apiClient),
     tenants: createHttpTenantRepository(apiClient),
+    support: createHttpSupportRepository(apiClient),
   };
 }
 

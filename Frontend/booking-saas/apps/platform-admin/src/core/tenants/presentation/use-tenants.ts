@@ -30,6 +30,7 @@ const ACTIONS: Record<string, string> = {
   'tenant.created': 'Tenant created (owner invited)',
   'tenant.suspended': 'Tenant suspended',
   'tenant.reactivated': 'Tenant reactivated',
+  'support.viewed': 'Support view opened',
 };
 export const actionLabel = (action: string) => ACTIONS[action] ?? action;
 

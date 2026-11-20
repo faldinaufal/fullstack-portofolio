@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type SubmitEvent } from 'react';
 import { useStepUp } from '@/core/auth/presentation/use-admin-auth';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
+import { PLATFORM_TIME_ZONE } from '@/core/shared/presentation/time-zone';
 import {
   statusOf,
   suggestSlug,
@@ -41,6 +42,15 @@ const date = (instant: Date | null) =>
         instant,
       )
     : '—';
+
+const dateTime = (instant: Date) =>
+  new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: PLATFORM_TIME_ZONE,
+  }).format(instant);
 
 function Header({ title, description }: Readonly<{ title: string; description?: string }>) {
   return (
@@ -235,6 +245,29 @@ export function TenantDetailScreen({ id }: Readonly<{ id: string }>) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Support access</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          {t.supportAccess ? (
+            <>
+              <span>
+                Granted by the owner until {dateTime(t.supportAccess.expiresAt)}. Read only; every
+                page you open is in the owner&apos;s audit log.
+              </span>
+              <Link href={`/tenants/${t.id}/support/bookings`} className={buttonVariants()}>
+                Open support view
+              </Link>
+            </>
+          ) : (
+            <span className="text-muted">
+              Closed. The owner can grant it in Console → Settings for 1, 24 or 72 hours.
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">

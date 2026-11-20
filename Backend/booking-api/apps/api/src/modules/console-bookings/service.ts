@@ -25,7 +25,7 @@ import { cancelBooking, closeCheckouts } from '../bookings/cancel.js';
 import { moveBooking } from '../bookings/move.js';
 import { translateOverlap } from '../bookings/rules.js';
 import { auditActor } from '../branches/service.js';
-import { notFound } from '../console-auth/access.js';
+import { notFound, viewerContext, type Viewer } from '../console-auth/access.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
 import {
   bookingActions,
@@ -44,6 +44,14 @@ import {
 } from './rows.js';
 
 const DAY = 24 * 60 * 60_000;
+const NO_ACTIONS = {
+  reschedule: false,
+  reassign: false,
+  cancel: false,
+  cancelNeedsReason: false,
+  complete: false,
+  noShow: false,
+};
 /** The calendar shows at most two weeks at a time. */
 const CALENDAR_MAX_DAYS = 14;
 
@@ -66,10 +74,8 @@ export function createConsoleBookingService({
   now = () => new Date(),
 }: ConsoleBookingDeps) {
   const emails = { hashToken, portalUrl, timeZone };
-  const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
-    withDbContext(prisma, { tenantId: actor.tenantId, teamAccountId: actor.teamAccountId }, work, {
-      timeoutMs: 15_000,
-    });
+  const inTenant = <T>(viewer: Viewer, work: (tx: Tx) => Promise<T>) =>
+    withDbContext(prisma, viewerContext(viewer), work, { timeoutMs: 15_000 });
 
   /** Instant of midnight starting a calendar date in the platform time zone. */
   const startOf = (date: string) =>
@@ -77,10 +83,10 @@ export function createConsoleBookingService({
   const nextDate = (date: string) =>
     new Date(new Date(`${date}T12:00:00Z`).getTime() + DAY).toISOString().slice(0, 10);
 
-  const toRow = (row: BookingRow, actor: ConsoleActor) => toConsoleBooking(row, actor, now());
+  const toRow = (row: BookingRow, actor: Viewer) => toConsoleBooking(row, actor, now());
 
   /** A booking the actor may see, else `404` (outside scope = does not exist, FSD 1.3). */
-  async function visible(tx: Tx, actor: ConsoleActor, id: string) {
+  async function visible(tx: Tx, actor: Viewer, id: string) {
     const row = await tx.booking.findUnique({ where: { id }, include: BOOKING_ROW_INCLUDE });
     if (!row || !canSeeBooking(actor, row)) throw notFound('Booking');
     return row;
@@ -92,15 +98,18 @@ export function createConsoleBookingService({
     return row;
   }
 
-  async function detail(tx: Tx, actor: ConsoleActor, id: string): Promise<ConsoleBookingDetail> {
+  async function detail(tx: Tx, actor: Viewer, id: string): Promise<ConsoleBookingDetail> {
     const row = await visible(tx, actor, id);
     const contact = canSeeCustomerContact(actor);
-    const timeline = contact
-      ? await tx.auditLog.findMany({
-          where: { entityType: 'booking', entityId: id },
-          orderBy: { createdAt: 'asc' },
-        })
-      : [];
+    // Support views are read only: no actions, and the tenant's log stays the owner's.
+    const support = Boolean(actor.supportGrantId);
+    const timeline =
+      contact && !support
+        ? await tx.auditLog.findMany({
+            where: { entityType: 'booking', entityId: id },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [];
     return {
       ...toRow(row, actor),
       customer: {
@@ -122,7 +131,7 @@ export function createConsoleBookingService({
       markedAt: row.markedAt?.toISOString() ?? null,
       customerRescheduleCount: row.customerRescheduleCount,
       timeZone,
-      actions: bookingActions(actor, row, now()),
+      actions: support ? NO_ACTIONS : bookingActions(actor, row, now()),
       timeline: timeline.map((entry) => ({
         at: entry.createdAt.toISOString(),
         actor: entry.actorLabel,
@@ -211,8 +220,8 @@ export function createConsoleBookingService({
 
   /** Owner: every branch. Manager: their branch only, whatever the filter says. */
   function listWhere(
-    actor: ConsoleActor,
-    query: ConsoleBookingListQuery,
+    actor: Viewer,
+    query: Omit<ConsoleBookingListQuery, 'format'>,
   ): Prisma.BookingWhereInput {
     const startsAt = dateRange(timeZone, query.from, query.to);
     return {
@@ -237,7 +246,7 @@ export function createConsoleBookingService({
   const page = (
     tx: Tx,
     where: Prisma.BookingWhereInput,
-    query: ConsoleBookingListQuery,
+    query: Pick<ConsoleBookingListQuery, 'sort'>,
     n: number,
     size: number,
   ) =>
@@ -253,7 +262,10 @@ export function createConsoleBookingService({
     filters;
 
   return {
-    list: (actor: ConsoleActor, query: ConsoleBookingListQuery): Promise<ConsoleBookingList> =>
+    list: (
+      actor: Viewer,
+      query: Omit<ConsoleBookingListQuery, 'format'>,
+    ): Promise<ConsoleBookingList> =>
       inTenant(actor, async (tx) => {
         const where = listWhere(actor, query);
         const total = await tx.booking.count({ where });
@@ -311,7 +323,7 @@ export function createConsoleBookingService({
       };
     },
 
-    detail: (actor: ConsoleActor, id: string) => inTenant(actor, (tx) => detail(tx, actor, id)),
+    detail: (actor: Viewer, id: string) => inTenant(actor, (tx) => detail(tx, actor, id)),
 
     /** Day and week view of one branch (FSD 2.2 Calendar); staff see only their own column. */
     calendar: (actor: ConsoleActor, query: CalendarQuery): Promise<Calendar> =>

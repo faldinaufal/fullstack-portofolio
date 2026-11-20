@@ -14,3 +14,4 @@ export * from './portal-bookings.js';
 export * from './problem.js';
 export * from './public.js';
 export * from './reports.js';
+export * from './support.js';

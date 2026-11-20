@@ -19,7 +19,15 @@ export function createPrismaClient({
   connectionString,
   maxConnections = 10,
 }: CreatePrismaClientOptions): PrismaClient {
-  const adapter = new PrismaPg({ connectionString, max: maxConnections });
+  // Sessions run in UTC. The adapter sends timestamps without an offset, and PostgreSQL reads
+  // those in the session time zone: on a server set to another zone, every stored instant
+  // would shift, and comparisons with the database clock (`now()` in RLS policies and worker
+  // jobs) would be off by that many hours.
+  const adapter = new PrismaPg({
+    connectionString,
+    max: maxConnections,
+    options: '-c TimeZone=UTC',
+  });
   return new PrismaClient({ adapter });
 }
 

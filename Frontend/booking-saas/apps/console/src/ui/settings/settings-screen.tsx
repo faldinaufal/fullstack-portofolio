@@ -14,10 +14,11 @@ import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { formText } from '@/ui/common/form-values';
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
+import { SupportAccessCard } from './support-access-card';
 
 type Settings = NonNullable<ReturnType<typeof useBusinessSettings>['data']>;
 
-/** FSD 2.2 Settings (owner): business name and booking settings (FSD 6.1). */
+/** FSD 2.2 Settings (owner): business name, booking settings (FSD 6.1), support access. */
 export function SettingsScreen() {
   const settings = useBusinessSettings();
   return (
@@ -26,7 +27,7 @@ export function SettingsScreen() {
       {settings.isPending && <div className="h-64 animate-pulse rounded-card bg-surface-muted" />}
       <RequestErrorAlert error={toRequestErrorView(settings.error)} />
       {settings.data && (
-        <Card className="max-w-[720px]">
+        <Card className="mb-5 max-w-[720px]">
           <CardHeader>
             <CardTitle>Business and booking rules</CardTitle>
           </CardHeader>
@@ -36,6 +37,7 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
       )}
+      <SupportAccessCard />
     </>
   );
 }

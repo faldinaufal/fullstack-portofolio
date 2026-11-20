@@ -21,6 +21,8 @@ export interface TenantDetail extends Tenant {
   suspensionReason: string | null;
   owner: { name: string; email: string } | null;
   ownerInvitation: { email: string; status: 'pending' | 'expired'; expiresAt: Date } | null;
+  /** The owner's active support grant (FSD 1.4); null while support views are closed. */
+  supportAccess: { startsAt: Date; expiresAt: Date } | null;
 }
 
 export type TenantFilter = 'active' | 'onboarding' | 'suspended';

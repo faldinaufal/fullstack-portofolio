@@ -69,6 +69,7 @@ model Tenant {
   payments      Payment[]
   counters      InvoiceCounter[]
   bookingLinks  BookingAccessToken[]
+  supportGrants SupportGrant[]
 
   @@map("tenants")
 }
@@ -218,6 +219,7 @@ model Membership {
   timeOffCreated     StaffTimeOff[]      @relation("TimeOffCreatedBy")
   bookings           Booking[]           @relation("BookingTherapist")
   bookingsMarked     Booking[]           @relation("BookingMarkedBy")
+  supportGranted     SupportGrant[]
 
   @@unique([teamAccountId, tenantId])
   @@index([tenantId])
@@ -775,4 +777,27 @@ model RateLimitHit {
 
   @@index([bucket, keyHash, createdAt])
   @@map("rate_limit_hits")
+}
+
+/// Support access (FSD 1.4, 3.10): the owner lets platform admins read the business's data,
+/// read only, until `expires_at` or until revoked. At most one grant is active per tenant
+/// (exclusion constraint in SQL). RLS: tenant policy; the support policy of the business
+/// tables reads it through `app.support_grant`.
+model SupportGrant {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  grantedByMembershipId String    @map("granted_by_membership_id") @db.Uuid
+  startsAt              DateTime  @map("starts_at") @db.Timestamptz(3)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt             DateTime? @map("revoked_at") @db.Timestamptz(3)
+  /// Set by the worker once the expiry is written to the audit log.
+  expiryRecordedAt      DateTime? @map("expiry_recorded_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  grantedBy Membership @relation(fields: [grantedByMembershipId], references: [id])
+
+  @@index([tenantId, startsAt])
+  @@index([grantedByMembershipId])
+  @@map("support_grants")
 }
