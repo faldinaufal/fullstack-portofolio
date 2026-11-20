@@ -68,8 +68,10 @@ Backend/booking-api/
 ├── packages/
 │   ├── contracts/           Zod schemas + types shared with the frontends
 │   └── db/                  Prisma schema, SQL migrations, client factory
-├── docker/postgres/init/    database roles (runs once per database)
-└── Dockerfile               api, worker and migrate images
+└── docker/postgres/init/    database roles (runs once per database)
+
+The images (api, worker, migrate and the three apps) come from the `Dockerfile` at the
+repository root.
 ```
 
 ## Database roles
@@ -93,6 +95,11 @@ Requirements: Node.js 24+, pnpm 10, Docker.
 cp .env.example .env          # choose local passwords
 docker compose up --build     # PostgreSQL, migrations, API, worker, the three apps, Mailpit
 ```
+
+The first build takes about a minute and a half (it downloads the dependencies once); after
+that, `docker compose up --build` takes seconds when nothing changed and well under a minute
+after a change. All six images come from one Dockerfile and share one dependency install; the
+backend and the apps build separately, so changing one side does not rebuild the other.
 
 API: http://localhost:4000/health · Docs: http://localhost:4000/v1/docs · Emails (codes, reset links): http://localhost:8025
 

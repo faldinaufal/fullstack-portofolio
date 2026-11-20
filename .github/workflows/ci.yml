@@ -119,35 +119,17 @@ jobs:
           cat worker.log && echo "Worker never started" && exit 1
 
   docker:
-    name: Docker image (${{ matrix.name }})
+    name: Docker images
     runs-on: ubuntu-latest
     needs: verify
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: api, file: Backend/booking-api/Dockerfile, target: api, app: '' }
-          - { name: worker, file: Backend/booking-api/Dockerfile, target: worker, app: '' }
-          - { name: migrate, file: Backend/booking-api/Dockerfile, target: migrate, app: '' }
-          - { name: portal, file: Frontend/booking-saas/Dockerfile, target: runtime, app: portal }
-          - { name: console, file: Frontend/booking-saas/Dockerfile, target: runtime, app: console }
-          - {
-              name: platform-admin,
-              file: Frontend/booking-saas/Dockerfile,
-              target: runtime,
-              app: platform-admin,
-            }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      # All six images in one bake, sharing the install and the builds (docker-bake.hcl).
+      - uses: docker/bake-action@v6
         with:
-          context: .
-          file: ${{ matrix.file }}
-          target: ${{ matrix.target }}
-          build-args: |
-            APP=${{ matrix.app }}
-            NEXT_PUBLIC_API_URL=http://localhost:4000
-          push: false
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          source: .
+          files: docker-bake.hcl
+          set: |
+            *.cache-from=type=gha,scope=tempora
+            *.cache-to=type=gha,mode=max,scope=tempora
