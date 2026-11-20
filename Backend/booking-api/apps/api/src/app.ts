@@ -24,6 +24,8 @@ import { consoleBookingRoutes } from './modules/console-bookings/routes.js';
 import type { ConsoleBookingService } from './modules/console-bookings/service.js';
 import { consoleRecordRoutes } from './modules/console-records/routes.js';
 import type { ConsoleRecordsService } from './modules/console-records/service.js';
+import { consoleLogRoutes } from './modules/console-logs/routes.js';
+import type { ConsoleLogService } from './modules/console-logs/service.js';
 import { reportRoutes } from './modules/reports/routes.js';
 import type { ReportService } from './modules/reports/service.js';
 import type { BranchService } from './modules/branches/service.js';
@@ -90,6 +92,7 @@ export interface AppDependencies {
     records: ConsoleRecordsService;
     reports: ReportService;
     support: SupportGrantService;
+    logs: ConsoleLogService;
   };
 }
 
@@ -203,6 +206,7 @@ export async function buildApp({
           await scope.register(consoleRecordRoutes, { service: consoleModules.records, guard });
           await scope.register(reportRoutes, { service: consoleModules.reports, guard });
           await scope.register(supportGrantRoutes, { service: consoleModules.support, guard });
+          await scope.register(consoleLogRoutes, { service: consoleModules.logs, guard });
         }
       },
       { prefix: '/v1/console' },

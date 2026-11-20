@@ -61,7 +61,7 @@ async function describe(tx: Tx, bookingId: string, context: BookingEmailContext)
  */
 async function queueReminder(
   tx: Tx,
-  booking: { id: string; tenantId: string; startsAt: Date },
+  booking: { id: string; tenantId: string; branchId: string; startsAt: Date },
   to: string,
   details: BookingEmailDetails,
   reference: Date,
@@ -71,6 +71,7 @@ async function queueReminder(
   await tx.emailMessage.create({
     data: {
       tenantId: booking.tenantId,
+      branchId: booking.branchId,
       toEmail: to,
       template: 'portal.booking_reminder',
       payload: { ...details },
@@ -96,6 +97,7 @@ export async function queueConfirmation(
   await tx.emailMessage.create({
     data: {
       tenantId: booking.tenantId,
+      branchId: booking.branchId,
       toEmail: to,
       template: 'portal.booking_confirmed',
       payload: {
@@ -125,6 +127,7 @@ export async function queueRescheduled(
   await tx.emailMessage.create({
     data: {
       tenantId: booking.tenantId,
+      branchId: booking.branchId,
       toEmail: to,
       template: 'portal.booking_rescheduled',
       payload: {
@@ -148,6 +151,7 @@ export async function queueCancelled(
   await tx.emailMessage.create({
     data: {
       tenantId: booking.tenantId,
+      branchId: booking.branchId,
       toEmail: booking.tenantCustomer.email,
       template: 'portal.booking_cancelled',
       payload: { ...details, reason: cancellation.reason, refundByBusiness: cancellation.paid },

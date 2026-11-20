@@ -22,6 +22,7 @@ import { createPortalAuthService } from './modules/portal-auth/service.js';
 import { createPublicCatalogue } from './modules/public/service.js';
 import { createConsoleBookingService } from './modules/console-bookings/service.js';
 import { createConsoleRecordsService } from './modules/console-records/service.js';
+import { createConsoleLogService } from './modules/console-logs/service.js';
 import { createSupportGrantService } from './modules/support/grants.js';
 import { createSupportViewService } from './modules/support/views.js';
 import { createReportService } from './modules/reports/service.js';
@@ -122,6 +123,7 @@ const app = await buildApp({
     records: consoleRecords,
     reports: createReportService({ prisma, timeZone: env.APP_TIME_ZONE }),
     support: createSupportGrantService({ prisma }),
+    logs: createConsoleLogService({ prisma, timeZone: env.APP_TIME_ZONE }),
     team: createTeamService({
       prisma,
       passwords,

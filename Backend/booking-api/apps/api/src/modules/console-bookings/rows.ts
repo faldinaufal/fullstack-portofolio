@@ -65,7 +65,7 @@ export function dateRange(
 export async function auditExport(
   tx: Tx,
   actor: ConsoleActor,
-  list: 'bookings' | 'customers' | 'invoices',
+  list: 'bookings' | 'customers' | 'invoices' | 'audit',
   filters: object,
   rows: number,
 ): Promise<void> {

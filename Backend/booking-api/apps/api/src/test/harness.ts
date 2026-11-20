@@ -22,6 +22,7 @@ import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
 import { createConsoleBookingService } from '../modules/console-bookings/service.js';
 import { createConsoleRecordsService } from '../modules/console-records/service.js';
+import { createConsoleLogService } from '../modules/console-logs/service.js';
 import { createSupportGrantService } from '../modules/support/grants.js';
 import { createSupportViewService } from '../modules/support/views.js';
 import { createReportService } from '../modules/reports/service.js';
@@ -202,6 +203,7 @@ export async function createHarness(): Promise<Harness> {
       records: consoleRecords,
       reports: createReportService({ prisma, timeZone: 'America/New_York', now }),
       support: createSupportGrantService({ prisma, now }),
+      logs: createConsoleLogService({ prisma, timeZone: 'America/New_York', now }),
       team: createTeamService({
         prisma,
         passwords,
