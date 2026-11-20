@@ -43,6 +43,9 @@ import { teamRoutes } from './modules/team/routes.js';
 import type { TeamService } from './modules/team/service.js';
 import { tenantRoutes } from './modules/tenant/routes.js';
 import type { TenantService } from './modules/tenant/service.js';
+import type { SupportGrantService } from './modules/support/grants.js';
+import { supportGrantRoutes, supportViewRoutes } from './modules/support/routes.js';
+import type { SupportViewService } from './modules/support/views.js';
 import type { HealthRepository } from './modules/health/repository.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { createHealthService } from './modules/health/service.js';
@@ -67,7 +70,13 @@ export interface AppDependencies {
   /** Booking, payments and webhooks, and the Portal's booking pages; need `portalAuth`. */
   bookings?: { service: BookingService; portal: PortalBookingService };
   /** Platform Admin (`/v1/admin`). */
-  admin?: { auth: AdminAuthService; service: AdminService; cookies: CookieSettings };
+  admin?: {
+    auth: AdminAuthService;
+    service: AdminService;
+    /** Read-only support views under an owner's grant (FSD 1.4). */
+    support: SupportViewService;
+    cookies: CookieSettings;
+  };
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
   /** Console business modules; need `consoleAuth`. */
@@ -80,6 +89,7 @@ export interface AppDependencies {
     bookings: ConsoleBookingService;
     records: ConsoleRecordsService;
     reports: ReportService;
+    support: SupportGrantService;
   };
 }
 
@@ -154,6 +164,7 @@ export async function buildApp({
           cookies: admin.cookies,
         });
         await scope.register(adminRoutes, { service: admin.service, guard });
+        await scope.register(supportViewRoutes, { service: admin.support, guard });
       },
       { prefix: '/v1/admin' },
     );
@@ -191,6 +202,7 @@ export async function buildApp({
           await scope.register(consoleBookingRoutes, { service: consoleModules.bookings, guard });
           await scope.register(consoleRecordRoutes, { service: consoleModules.records, guard });
           await scope.register(reportRoutes, { service: consoleModules.reports, guard });
+          await scope.register(supportGrantRoutes, { service: consoleModules.support, guard });
         }
       },
       { prefix: '/v1/console' },

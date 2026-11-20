@@ -131,8 +131,9 @@ Legend: ✅ allowed · 🏢 own branch only · 👤 own records only · 👁 rea
 ### 1.4 Support access
 - The owner grants support access for a chosen duration (1 h, 24 h or 72 h) and can revoke it at any time.
 - While a grant is active, a platform admin can open the tenant in **read-only** mode; any write request is rejected by the API.
-- Every page or record viewed under a grant is written to the tenant's audit log, visible to the owner.
-- Grant creation, expiry and revocation are audited too.
+- Every page or record viewed under a grant is written to the tenant's audit log, visible to the owner (and to the platform log).
+- Grant creation, expiry and revocation are audited too. Granting while a grant is active replaces it: the old one ends, the new period starts now.
+- Support views show what the owner sees (every branch, customer contact details), with no actions and no booking timeline. Nothing can be exported.
 
 ## 2. Screens
 Every screen supports light/dark mode and works from 360 px wide. List screens have loading, empty and error states; destructive actions ask for confirmation.
@@ -292,7 +293,7 @@ Alternative paths:
 
 ### 4.1 Conventions
 - **IDs:** UUID v7 (time-ordered, so indexes stay efficient and IDs do not reveal row counts).
-- **Time:** `timestamptz`, stored in UTC; displayed in the platform time zone (`APP_TIME_ZONE`). Opening and working hours are local wall-clock times (`time`) interpreted in that zone.
+- **Time:** `timestamptz`, stored in UTC; displayed in the platform time zone (`APP_TIME_ZONE`). Database sessions of the API run in UTC (`TimeZone=UTC`), so instants sent without an offset are never shifted by the server's own time zone. Opening and working hours are local wall-clock times (`time`) interpreted in that zone.
 - **Money:** integer cents (`price_cents`, `amount_cents`), currency fixed to `usd`. No floating point for money.
 - **Snapshots:** a booking copies the service name, duration, buffer and price at booking time, so later catalogue changes never alter past bookings or invoices.
 - **Soft delete:** business records use `archived_at` (or a `status`) instead of `DELETE`. Bookings, invoices, payments and audit entries are never deleted.
@@ -349,7 +350,7 @@ erDiagram
 | `tenants` | `id`, `slug` (unique), `name`, `logo_url`, `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), `suspended_at`, `suspension_reason`, booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
 | `memberships` | `id`, `tenant_id`, `team_account_id`, `role` (`owner`/`manager`/`staff`), `branch_id` (null for owner), `status` (`active`/`deactivated`), `created_at` | Unique (`team_account_id`, `tenant_id`). Partial unique indexes: one active `owner` per tenant; one active `manager` per branch. Check: managers and staff must have a branch. |
 | `invitations` | `id`, `tenant_id`, `email`, `role`, `branch_id`, `token_hash`, `invited_by_membership_id`, `created_at`, `expires_at`, `accepted_at`, `revoked_at` | Valid for 7 days. Accepting creates (or reuses) the team account and the membership. Status is derived (pending, expired, accepted, revoked). Partial unique index: at most one open invitation per tenant and email. |
-| `support_grants` | `id`, `tenant_id`, `granted_by_membership_id`, `starts_at`, `expires_at`, `revoked_at` | At most one active grant per tenant. |
+| `support_grants` | `id`, `tenant_id`, `granted_by_membership_id`, `starts_at`, `expires_at`, `revoked_at`, `expiry_recorded_at` | Lasts exactly 1, 24 or 72 h (check). At most one active grant per tenant: an exclusion constraint keeps the periods `[starts_at, coalesce(revoked_at, expires_at))` of one tenant from overlapping. Never deleted. `expiry_recorded_at` is set by the worker once the expiry is in the audit log. |
 
 #### Catalogue & schedules
 | Table | Key columns | Notes |
@@ -407,18 +408,19 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
   - `app.booking_token_hash`: the HMAC of a booking access token (guest link), before any login.
   - `app.team_account_id`: the signed-in team account, so it can read **its own** memberships in every tenant (login, tenant switcher).
   - `app.invitation_token_hash`: the HMAC of an invitation link token, before any login.
-  - `app.support_grant`: set for read-only platform admin access.
+  - `app.support_grant`: the ID of an active support grant, for the Platform Admin's support views. Never set together with `app.tenant_id`.
   - `app.platform_admin_id`: the signed-in platform admin; lets them write and read **platform-level** audit entries (`tenant_id` null) and nothing else.
 - **Platform metrics** (Platform Admin overview and tenant usage) need counts across tenants. `SECURITY DEFINER` functions (`platform_tenant_usage`, `platform_daily_activity`) return numbers only, never rows of tenant-owned tables, like the public directory functions.
 - Policies on every tenant-owned table:
   - **tenant policy:** `tenant_id = current_setting('app.tenant_id')::uuid`
   - **customer policy** (`tenant_customers`, `bookings`, `invoices`, `payments`, read only): the row belongs to a `tenant_customer` whose `customer_account_id = current_setting('app.customer_account_id')::uuid`.
-  - **support policy** (read only): the row's tenant has an active, unexpired support grant matching `app.support_grant`.
+  - **support policy** (read only, `FOR SELECT`; on `branches`, `memberships`, `tenant_customers`, `bookings`, `invoices`, `payments`): `tenant_id = app_support_tenant_id()`. That `SECURITY DEFINER` function returns the tenant of the grant in `app.support_grant` if it is not revoked and not expired **on the database clock**, so a revoked or expired grant opens nothing even if the API forgot to check. The only write a support context can make is an `audit_logs` entry with `action = 'support.viewed'`, actor `platform_admin`, in that tenant (policy `support_viewed`). The API finds a tenant's active grant through `active_support_grant(tenant, at)`, which returns its ID and period only.
 - **Own-memberships policy** (`memberships`, read only): `team_account_id = current_setting('app.team_account_id')::uuid`.
 - **Invitation-link policy** (`invitations`, read only): the one row whose `token_hash` matches `app.invitation_token_hash`. Once found, the API switches to that invitation's tenant context.
 - **Booking-link policy** (`booking_access_tokens`, read only): the one row whose `token_hash` matches `app.booking_token_hash`. The API checks expiry and revocation, then switches to that booking's tenant context. Customer requests work the same way: the booking is found through the customer policy, then loaded in its tenant's context.
 - **Linking guest bookings:** when a customer verifies their email, the `SECURITY DEFINER` function `link_guest_bookings(account_id)` attaches every unlinked `tenant_customers` row with the account's **verified** email (across tenants) and revokes the booking links of those bookings. It reads the email from the account row itself, never from the caller.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
+- **Support expiry** (`support_grants`): the worker role may read grants and set `expiry_recorded_at` (column grant), nothing else.
 - **Hold expiry** (`bookings`, `invoices`, `payments`): the worker role has a cross-tenant policy with `SELECT`/`UPDATE` only (no insert, no delete) and may `INSERT` into `audit_logs`. `DELETE` is revoked from the API role on these tables: bookings and invoices change status, they are never removed.
 - **Public directory:** whether a tenant is bookable needs rows of several tenant-owned tables across tenants. Two `SECURITY DEFINER` functions (`tenant_is_bookable`, `public_directory`) run as the table owner and return only public facts (yes/no, names, slugs), never protected rows; their `search_path` is pinned and only `tempora_app` may execute them.
 - If no context is set, policies match nothing, so a forgotten context fails closed (no rows) instead of leaking.
@@ -518,8 +520,8 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 | PUT | `/tenant/logo` | Confirm the uploaded object (API checks type and size) and set it as logo | owner |
 | POST | `/tenant/transfer-ownership` | New owner + old owner's new state + password | owner |
 | GET | `/support-grants` | Current and past grants | owner |
-| POST | `/support-grants` | Grant support access (`durationHours`: 1, 24, 72) | owner |
-| DELETE | `/support-grants/:id` | Revoke grant | owner |
+| POST | `/support-grants` | Grant support access (`durationHours`: 1, 24, 72); replaces an active grant | owner |
+| DELETE | `/support-grants/:id` | Revoke grant (an ended grant: no change) | owner |
 
 **Branches & services**
 | Method | Endpoint | Description | Auth |
@@ -599,7 +601,7 @@ Every report takes `from`/`to` (calendar dates in the platform time zone, both i
 | GET | `/tenants/:id` | Metadata, usage, support grant status | platform admin |
 | POST | `/tenants/:id/suspend` | Suspend (`reason` required) | platform admin · step-up |
 | POST | `/tenants/:id/reactivate` | Reactivate | platform admin · step-up |
-| GET | `/tenants/:id/support/bookings`, `/customers`, `/invoices` (and `/:recordId`) | Read-only tenant data; requires an active grant; every call audited in the tenant's log | platform admin · step-up |
+| GET | `/tenants/:id/support/bookings`, `/customers`, `/invoices` (and `/:recordId`) | Read-only tenant data with the Console's filters and response shapes (no CSV); requires an active grant (`403 SUPPORT_ACCESS_REQUIRED` otherwise); every call audited in the tenant's and the platform log before the data is read; `Cache-Control: no-store` | platform admin · step-up |
 | GET | `/audit-logs` | Platform-level events (`tenant_id` null), newest first, pagination | platform admin |
 
 Login always answers with a `challengeId`, also for an unknown email or a wrong password (the code then never arrives and cannot be verified), so the login form does not reveal which addresses are platform admins. Failed attempts are rate-limited like the Console's. A sensitive action without a fresh step-up answers `403 STEP_UP_REQUIRED`; the app then asks for a code and retries. Creating a tenant, suspending and reactivating write one entry to the platform log and one to the tenant's log.
@@ -703,7 +705,7 @@ Customers cannot cancel a paid booking (PRD); they can only reschedule within th
 ### 6.9 Tenant suspension
 - The Portal shows the tenant as unavailable; availability search and new bookings return `423 TENANT_SUSPENDED`.
 - Existing bookings stay as they are; webhooks and scheduled jobs keep working so pending payments and reminders resolve correctly.
-- The Console becomes read only for the tenant's members, with a banner explaining the suspension: every state-changing request answers `423 TENANT_SUSPENDED`, except logging in and out and switching to another business.
+- The Console becomes read only for the tenant's members, with a banner explaining the suspension: every state-changing request answers `423 TENANT_SUSPENDED`, except logging in and out, switching to another business, and granting or revoking support access (so Tempora can help resolve the suspension).
 - Suspending requires a reason (shown to the owner in the email and the banner); suspending a tenant that is already suspended, or reactivating an active one, changes nothing and answers `200` with the current state.
 
 ### 6.10 Invoices
@@ -783,6 +785,7 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
 | `TENANT_SUSPENDED` | 423 | Rule 6.9; also any Console write while the member's business is suspended |
 | `STEP_UP_REQUIRED` | 403 | Platform Admin action without a step-up in the last 10 minutes (6.11) |
+| `SUPPORT_ACCESS_REQUIRED` | 403 | Support view of a tenant without an active support grant (1.4) |
 | `RATE_LIMITED` | 429 | Rule 6.11 |
 | `PAYMENT_PROVIDER_UNAVAILABLE` | 503 | Rule 6.3 step 7 |
 
@@ -853,7 +856,7 @@ stateDiagram-v2
 - Membership: `active` ⇄ `deactivated` (reactivation allowed; sessions are revoked on deactivation).
 - Tenant: `active` ⇄ `suspended` by the platform admin; archived tenants are hidden from the directory.
 - Platform Admin shows **Onboarding** for an `active` tenant whose setup is not complete (no branch, service or therapist with working hours yet, FSD 3.4). It is derived for display only, never stored.
-- Support grant: `active` → `expired` (time) or `revoked` (owner).
+- Support grant: `active` → `expired` (time) or `revoked` (owner, or replaced by a new grant). The worker records each expiry in the tenant's audit log (`support.expired`, every 5 minutes); the grant already stops working at `expires_at`.
 
 ## 8. Non-functional requirements
 
@@ -923,7 +926,7 @@ Latest two versions of Chrome, Edge, Firefox and Safari (desktop and mobile). La
 |---|---|---|---|
 | Unit | Vitest | Pure domain logic: availability calculation, slot grid, cut-off and limits, invoice numbering format, permission rules | Every PR |
 | API integration | Vitest + real PostgreSQL in a container | Every endpoint through HTTP against a migrated database: validation, authorization, RLS, constraints, transactions | Every PR |
-| Worker | Vitest + PostgreSQL | Jobs: hold expiry, reminders, auto-complete, email retries | Every PR |
+| Worker | Vitest + PostgreSQL | Jobs: hold expiry, reminders, auto-complete, support expiry, email retries | Every PR |
 | Frontend components | Vitest + Testing Library | Shared UI components, forms, error mapping | Every PR |
 | End to end | Playwright against the full stack (docker compose) | Main flow of every role in a real browser, plus axe accessibility checks | Every PR |
 | Preview smoke | Playwright against the PR preview deployment | Log in per app, real Stripe test Checkout once | Every PR (after deploy) |

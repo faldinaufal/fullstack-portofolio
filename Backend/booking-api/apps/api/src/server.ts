@@ -22,6 +22,8 @@ import { createPortalAuthService } from './modules/portal-auth/service.js';
 import { createPublicCatalogue } from './modules/public/service.js';
 import { createConsoleBookingService } from './modules/console-bookings/service.js';
 import { createConsoleRecordsService } from './modules/console-records/service.js';
+import { createSupportGrantService } from './modules/support/grants.js';
+import { createSupportViewService } from './modules/support/views.js';
 import { createReportService } from './modules/reports/service.js';
 import { createScheduleService } from './modules/schedules/service.js';
 import { createServiceCatalogue } from './modules/services/service.js';
@@ -46,6 +48,15 @@ const payments =
         portalUrl: env.PORTAL_URL,
       });
 const rateLimiter = createPostgresRateLimiter(prisma, hashToken);
+// Shared by the Console and the Platform Admin's support views (same queries, FSD 1.4).
+const consoleBookings = createConsoleBookingService({
+  prisma,
+  payments,
+  hashToken,
+  portalUrl: env.PORTAL_URL,
+  timeZone: env.APP_TIME_ZONE,
+});
+const consoleRecords = createConsoleRecordsService({ prisma, timeZone: env.APP_TIME_ZONE });
 
 const app = await buildApp({
   env,
@@ -85,6 +96,11 @@ const app = await buildApp({
       consoleUrl: env.CONSOLE_URL,
       timeZone: env.APP_TIME_ZONE,
     }),
+    support: createSupportViewService({
+      prisma,
+      bookings: consoleBookings,
+      records: consoleRecords,
+    }),
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
   portalAuth: {
@@ -102,15 +118,10 @@ const app = await buildApp({
     branches: createBranchService({ prisma, timeZone: env.APP_TIME_ZONE }),
     services: createServiceCatalogue({ prisma }),
     schedules: createScheduleService({ prisma, timeZone: env.APP_TIME_ZONE }),
-    bookings: createConsoleBookingService({
-      prisma,
-      payments,
-      hashToken,
-      portalUrl: env.PORTAL_URL,
-      timeZone: env.APP_TIME_ZONE,
-    }),
-    records: createConsoleRecordsService({ prisma, timeZone: env.APP_TIME_ZONE }),
+    bookings: consoleBookings,
+    records: consoleRecords,
     reports: createReportService({ prisma, timeZone: env.APP_TIME_ZONE }),
+    support: createSupportGrantService({ prisma }),
     team: createTeamService({
       prisma,
       passwords,

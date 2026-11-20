@@ -29,6 +29,10 @@ export const toTenantDetail = (dto: AdminTenantDetail): TenantDetail => ({
     ...dto.ownerInvitation,
     expiresAt: new Date(dto.ownerInvitation.expiresAt),
   },
+  supportAccess: dto.supportAccess && {
+    startsAt: new Date(dto.supportAccess.startsAt),
+    expiresAt: new Date(dto.supportAccess.expiresAt),
+  },
 });
 
 /** `/v1/admin/tenants*` and `/v1/admin/audit-logs` (FSD 5.5). */

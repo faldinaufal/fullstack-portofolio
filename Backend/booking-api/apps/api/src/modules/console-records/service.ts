@@ -13,7 +13,7 @@ import type {
 } from '@tempora/contracts';
 import { Prisma, withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { csvAmount, csvDateTime, csvStream } from '../../lib/csv.js';
-import { notFound } from '../console-auth/access.js';
+import { notFound, viewerContext, type Viewer } from '../console-auth/access.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
 import {
   auditExport,
@@ -64,11 +64,11 @@ export function createConsoleRecordsService({
   timeZone,
   now = () => new Date(),
 }: ConsoleRecordsDeps) {
-  const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
-    withDbContext(prisma, { tenantId: actor.tenantId, teamAccountId: actor.teamAccountId }, work);
+  const inTenant = <T>(viewer: Viewer, work: (tx: Tx) => Promise<T>) =>
+    withDbContext(prisma, viewerContext(viewer), work);
 
   /** The manager's branch, or null for the owner (every branch). */
-  const branchOf = (actor: ConsoleActor) => (actor.role === 'manager' ? actor.branchId : null);
+  const branchOf = (actor: Viewer) => (actor.role === 'manager' ? actor.branchId : null);
 
   // --- customers ------------------------------------------------------------
 
@@ -79,7 +79,7 @@ export function createConsoleRecordsService({
    * latest one that took place; the next is the earliest one still to come.
    */
   function customerQuery(
-    actor: ConsoleActor,
+    actor: Viewer,
     query: Pick<CustomerListQuery, 'q' | 'sort'>,
     at: Date,
     paging: { limit: number; offset: number } | null,
@@ -123,7 +123,7 @@ export function createConsoleRecordsService({
     nextBookingAt: row.next_booking_at?.toISOString() ?? null,
   });
 
-  async function countCustomers(tx: Tx, actor: ConsoleActor, query: CustomerListQuery) {
+  async function countCustomers(tx: Tx, actor: Viewer, query: Omit<CustomerListQuery, 'format'>) {
     const [row] = await tx.$queryRaw<{ total: number }[]>`
       SELECT count(*)::int AS total FROM (${customerQuery(actor, query, now(), null)}) AS scoped`;
     return row?.total ?? 0;
@@ -131,8 +131,8 @@ export function createConsoleRecordsService({
 
   const customerPage = (
     tx: Tx,
-    actor: ConsoleActor,
-    query: CustomerListQuery,
+    actor: Viewer,
+    query: Omit<CustomerListQuery, 'format'>,
     n: number,
     size: number,
   ) =>
@@ -142,7 +142,10 @@ export function createConsoleRecordsService({
 
   // --- invoices -------------------------------------------------------------
 
-  function invoiceWhere(actor: ConsoleActor, query: InvoiceListQuery): Prisma.InvoiceWhereInput {
+  function invoiceWhere(
+    actor: Viewer,
+    query: Omit<InvoiceListQuery, 'format'>,
+  ): Prisma.InvoiceWhereInput {
     const branch = branchOf(actor) ?? query.branchId;
     const issuedAt = dateRange(timeZone, query.from, query.to);
     return {
@@ -190,7 +193,7 @@ export function createConsoleRecordsService({
   }: T) => filters;
 
   return {
-    customers: (actor: ConsoleActor, query: CustomerListQuery): Promise<CustomerList> =>
+    customers: (actor: Viewer, query: Omit<CustomerListQuery, 'format'>): Promise<CustomerList> =>
       inTenant(actor, async (tx) => ({
         items: (await customerPage(tx, actor, query, query.page, query.pageSize)).map(toCustomer),
         page: query.page,
@@ -228,7 +231,7 @@ export function createConsoleRecordsService({
     },
 
     /** A customer outside the manager's branch does not exist for them (`404`). */
-    customer: (actor: ConsoleActor, id: string): Promise<ConsoleCustomerDetail> =>
+    customer: (actor: Viewer, id: string): Promise<ConsoleCustomerDetail> =>
       inTenant(actor, async (tx) => {
         const [row] = await tx.$queryRaw<CustomerAggregate[]>(
           customerQuery(actor, { sort: 'name' }, now(), null, id),
@@ -248,7 +251,7 @@ export function createConsoleRecordsService({
         };
       }),
 
-    invoices: (actor: ConsoleActor, query: InvoiceListQuery): Promise<InvoiceList> =>
+    invoices: (actor: Viewer, query: Omit<InvoiceListQuery, 'format'>): Promise<InvoiceList> =>
       inTenant(actor, async (tx) => {
         const where = invoiceWhere(actor, query);
         return {
@@ -297,7 +300,7 @@ export function createConsoleRecordsService({
       };
     },
 
-    invoice: (actor: ConsoleActor, id: string): Promise<ConsoleInvoiceDetail> =>
+    invoice: (actor: Viewer, id: string): Promise<ConsoleInvoiceDetail> =>
       inTenant(actor, async (tx) => {
         const row = await tx.invoice.findUnique({
           where: { id },

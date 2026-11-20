@@ -22,6 +22,8 @@ import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
 import { createConsoleBookingService } from '../modules/console-bookings/service.js';
 import { createConsoleRecordsService } from '../modules/console-records/service.js';
+import { createSupportGrantService } from '../modules/support/grants.js';
+import { createSupportViewService } from '../modules/support/views.js';
 import { createReportService } from '../modules/reports/service.js';
 import { createScheduleService } from '../modules/schedules/service.js';
 import { createServiceCatalogue } from '../modules/services/service.js';
@@ -41,6 +43,7 @@ function requireEnv(name: string): string {
 /** Every table the tests touch, emptied before each test. */
 const TABLES = [
   'idempotency_keys',
+  'support_grants',
   'platform_admins',
   'booking_access_tokens',
   'stripe_events',
@@ -107,6 +110,19 @@ export async function createHarness(): Promise<Harness> {
     now,
   });
   const rateLimiter = createPostgresRateLimiter(prisma, hashToken, now);
+  const consoleBookings = createConsoleBookingService({
+    prisma,
+    payments,
+    hashToken,
+    portalUrl: 'http://localhost:3000',
+    timeZone: 'America/New_York',
+    now,
+  });
+  const consoleRecords = createConsoleRecordsService({
+    prisma,
+    timeZone: 'America/New_York',
+    now,
+  });
 
   const app = await buildApp({
     env: {
@@ -158,6 +174,12 @@ export async function createHarness(): Promise<Harness> {
         timeZone: 'America/New_York',
         now,
       }),
+      support: createSupportViewService({
+        prisma,
+        bookings: consoleBookings,
+        records: consoleRecords,
+        now,
+      }),
       cookies: { secure: false, domain: undefined },
     },
     portalAuth: {
@@ -176,16 +198,10 @@ export async function createHarness(): Promise<Harness> {
       branches: createBranchService({ prisma, timeZone: 'America/New_York', now }),
       services: createServiceCatalogue({ prisma }),
       schedules: createScheduleService({ prisma, timeZone: 'America/New_York', now }),
-      bookings: createConsoleBookingService({
-        prisma,
-        payments,
-        hashToken,
-        portalUrl: 'http://localhost:3000',
-        timeZone: 'America/New_York',
-        now,
-      }),
-      records: createConsoleRecordsService({ prisma, timeZone: 'America/New_York', now }),
+      bookings: consoleBookings,
+      records: consoleRecords,
       reports: createReportService({ prisma, timeZone: 'America/New_York', now }),
+      support: createSupportGrantService({ prisma, now }),
       team: createTeamService({
         prisma,
         passwords,

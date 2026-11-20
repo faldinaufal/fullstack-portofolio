@@ -6,6 +6,7 @@ import type { Prisma, Tx } from '@tempora/db';
 import { recordAudit } from '../../lib/audit.js';
 import { wallTimeToInstant } from '../availability/engine.js';
 import { auditActor } from '../branches/service.js';
+import type { Scope } from '../console-auth/access.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
 import { canSeeCustomerContact, effectiveStatus } from './access.js';
 
@@ -19,7 +20,7 @@ export const BOOKING_ROW_INCLUDE = {
 
 export type BookingRow = Prisma.BookingGetPayload<{ include: typeof BOOKING_ROW_INCLUDE }>;
 
-export function toConsoleBooking(row: BookingRow, actor: ConsoleActor, now: Date): ConsoleBooking {
+export function toConsoleBooking(row: BookingRow, actor: Scope, now: Date): ConsoleBooking {
   return {
     id: row.id,
     status: effectiveStatus(row, now) as ConsoleBooking['status'],

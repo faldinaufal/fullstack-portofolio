@@ -10,6 +10,7 @@ import { loadEnv } from './config/env.js';
 import { createSmtpMailer } from './email/mailer.js';
 import { createOutboxProcessor } from './email/outbox.js';
 import { createAutoCompleteHandler } from './jobs/auto-complete.js';
+import { createSupportExpiryHandler } from './jobs/support-expiry.js';
 import { createExpireHoldsHandler } from './jobs/expire-holds.js';
 import { createHeartbeatHandler } from './jobs/heartbeat.js';
 import { QUEUES } from './queues.js';
@@ -49,6 +50,11 @@ await boss.work(QUEUES.expireHolds, createExpireHoldsHandler(jobsPool, logger));
 await boss.createQueue(QUEUES.autoComplete, { retryLimit: 0 });
 await boss.schedule(QUEUES.autoComplete, '7 * * * *');
 await boss.work(QUEUES.autoComplete, createAutoCompleteHandler(jobsPool, logger));
+
+// FSD 1.4: support grant expiries in the audit log, every 5 minutes.
+await boss.createQueue(QUEUES.supportExpiry, { retryLimit: 0 });
+await boss.schedule(QUEUES.supportExpiry, '*/5 * * * *');
+await boss.work(QUEUES.supportExpiry, createSupportExpiryHandler(jobsPool, logger));
 
 // Email outbox (FSD 0.2): the API queues emails in `email_messages` inside its own
 // transactions; this loop sends them. A full batch means more may be waiting, so the next

@@ -35,7 +35,10 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
         { name: 'payments', description: 'Payment webhooks and the demo checkout' },
         { name: 'console-auth', description: 'Console sign-up, login with email code, sessions' },
         { name: 'console-branches', description: 'Branches, opening hours and closures' },
-        { name: 'console-settings', description: 'Business profile and booking settings' },
+        {
+          name: 'console-settings',
+          description: 'Business profile, booking settings and support access',
+        },
         { name: 'console-services', description: 'Service catalogue' },
         { name: 'console-team', description: 'Members, roles, invitations and schedules' },
         {
@@ -47,6 +50,10 @@ export async function registerOpenApi(app: FastifyInstance, { version }: { versi
         { name: 'console-reports', description: 'Dashboard reports' },
         { name: 'admin-auth', description: 'Platform Admin login, step-up and session' },
         { name: 'admin', description: 'Platform Admin: tenants, metrics, platform log' },
+        {
+          name: 'admin-support',
+          description: "Read-only support views under the owner's grant (step-up, audited)",
+        },
       ],
     },
     transform: jsonSchemaTransform,

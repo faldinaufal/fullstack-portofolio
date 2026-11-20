@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
+import type { DbContext } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import type { ConsoleRole } from './guard.js';
 
@@ -16,6 +17,23 @@ export interface Scope {
   branchId: string | null;
   membershipId: string;
 }
+
+/**
+ * Who reads the Console's business data: a Console user, or a platform admin under the
+ * owner's support grant (FSD 1.4). Support viewers see what the owner sees, read only.
+ */
+export interface Viewer extends Scope {
+  tenantId: string;
+  teamAccountId?: string;
+  /** Support views: queries run with the grant only, so RLS allows reads and nothing else. */
+  supportGrantId?: string;
+}
+
+/** The RLS context a viewer's queries run in (FSD 4.4). Never the tenant for support. */
+export const viewerContext = (viewer: Viewer): DbContext =>
+  viewer.supportGrantId
+    ? { supportGrantId: viewer.supportGrantId }
+    : { tenantId: viewer.tenantId, teamAccountId: viewer.teamAccountId ?? '' };
 
 export interface MemberRef {
   id: string;

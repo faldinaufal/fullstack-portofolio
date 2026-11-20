@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { EmailSchema, OtpCodeSchema, PersonNameSchema, SlugSchema } from './console-auth.js';
 import { DateOnlySchema } from './console-branches.js';
+import { SupportAccessSchema } from './support.js';
 
 /** Platform Admin (`/v1/admin`, FSD 2.3, 5.5). */
 
@@ -79,6 +80,8 @@ export const AdminTenantDetailSchema = AdminTenantSchema.extend({
       expiresAt: z.iso.datetime(),
     })
     .nullable(),
+  /** The owner's active support grant (FSD 1.4); null when support views are closed. */
+  supportAccess: SupportAccessSchema.nullable(),
 }).meta({ id: 'AdminTenantDetail' });
 export type AdminTenantDetail = z.infer<typeof AdminTenantDetailSchema>;
 

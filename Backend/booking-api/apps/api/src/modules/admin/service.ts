@@ -20,6 +20,7 @@ import { addDays } from '../reports/calc.js';
 import { todayIn } from '../availability/engine.js';
 import { notFound } from '../console-auth/access.js';
 import { consoleAuthRepository } from '../console-auth/repository.js';
+import { activeSupportGrant, toSupportAccess } from '../support/views.js';
 
 const DAY = 24 * 60 * 60_000;
 /** FSD 3.5 / 6.8: the owner invitation is valid for 7 days, like every invitation. */
@@ -60,7 +61,7 @@ const slugTaken = () =>
 /**
  * Platform Admin (FSD 2.3, 3.5, 3.11, 5.5): tenants, assisted onboarding, suspension,
  * platform metrics and the platform log. Tenant business data is out of reach here (support
- * access is a separate, owner-granted path); only metadata and counts are read.
+ * access is a separate, owner-granted path, `support/views.ts`); only metadata and counts.
  */
 export function createAdminService({
   prisma,
@@ -124,6 +125,7 @@ export function createAdminService({
     const tenant = await tx.tenant.findFirst({ where: { id, archivedAt: null } });
     if (!tenant) throw notFound('Tenant');
     const usage = (await usageMap(tx)).get(id);
+    const grant = await activeSupportGrant(tx, id, now());
     // Who to contact: the owner, or the pending owner invitation (metadata, not business data).
     await setDbContext(tx, { tenantId: id });
     const owner = await tx.membership.findFirst({
@@ -149,6 +151,7 @@ export function createAdminService({
             expiresAt: invitation.expiresAt.toISOString(),
           }
         : null,
+      supportAccess: grant && toSupportAccess(grant),
     };
   }
 

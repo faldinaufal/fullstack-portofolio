@@ -11,6 +11,7 @@ import type { CatalogueRepository } from '../../catalogue/domain/catalogue';
 import type { DashboardRepository } from '../../dashboard/domain/dashboard';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 import type { RecordsRepository } from '../../records/domain/records';
+import type { SupportRepository } from '../../support/domain/support';
 import type { TeamRepository } from '../../team/domain/team';
 
 /**
@@ -25,6 +26,7 @@ export interface Dependencies {
   catalogue: CatalogueRepository;
   team: TeamRepository;
   records: RecordsRepository;
+  support: SupportRepository;
   getApiStatus: GetApiStatus;
   dashboard: DashboardRepository;
 }

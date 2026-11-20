@@ -7,6 +7,10 @@ import { initialsOf, stepUpMinutesLeft } from './auth/domain/admin-auth';
 import { attentionItems, type PlatformOverview } from './overview/domain/overview';
 import { toOverviewView } from './overview/presentation/use-overview';
 import { toTenantDetail } from './tenants/data/http-tenant-repository';
+import { RequestError } from './shared/domain/request-error';
+import { toBooking } from './support/data/http-support-repository';
+import { dollars, grantBanner } from './support/domain/support';
+import { supportBlock } from './support/presentation/use-support';
 import { displayStatus, suggestSlug } from './tenants/domain/tenant';
 
 const now = new Date('2026-11-23T15:00:00Z');
@@ -51,9 +55,14 @@ describe('tenants', () => {
       suspensionReason: 'Card payments disputed',
       owner: { name: 'Jonah Reed', email: 'jonah@veloria.test' },
       ownerInvitation: null,
+      supportAccess: {
+        startsAt: '2026-11-23T14:00:00.000Z',
+        expiresAt: '2026-11-23T15:00:00.000Z',
+      },
     });
     expect(detail.suspendedAt).toEqual(new Date('2026-11-22T09:00:00Z'));
     expect(detail.ownerInvitation).toBeNull();
+    expect(detail.supportAccess?.expiresAt).toEqual(new Date('2026-11-23T15:00:00Z'));
   });
 });
 
@@ -91,5 +100,43 @@ describe('overview', () => {
       [3, 5],
       [2, 4],
     ]);
+  });
+});
+
+describe('support views (FSD 1.4)', () => {
+  it('shows when the grant ends, nothing once it ended', () => {
+    const banner = (iso: string) => grantBanner(new Date(iso), now, 'America/New_York');
+    expect(banner('2026-11-23T15:45:00Z')).toBe('Open until 23 Nov, 10:45 · 45 min left');
+    expect(banner('2026-11-24T16:30:00Z')).toBe('Open until 24 Nov, 11:30 · 25 h 30 min left');
+    expect(banner('2026-11-23T15:00:00Z')).toBeNull();
+  });
+
+  it('tells a missing step-up from a closed grant', () => {
+    expect(supportBlock(new RequestError('STEP_UP_REQUIRED', 'x'))).toBe('step-up');
+    expect(supportBlock(new RequestError('SUPPORT_ACCESS_REQUIRED', 'x'))).toBe('closed');
+    expect(supportBlock(new RequestError('NOT_FOUND', 'x'))).toBeNull();
+    expect(supportBlock(new Error('x'))).toBeNull();
+  });
+
+  it('maps a booking row', () => {
+    const row = toBooking({
+      id: 'fa1d0000-0000-4000-8000-000000004217',
+      status: 'confirmed',
+      startsAt: '2026-11-24T15:00:00.000Z',
+      endsAt: '2026-11-24T16:00:00.000Z',
+      serviceName: 'Deep Tissue Massage',
+      priceCents: 4217,
+      branch: { id: 'fa1d0000-0000-4000-8000-000000000011', name: 'Downtown' },
+      therapist: { id: 'fa1d0000-0000-4000-8000-000000000012', name: 'Ines Halvorsen' },
+      customer: { name: 'Omar Haddad', email: 'omar@veloria.test' },
+      invoice: {
+        id: 'fa1d0000-0000-4000-8000-000000000015',
+        number: 'LUM-2026-000001',
+        status: 'paid',
+      },
+    });
+    expect(row).toMatchObject({ branch: 'Downtown', therapist: 'Ines Halvorsen' });
+    expect(row.startsAt).toEqual(new Date('2026-11-24T15:00:00Z'));
+    expect(dollars(row.priceCents)).toBe('$42.17');
   });
 });
