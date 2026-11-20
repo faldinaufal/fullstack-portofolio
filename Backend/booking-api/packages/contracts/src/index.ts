@@ -9,6 +9,7 @@ export * from './console-team.js';
 export * from './health.js';
 export * from './portal-auth.js';
 export * from './console-bookings.js';
+export * from './console-logs.js';
 export * from './console-records.js';
 export * from './portal-bookings.js';
 export * from './problem.js';

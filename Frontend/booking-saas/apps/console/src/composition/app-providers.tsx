@@ -12,6 +12,7 @@ import { createSessionStorageChallengeStore } from '@/core/auth/data/session-sto
 import { createAuthUseCases } from '@/core/auth/domain/auth-use-cases';
 import { createHttpBookingRepository } from '@/core/bookings/data/http-booking-repository';
 import { createHttpBranchRepository } from '@/core/branches/data/http-branch-repository';
+import { createHttpLogRepository } from '@/core/logs/data/http-log-repository';
 import { createHttpRecordsRepository } from '@/core/records/data/http-records-repository';
 import { createHttpSupportRepository } from '@/core/support/data/http-support-repository';
 import { createHttpCatalogueRepository } from '@/core/catalogue/data/http-catalogue-repository';
@@ -40,6 +41,7 @@ function createDependencies(): Dependencies {
     bookings: createHttpBookingRepository(apiClient, apiUrl),
     records: createHttpRecordsRepository(apiClient, apiUrl),
     support: createHttpSupportRepository(apiClient),
+    logs: createHttpLogRepository(apiClient, apiUrl),
     branches: createHttpBranchRepository(apiClient),
     catalogue: createHttpCatalogueRepository(apiClient),
     team: createHttpTeamRepository(apiClient),

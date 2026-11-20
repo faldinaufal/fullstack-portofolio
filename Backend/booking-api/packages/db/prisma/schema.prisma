@@ -92,6 +92,7 @@ model Branch {
   openingHours BranchOpeningHours[]
   closures     BranchClosure[]
   bookings     Booking[]
+  emails       EmailMessage[]
 
   @@index([tenantId])
   @@map("branches")
@@ -757,11 +758,15 @@ model EmailMessage {
   /// and still starts at `bookingStartsAt`, otherwise `skipped` (FSD 6.5).
   bookingId         String?     @map("booking_id") @db.Uuid
   bookingStartsAt   DateTime?   @map("booking_starts_at") @db.Timestamptz(3)
+  /// The branch the email is about (bookings, staff invitations), for the managers' email log.
+  branchId          String?     @map("branch_id") @db.Uuid
 
   tenant  Tenant?  @relation(fields: [tenantId], references: [id])
   booking Booking? @relation(fields: [bookingId], references: [id])
+  branch  Branch?  @relation(fields: [branchId], references: [id])
 
   @@index([tenantId, createdAt])
+  @@index([branchId, createdAt])
   @@index([status, nextAttemptAt])
   @@index([bookingId])
   @@map("email_messages")

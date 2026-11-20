@@ -131,7 +131,12 @@ export function createTeamService({
   async function sendInvitationEmail(
     tx: Tx,
     actor: ConsoleActor,
-    invitation: { email: string; role: Invitation['role']; branchName: string | null },
+    invitation: {
+      email: string;
+      role: Invitation['role'];
+      branchId: string | null;
+      branchName: string | null;
+    },
     token: string,
   ) {
     const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId } });
@@ -140,6 +145,9 @@ export function createTeamService({
       data: [
         {
           tenantId: actor.tenantId,
+          // A staff invitation belongs to its branch's email log; a manager's (sent by the
+          // owner) stays out of other managers' view, like in the audit log (FSD 1.2).
+          branchId: invitation.role === 'staff' ? invitation.branchId : null,
           toEmail: invitation.email,
           template: 'console.invitation',
           payload: {
@@ -397,7 +405,7 @@ export function createTeamService({
         await sendInvitationEmail(
           tx,
           actor,
-          { email: input.email, role: input.role, branchName: branch.name },
+          { email: input.email, role: input.role, branchId: branch.id, branchName: branch.name },
           token,
         );
         const dto = toInvitation(invitation, now());
@@ -432,7 +440,12 @@ export function createTeamService({
         await sendInvitationEmail(
           tx,
           actor,
-          { email: renewed.email, role: renewed.role, branchName: renewed.branch?.name ?? null },
+          {
+            email: renewed.email,
+            role: renewed.role,
+            branchId: renewed.branchId,
+            branchName: renewed.branch?.name ?? null,
+          },
           token,
         );
         const dto = toInvitation(renewed, now());
