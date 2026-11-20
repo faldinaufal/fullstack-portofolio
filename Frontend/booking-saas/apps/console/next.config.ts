@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(process.cwd(), '../../../..'),
   poweredByHeader: false,
   reactStrictMode: true,
+  // Docker image builds only (see the root Dockerfile): CI type-checks separately, and fewer
+  // workers keep three app builds side by side within Docker Desktop's memory.
+  typescript: { ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === '1' },
+  ...(process.env.NEXT_BUILD_CPUS && {
+    experimental: { cpus: Number(process.env.NEXT_BUILD_CPUS) },
+  }),
 };
 
 export default nextConfig;

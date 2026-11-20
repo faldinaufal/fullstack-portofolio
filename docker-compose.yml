@@ -9,6 +9,15 @@
 
 name: tempora
 
+# Every image comes from the root Dockerfile with the same build arguments, so the images share
+# one install and one build; each service only picks its target.
+x-build: &build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    # The browser calls the API directly, so this is the host-facing URL.
+    NEXT_PUBLIC_API_URL: http://localhost:4000
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -38,8 +47,7 @@ services:
 
   migrate:
     build:
-      context: .
-      dockerfile: Backend/booking-api/Dockerfile
+      <<: *build
       target: migrate
     environment:
       DATABASE_MIGRATION_URL: postgresql://tempora:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}@postgres:5432/tempora
@@ -49,8 +57,7 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Backend/booking-api/Dockerfile
+      <<: *build
       target: api
     environment:
       NODE_ENV: production
@@ -71,8 +78,7 @@ services:
 
   worker:
     build:
-      context: .
-      dockerfile: Backend/booking-api/Dockerfile
+      <<: *build
       target: worker
     environment:
       NODE_ENV: production
@@ -87,33 +93,25 @@ services:
         condition: service_started
 
   portal:
-    build: &frontend-build
-      context: .
-      dockerfile: Frontend/booking-saas/Dockerfile
-      args:
-        APP: portal
-        # The browser calls the API directly, so this is the host-facing URL.
-        NEXT_PUBLIC_API_URL: http://localhost:4000
+    build:
+      <<: *build
+      target: portal
     ports:
       - '3000:3000'
     depends_on: [api]
 
   console:
     build:
-      <<: *frontend-build
-      args:
-        APP: console
-        NEXT_PUBLIC_API_URL: http://localhost:4000
+      <<: *build
+      target: console
     ports:
       - '3001:3000'
     depends_on: [api]
 
   platform-admin:
     build:
-      <<: *frontend-build
-      args:
-        APP: platform-admin
-        NEXT_PUBLIC_API_URL: http://localhost:4000
+      <<: *build
+      target: platform-admin
     ports:
       - '3002:3000'
     depends_on: [api]
