@@ -11,7 +11,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -60,14 +60,14 @@ export function CustomersScreen() {
             value={filters.q ?? ''}
             onChange={(e) => set({ q: e.target.value || undefined })}
           />
-          <SelectField
+          <Select
             label="Sort"
             options={[
               { value: 'name', label: 'Name' },
               { value: '-lastVisit', label: 'Last visit, newest first' },
             ]}
             value={filters.sort}
-            onChange={(e) => set({ sort: e.target.value as CustomerFilters['sort'] })}
+            onValueChange={(value) => set({ sort: value as CustomerFilters['sort'] })}
           />
         </CardContent>
       </Card>

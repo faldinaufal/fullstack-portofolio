@@ -34,6 +34,7 @@ const PATHS = {
   'arrow-right': 'M5 12h14M13 6l6 6-6 6',
   'chevron-left': 'M15 6l-6 6 6 6',
   'chevron-right': 'M9 6l6 6-6 6',
+  'chevron-down': 'M6 9l6 6 6-6',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
   timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16M12 9v4l2.5 2M9 2h6',
   check: 'M5 12l5 5 9-10',

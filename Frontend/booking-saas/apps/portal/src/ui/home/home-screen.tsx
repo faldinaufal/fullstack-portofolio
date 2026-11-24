@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import { buttonVariants, Icon, type IconName } from '@tempora/ui';
+import { buttonVariants, Icon, Select, type IconName } from '@tempora/ui';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { FeaturedBusinesses } from './featured-businesses';
@@ -131,19 +131,23 @@ export function HomeScreen() {
           action="/"
           className="mx-auto flex max-w-[1200px] flex-wrap items-end gap-3 rounded-[20px] bg-primary p-[18px]"
         >
-          <label className="flex flex-[1_1_200px] flex-col gap-1.5 text-[13px] font-semibold text-on-brand">
-            Service type
-            <select name="category" className={fieldClass} defaultValue="">
-              <option value="" className="text-ink">
-                Any service
-              </option>
-              {CATEGORIES.map((category) => (
-                <option key={category.label} className="text-ink">
-                  {category.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Service type"
+            name="category"
+            defaultValue=""
+            options={[
+              { value: '', label: 'Any service' },
+              ...CATEGORIES.map((category) => ({
+                value: category.label,
+                label: category.label,
+                icon: <Icon name={category.icon} size={18} />,
+              })),
+            ]}
+            icon
+            className="flex-[1_1_200px]"
+            labelClassName="text-[13px] text-on-brand"
+            triggerClassName={`${fieldClass} [&>svg]:text-on-brand`}
+          />
           <label className="flex flex-[1_1_200px] flex-col gap-1.5 text-[13px] font-semibold text-on-brand">
             Business or area
             <input name="q" type="text" placeholder="e.g. Lumen, Downtown" className={fieldClass} />

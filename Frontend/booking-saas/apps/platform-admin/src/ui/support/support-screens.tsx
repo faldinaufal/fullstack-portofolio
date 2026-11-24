@@ -10,7 +10,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -76,14 +76,14 @@ function Filters({
           onChange={(e) => list.set({ q: e.target.value || undefined })}
         />
         {statuses && (
-          <SelectField
+          <Select
             label="Status"
             options={[
               { value: '', label: 'All' },
               ...statuses.map((s) => ({ value: s, label: label(s) })),
             ]}
             value={list.query.status ?? ''}
-            onChange={(e) => list.set({ status: e.target.value || undefined })}
+            onValueChange={(value) => list.set({ status: value || undefined })}
           />
         )}
       </CardContent>

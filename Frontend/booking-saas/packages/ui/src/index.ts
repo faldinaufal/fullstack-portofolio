@@ -20,7 +20,14 @@ export { Icon, TemporaMark, type IconName, type IconProps } from './components/i
 export { KpiCard, type KpiCardProps } from './components/kpi-card.js';
 export { LineChart, type LineChartProps } from './components/line-chart.js';
 export { MonthCalendar, type MonthCalendarProps } from './components/month-calendar.js';
-export { SelectField, type SelectFieldProps } from './components/select-field.js';
+export {
+  Select,
+  type MultipleSelectProps,
+  type SelectIcon,
+  type SelectOption,
+  type SelectProps,
+  type SingleSelectProps,
+} from './components/select.js';
 export { SearchField, type SearchFieldProps } from './components/search-field.js';
 export { TextField, type TextFieldProps } from './components/text-field.js';
 export { ThemeProvider, ThemeToggle, type ThemeToggleProps } from './components/theme.js';
