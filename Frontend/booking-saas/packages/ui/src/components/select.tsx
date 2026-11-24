@@ -91,7 +91,7 @@ function Checkbox({ state }: Readonly<{ state: SelectAllState | boolean }>) {
         'flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border',
         checked || mixed
           ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border bg-surface',
+          : 'border-border-strong bg-surface',
       )}
     >
       {checked && <Icon name="check" size={13} strokeWidth={3} />}
@@ -323,7 +323,7 @@ export function Select(props: Readonly<SelectProps>) {
         className={cn(
           'flex h-12 w-full items-center gap-2 rounded-xl border bg-surface px-3 text-left text-[15px] text-foreground',
           'disabled:cursor-not-allowed disabled:opacity-60',
-          error ? 'border-danger' : 'border-border',
+          error ? 'border-danger' : 'border-border-strong',
           triggerClassName,
         )}
       >

@@ -5,7 +5,7 @@ import { ApiError } from '@tempora/api-client';
 import { describe, expect, it, vi } from 'vitest';
 import { RequestError } from '../shared/domain/request-error';
 import { createHttpAccountRepository } from './data/http-account-repository';
-import { signupProblems } from './domain/account';
+import { passwordStrength, signupProblems } from './domain/account';
 
 const valid = {
   name: 'Ines Halvorsen',
@@ -48,5 +48,15 @@ describe('account repository', () => {
     const repository = createHttpAccountRepository(client as never);
     await expect(repository.signup(valid)).rejects.toEqual(expect.any(RequestError));
     await expect(repository.signup(valid)).rejects.toMatchObject({ code: 'EMAIL_TAKEN' });
+  });
+});
+
+describe('passwordStrength', () => {
+  it('follows the password rules', () => {
+    expect(passwordStrength('')).toBe(0);
+    expect(passwordStrength('short')).toBe(1);
+    expect(passwordStrength('lena.fischer-2026', 'lena.fischer@veloria.test')).toBe(1);
+    expect(passwordStrength('quiet harbor ok')).toBe(2);
+    expect(passwordStrength('a calm walk by the quay')).toBe(3);
   });
 });

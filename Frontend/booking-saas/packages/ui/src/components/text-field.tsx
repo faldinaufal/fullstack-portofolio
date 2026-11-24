@@ -12,6 +12,10 @@ export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string | undefined;
   /** Extra element on the right of the label row, e.g. a "Forgot password?" link. */
   labelAction?: ReactNode;
+  /** Decorative icon inside the field, on the left. */
+  leading?: ReactNode;
+  /** Element inside the field, on the right: an icon or a small button. */
+  trailing?: ReactNode;
 }
 
 /**
@@ -23,6 +27,8 @@ export function TextField({
   hint,
   error,
   labelAction,
+  leading,
+  trailing,
   id,
   className,
   ...props
@@ -41,16 +47,29 @@ export function TextField({
         </label>
         {labelAction}
       </div>
-      <input
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        className={cn(
-          'h-12 rounded-xl border bg-surface px-3.5 text-[15px] text-foreground placeholder:text-muted',
-          error ? 'border-danger' : 'border-border',
+      <div className="relative flex items-center">
+        {leading && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3.5 flex text-muted"
+          >
+            {leading}
+          </span>
         )}
-        {...props}
-      />
+        <input
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className={cn(
+            'h-12 w-full rounded-lg border bg-surface px-3.5 text-[15px] text-foreground placeholder:text-muted',
+            error ? 'border-danger' : 'border-border-strong',
+            leading && 'pl-11',
+            trailing && 'pr-12',
+          )}
+          {...props}
+        />
+        {trailing && <span className="absolute right-1.5 flex">{trailing}</span>}
+      </div>
       {hint && (
         <p id={hintId} className="text-[13px] text-muted">
           {hint}

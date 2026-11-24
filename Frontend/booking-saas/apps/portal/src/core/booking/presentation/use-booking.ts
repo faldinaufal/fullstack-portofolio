@@ -5,7 +5,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { BranchPage, BusinessPage, PublicService, SlotQuery } from '../domain/booking';
-import { bookableDays, summarizeHours, therapistsFor } from '../domain/booking';
+import {
+  bookableDays,
+  policyLines,
+  summarizeHours,
+  therapistsFor,
+  weekHours,
+} from '../domain/booking';
 import { useDependencies } from '../../shared/presentation/dependencies';
 
 export const formatPrice = (cents: number) =>
@@ -45,9 +51,11 @@ export function useBusinessPage(slug: string) {
     select: (business: BusinessPage) => ({
       ...business,
       services: business.services.map(toServiceView),
+      policyLines: policyLines(business.policy, business.maxAdvanceDays),
       branches: business.branches.map((branch) => ({
         ...branch,
         hours: summarizeHours(branch.openingHours),
+        week: weekHours(branch.openingHours),
       })),
     }),
   });

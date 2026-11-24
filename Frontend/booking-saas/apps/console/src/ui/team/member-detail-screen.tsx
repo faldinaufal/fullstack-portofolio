@@ -31,6 +31,7 @@ import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 import { useWeekHours, WeekHoursEditor } from '@/ui/common/week-hours-editor';
 import { formText } from '@/ui/common/form-values';
+import { MemberPhotoCard } from './member-photo-card';
 
 type Detail = NonNullable<ReturnType<typeof useMember>['data']>;
 
@@ -67,6 +68,14 @@ export function MemberDetailScreen({ id, mine = false }: Readonly<{ id: string; 
             </Alert>
           ) : (
             <div className="grid gap-[22px] xl:grid-cols-2">
+              {member.data.canManageTimeOff && (
+                <MemberPhotoCard
+                  id={member.data.id}
+                  name={member.data.name}
+                  photoUrl={member.data.photoUrl}
+                  mine={mine || member.data.id === me.membershipId}
+                />
+              )}
               <WorkingHoursCard
                 key={`hours-${member.data.workingHours.length}`}
                 member={member.data}

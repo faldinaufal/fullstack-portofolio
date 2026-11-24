@@ -6,11 +6,11 @@ import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '../lib/cn.js';
 
 /**
- * Pill buttons from the design. Use `buttonVariants()` on a Next.js <Link> for links that
+ * Buttons from the design (8 px radius). Use `buttonVariants()` on a Next.js <Link> for links that
  * look like buttons, and <Button> for real actions.
  */
 export const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {

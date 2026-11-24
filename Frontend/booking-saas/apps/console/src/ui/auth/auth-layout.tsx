@@ -28,7 +28,10 @@ export function AuthLayout({
           className="absolute -right-24 -bottom-24 size-[420px] rounded-full bg-white/10"
         />
         <p className="flex items-center gap-2.5 text-xl font-bold">
-          <TemporaMark /> Tempora Console
+          <span className="flex size-10 items-center justify-center rounded-xl bg-white">
+            <TemporaMark size={18} />
+          </span>
+          Tempora Console
         </p>
         <div className="relative flex flex-col gap-6">
           <p className="text-[34px] leading-tight font-extrabold">

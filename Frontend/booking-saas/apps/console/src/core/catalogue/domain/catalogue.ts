@@ -21,7 +21,28 @@ export interface BusinessSettings {
   slug: string;
   version: number;
   bookingSettings: BookingSettings;
+  /** Uploaded images (FSD 6.15); null until the owner adds one. */
+  logoUrl: string | null;
+  coverUrl: string | null;
   setup: SetupStatus;
+}
+
+export type ImageKind = 'logo' | 'cover';
+
+/** Same rules as the API (FSD 6.15): raster images only, size per kind. */
+export const IMAGE_RULES: Record<ImageKind, { maxBytes: number; types: readonly string[] }> = {
+  logo: { maxBytes: 1024 * 1024, types: ['image/png', 'image/jpeg', 'image/webp'] },
+  cover: { maxBytes: 4 * 1024 * 1024, types: ['image/jpeg', 'image/webp', 'image/png'] },
+};
+
+/** Why a chosen file cannot be used, before anything is uploaded; null when it is fine. */
+export function imageProblem(kind: ImageKind, file: { type: string; size: number }): string | null {
+  const rule = IMAGE_RULES[kind];
+  if (!rule.types.includes(file.type)) return 'Choose a PNG, JPEG or WebP image.';
+  if (file.size > rule.maxBytes) {
+    return `The file is too large: at most ${rule.maxBytes / (1024 * 1024)} MB.`;
+  }
+  return null;
 }
 
 export interface Service {
@@ -50,6 +71,9 @@ export interface CatalogueRepository {
     version: number,
     input: { name?: string; bookingSettings?: Partial<BookingSettings> },
   ): Promise<BusinessSettings>;
+  /** Uploads straight to storage, then asks the API to check and use it (FSD 6.15). */
+  uploadImage(kind: ImageKind, version: number, file: File): Promise<BusinessSettings>;
+  removeImage(kind: ImageKind, version: number): Promise<BusinessSettings>;
   listServices(): Promise<Service[]>;
   createService(input: ServiceInput): Promise<Service>;
   updateService(id: string, version: number, input: ServiceInput): Promise<Service>;

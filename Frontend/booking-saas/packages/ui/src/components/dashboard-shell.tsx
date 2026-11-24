@@ -7,7 +7,8 @@ import { useCallback, useState, type ComponentType, type ReactNode } from 'react
 import { cn } from '../lib/cn.js';
 import { buttonVariants } from './button.js';
 import { Drawer } from './drawer.js';
-import { Icon, TemporaMark, type IconName } from './icon.js';
+import { TemporaMark } from './brand.js';
+import { Icon, type IconName } from './icon.js';
 
 /** Any link component with an anchor-like API (Next.js <Link> or a plain <a>). */
 export type ShellLink = ComponentType<{
@@ -149,9 +150,9 @@ function ShellNavigation({
         <Link
           href={homeHref}
           aria-label={`${brand.title} home`}
-          className="flex size-11 items-center justify-center rounded-[14px] bg-primary text-primary-foreground"
+          className="flex size-11 items-center justify-center rounded-xl bg-primary-container"
         >
-          <TemporaMark size={24} />
+          <TemporaMark size={18} />
         </Link>
         <span aria-hidden="true" className="h-px w-8 bg-border" />
         {railItems.map((item) => (

@@ -95,6 +95,7 @@ COPY --from=backend-build --chown=node:node /out/migrate ./
 CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
 
 # ---- Next.js images: the "standalone" server plus only the files it needs ----
+# (standalone leaves out `.next/static` and `public/`, so both are copied next to it)
 FROM ${NODE_IMAGE} AS next-runtime
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -107,14 +108,17 @@ EXPOSE 3000
 FROM next-runtime AS portal
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/portal/.next/standalone ./
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/portal/.next/static ./Frontend/booking-saas/apps/portal/.next/static
+COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/portal/public ./Frontend/booking-saas/apps/portal/public
 CMD ["node", "Frontend/booking-saas/apps/portal/server.js"]
 
 FROM next-runtime AS console
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/console/.next/standalone ./
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/console/.next/static ./Frontend/booking-saas/apps/console/.next/static
+COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/console/public ./Frontend/booking-saas/apps/console/public
 CMD ["node", "Frontend/booking-saas/apps/console/server.js"]
 
 FROM next-runtime AS platform-admin
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/platform-admin/.next/standalone ./
 COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/platform-admin/.next/static ./Frontend/booking-saas/apps/platform-admin/.next/static
+COPY --from=frontend-build --chown=node:node /repo/Frontend/booking-saas/apps/platform-admin/public ./Frontend/booking-saas/apps/platform-admin/public
 CMD ["node", "Frontend/booking-saas/apps/platform-admin/server.js"]

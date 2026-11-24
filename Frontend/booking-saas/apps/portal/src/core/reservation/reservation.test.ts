@@ -22,6 +22,7 @@ const dto = {
   branchName: 'Downtown',
   serviceName: 'Deep Tissue Massage',
   therapist: 'Ines H.',
+  therapistPhotoUrl: null,
   startsAt: '2026-11-23T15:00:00.000Z',
   endsAt: '2026-11-23T16:00:00.000Z',
   priceCents: 4217,

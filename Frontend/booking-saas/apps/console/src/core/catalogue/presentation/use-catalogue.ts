@@ -4,8 +4,10 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BookingSettings, Service, ServiceInput } from '../domain/catalogue';
+import type { BookingSettings, ImageKind, Service, ServiceInput } from '../domain/catalogue';
 import { formatDollars } from '../domain/catalogue';
+
+export { IMAGE_RULES, imageProblem, type ImageKind } from '../domain/catalogue';
 import { useDependencies } from '../../shared/presentation/dependencies';
 
 const SETTINGS = ['catalogue', 'settings'] as const;
@@ -37,6 +39,25 @@ export function toServiceRow(service: Service): ServiceRow {
 export function useBusinessSettings(enabled = true) {
   const { catalogue } = useDependencies();
   return useQuery({ queryKey: SETTINGS, queryFn: () => catalogue.getSettings(), enabled });
+}
+
+/** Upload or remove the logo or cover photo (FSD 6.15). */
+export function useBusinessImage(kind: ImageKind) {
+  const { catalogue } = useDependencies();
+  const queryClient = useQueryClient();
+  const onSuccess = (settings: Awaited<ReturnType<typeof catalogue.getSettings>>) =>
+    queryClient.setQueryData(SETTINGS, settings);
+  return {
+    upload: useMutation({
+      mutationFn: ({ version, file }: { version: number; file: File }) =>
+        catalogue.uploadImage(kind, version, file),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (version: number) => catalogue.removeImage(kind, version),
+      onSuccess,
+    }),
+  };
 }
 
 export function useUpdateBusinessSettings() {

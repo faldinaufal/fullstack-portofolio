@@ -10,7 +10,9 @@ const business = (overrides: Partial<Business>): Business => ({
   slug: 'lumen',
   name: 'Lumen Wellness Studio',
   offering: 'Massage and physiotherapy',
+  serviceNames: ['Swedish Massage'],
   branchNames: ['Downtown'],
+  logoUrl: null,
   ...overrides,
 });
 

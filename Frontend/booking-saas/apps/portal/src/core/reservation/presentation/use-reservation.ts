@@ -13,6 +13,7 @@ import {
   keepWaitingForPayment,
   reserve,
   timeLeft,
+  type InvoiceQuery,
   type NewReservation,
   type Reservation,
   type ReservationStatus,
@@ -21,7 +22,10 @@ import {
 
 export type {
   Invoice,
+  InvoiceQuery,
+  InvoiceStatus,
   InvoiceSummary,
+  InvoiceTotals,
   Reservation,
   ReservationStatus,
   ReservationSummary,
@@ -140,6 +144,8 @@ export function useCancelReservation(id: string) {
     onSuccess: (reservation: Reservation) => {
       queryClient.setQueryData(key(id), reservation);
       void queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      // Cancelling voids the invoice (FSD 6.7).
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
   });
 }
@@ -228,11 +234,19 @@ export function useInvoice(id: string) {
   });
 }
 
-export function useMyInvoices(page: number) {
+export function useMyInvoices(query: InvoiceQuery) {
   const { reservations } = useDependencies();
   return useQuery({
-    queryKey: ['invoices', page],
-    queryFn: () => reservations.invoices(page),
+    queryKey: ['invoices', 'list', query],
+    queryFn: () => reservations.invoices(query),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useInvoiceTotals() {
+  const { reservations } = useDependencies();
+  return useQuery({
+    queryKey: ['invoices', 'totals'],
+    queryFn: () => reservations.invoiceTotals(),
   });
 }

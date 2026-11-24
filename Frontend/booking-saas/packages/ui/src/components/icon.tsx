@@ -52,6 +52,17 @@ const PATHS = {
   spine: 'M12 3v18M9 5h6M8.5 9h7M9 13h6M8.5 17h7',
   leaf: 'M12 4c-4 4-4 9 0 16 4-7 4-12 0-16zM12 11v9',
   pilates: 'M12 6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M7 10l5 1 5-1M12 11v4l-3 5M12 15l3 5',
+  eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+  'eye-off':
+    'M3 3l18 18M10.6 5.6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.9 3.7M6.6 6.6C3.9 8.3 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4.4-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  phone: 'M8 3h8v18H8zM11 18h2',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1',
+  lock: 'M6 11h12v10H6zM8.5 11V7.5a3.5 3.5 0 0 1 7 0V11M12 15v2',
+  'check-circle': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8.5 12.5l2.5 2.5 4.5-5',
+  'user-search':
+    'M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M3 21v-1a6 6 0 0 1 7-5.9M17.5 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5M21 22l-1.7-1.7',
+  'calendar-edit': 'M4 6h16v6M4 6v14h7M4 10h16M8 3v4M16 3v4M18.5 14.5l2 2-5 5H13.5v-2z',
+  receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -78,32 +89,6 @@ export function Icon({ name, size = 20, strokeWidth = 1.9, ...props }: Readonly<
         d={PATHS[name]}
         stroke="currentColor"
         strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** The Tempora mark: a clock face in a circle. */
-export function TemporaMark({
-  size = 28,
-  className,
-}: Readonly<{ size?: number; className?: string }>) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 28 28"
-      fill="none"
-      aria-hidden="true"
-      className={className}
-    >
-      <circle cx="14" cy="14" r="11.5" stroke="currentColor" strokeWidth="2.2" />
-      <path
-        d="M14 8v6l4 2.5"
-        stroke="currentColor"
-        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -60,6 +60,8 @@ export interface TimeOff {
 
 /** A member with their schedule (FSD 2.2 Team member detail, My schedule). */
 export interface MemberDetail extends Member {
+  /** Therapist photo shown to customers (FSD 6.15); null shows the initials. */
+  photoUrl: string | null;
   workingHours: WorkingHours[];
   services: { id: string; name: string }[];
   timeOff: TimeOff[];
@@ -75,6 +77,8 @@ export interface TeamRepository {
     input: { startsAt: Date; endsAt: Date; reason?: string },
   ): Promise<TimeOff>;
   removeTimeOff(id: string, timeOffId: string): Promise<void>;
+  uploadPhoto(id: string, file: File): Promise<MemberDetail>;
+  removePhoto(id: string): Promise<MemberDetail>;
   updateMember(id: string, change: MemberChange): Promise<Member>;
   deactivate(id: string): Promise<Member>;
   reactivate(id: string): Promise<Member>;
@@ -114,4 +118,19 @@ export function canManage(
   return (
     actor.role === 'manager' && member.role === 'staff' && member.branch?.id === actor.branchId
   );
+}
+
+/** Same rules as the API (FSD 6.15): a PNG, JPEG or WebP of at most 1 MB. */
+export const PHOTO_RULE = {
+  maxBytes: 1024 * 1024,
+  types: ['image/png', 'image/jpeg', 'image/webp'],
+} as const;
+
+/** Why a chosen photo cannot be used, before anything is uploaded; null when it is fine. */
+export function photoProblem(file: { type: string; size: number }): string | null {
+  if (!(PHOTO_RULE.types as readonly string[]).includes(file.type)) {
+    return 'Choose a PNG, JPEG or WebP image.';
+  }
+  if (file.size > PHOTO_RULE.maxBytes) return 'The file is too large: at most 1 MB.';
+  return null;
 }

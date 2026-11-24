@@ -141,4 +141,10 @@ export function useRevokeSession() {
   });
 }
 
-export { PASSWORD_MIN_LENGTH, signupProblems, type Customer } from '../domain/account';
+export {
+  PASSWORD_MIN_LENGTH,
+  passwordStrength,
+  signupProblems,
+  type Customer,
+  type PasswordStrength,
+} from '../domain/account';

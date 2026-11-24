@@ -102,6 +102,7 @@ const ACTIONS: Record<string, string> = {
   'membership.deactivated': 'Member deactivated',
   'membership.reactivated': 'Member reactivated',
   'membership.services_replaced': 'Services of a therapist changed',
+  'membership.photo_changed': 'Photo of a therapist changed',
   'membership.working_hours_replaced': 'Working hours changed',
   'invitation.created': 'Invitation sent',
   'invitation.resent': 'Invitation resent',

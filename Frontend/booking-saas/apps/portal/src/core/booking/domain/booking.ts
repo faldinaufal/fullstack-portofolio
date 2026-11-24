@@ -33,12 +33,23 @@ export interface PublicBranch {
   closures: Closure[];
 }
 
+/** Booking rules the business has set (FSD 6.1, 6.5), shown on its page. */
+export interface BookingPolicy {
+  minLeadHours: number;
+  cancellationCutoffHours: number;
+  maxCustomerReschedules: number;
+}
+
 export interface BusinessPage {
   slug: string;
   name: string;
   available: boolean;
   timeZone: string;
   maxAdvanceDays: number;
+  policy: BookingPolicy;
+  /** Uploaded by the owner (FSD 6.15); null shows initials and the brand gradient. */
+  logoUrl: string | null;
+  coverUrl: string | null;
   branches: PublicBranch[];
   services: PublicService[];
 }
@@ -46,6 +57,8 @@ export interface BusinessPage {
 export interface Therapist {
   id: string;
   displayName: string;
+  /** Uploaded in the Console (FSD 6.15); null shows the initials. */
+  photoUrl: string | null;
   serviceIds: string[];
 }
 
@@ -147,4 +160,53 @@ export function therapistsFor(
   serviceId: string,
 ): Therapist[] {
   return branch.therapists.filter((t) => t.serviceIds.includes(serviceId));
+}
+
+const plural = (count: number, one: string, many = `${one}s`) =>
+  `${count} ${count === 1 ? one : many}`;
+
+/**
+ * The policy as short sentences for the business page. Payment is always taken at booking
+ * and an unpaid hold lasts 30 minutes (FSD 6.3); cancelling online is only for unpaid
+ * bookings (FSD 6.7).
+ */
+export function policyLines(policy: BookingPolicy, maxAdvanceDays: number): string[] {
+  const reschedules =
+    policy.maxCustomerReschedules === 0
+      ? 'Contact the business to move a confirmed booking.'
+      : `Reschedule online up to ${plural(policy.cancellationCutoffHours, 'hour')} before the session, ${plural(policy.maxCustomerReschedules, 'time')} per booking.`;
+  return [
+    policy.minLeadHours > 0
+      ? `Book at least ${plural(policy.minLeadHours, 'hour')} ahead, up to ${plural(maxAdvanceDays, 'day')} ahead.`
+      : `Book up to ${plural(maxAdvanceDays, 'day')} ahead.`,
+    'Pay when you book: the time is held for 30 minutes while you pay.',
+    reschedules,
+  ];
+}
+
+export interface DayHours {
+  weekday: number;
+  label: string;
+  /** "09:00–18:00", or null when closed. */
+  hours: string | null;
+}
+
+const WEEKDAYS_LONG = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+
+/** One row per weekday, Monday first, for an opening-hours table. */
+export function weekHours(hours: OpeningHours[]): DayHours[] {
+  const byDay = new Map(hours.map((h) => [h.weekday, `${h.opensAt}–${h.closesAt}`]));
+  return WEEK_ORDER.map((weekday) => ({
+    weekday,
+    label: WEEKDAYS_LONG[weekday]!,
+    hours: byDay.get(weekday) ?? null,
+  }));
 }

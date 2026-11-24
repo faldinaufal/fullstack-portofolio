@@ -4,6 +4,7 @@
 import type { ApiClient } from '@tempora/api-client';
 import {
   AcceptedResponseSchema,
+  ImageUploadSchema,
   InvitationListSchema,
   InvitationPreviewSchema,
   InvitationSchema,
@@ -17,6 +18,7 @@ import {
   type Member as MemberDto,
 } from '@tempora/contracts';
 import { z } from 'zod';
+import { putToStorage } from '../../shared/data/direct-upload';
 import { request } from '../../shared/data/to-request-error';
 import type { Invitation, Member, MemberDetail, TeamRepository, TimeOff } from '../domain/team';
 
@@ -37,6 +39,7 @@ const toTimeOff = (dto: TimeOffDto): TimeOff => ({
 
 export const toMemberDetail = (dto: MemberDetailDto): MemberDetail => ({
   ...toMember(dto),
+  photoUrl: dto.photoUrl,
   workingHours: dto.workingHours.map((h) => ({ ...h })),
   services: dto.services.map((s) => ({ ...s })),
   timeOff: dto.timeOff.map(toTimeOff),
@@ -62,6 +65,33 @@ export function createHttpTeamRepository(client: ApiClient): TeamRepository {
     getMember: (id) =>
       request(async () =>
         toMemberDetail(await client.get(`${C}/members/${id}`, { schema: MemberDetailSchema })),
+      ),
+
+    /** Sign, upload straight to storage, then confirm (FSD 6.15). */
+    uploadPhoto: (id, file) =>
+      request(async () => {
+        const upload = await client.post(`${C}/members/${id}/photo/upload-url`, {
+          schema: ImageUploadSchema,
+          body: { contentType: file.type, sizeBytes: file.size },
+        });
+        await putToStorage(upload, file);
+        return toMemberDetail(
+          await client.request(`${C}/members/${id}/photo`, {
+            method: 'PUT',
+            schema: MemberDetailSchema,
+            body: { key: upload.key },
+          }),
+        );
+      }),
+
+    removePhoto: (id) =>
+      request(async () =>
+        toMemberDetail(
+          await client.request(`${C}/members/${id}/photo`, {
+            method: 'DELETE',
+            schema: MemberDetailSchema,
+          }),
+        ),
       ),
 
     replaceWorkingHours: (id, hours) =>
