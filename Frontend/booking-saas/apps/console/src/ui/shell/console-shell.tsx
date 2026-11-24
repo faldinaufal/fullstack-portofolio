@@ -9,7 +9,6 @@ import {
   DashboardShell,
   Icon,
   SearchField,
-  Select,
   ThemeToggle,
   type ShellNavItem,
 } from '@tempora/ui';
@@ -25,12 +24,6 @@ const ALL: Role[] = ['owner', 'manager', 'staff'];
 const LEADS: Role[] = ['owner', 'manager'];
 
 /** Sidebar entries and who sees them (FSD 2.2: the sidebar shows only what the role may use). */
-/** Header branch picker: still demo data, like the "Demo data" badge beside it. */
-const DEMO_BRANCHES = ['All branches', 'Downtown', 'Riverside', 'Northgate'].map((name) => ({
-  value: name,
-  label: name,
-}));
-
 const NAV: (Omit<ShellNavItem, 'active'> & { roles: Role[] })[] = [
   { href: '/', label: 'Dashboard', icon: 'dashboard', roles: ALL },
   { href: '/calendar', label: 'Calendar', icon: 'calendar', roles: ALL },
@@ -88,17 +81,7 @@ export function ConsoleShell({
             {/* Secondary status; hidden on phones to keep the top bar to one row. */}
             <div className="hidden items-center gap-2.5 md:flex">
               <ApiStatusBadge />
-              <span className="rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-bold text-muted">
-                Demo data
-              </span>
             </div>
-            <Select
-              label="Branch"
-              options={DEMO_BRANCHES}
-              className="flex-row items-center gap-2"
-              labelClassName="sr-only text-[13px] font-normal text-muted sm:not-sr-only"
-              triggerClassName="h-10 w-auto min-w-[150px] rounded-[10px] px-2.5 text-sm font-semibold"
-            />
             <ThemeToggle />
             <div className="flex min-h-11 items-center gap-2.5 px-1" title={session.email}>
               <span

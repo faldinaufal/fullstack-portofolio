@@ -136,7 +136,7 @@ Legend: ✅ allowed · 🏢 own branch only · 👤 own records only · 👁 rea
 - Support views show what the owner sees (every branch, customer contact details), with no actions and no booking timeline. Nothing can be exported.
 
 ## 2. Screens
-Every screen supports light/dark mode and works from 360 px wide. List screens have loading, empty and error states; destructive actions ask for confirmation.
+Every screen supports light/dark mode and works from 360 px wide. List screens have loading, empty and error states; destructive actions ask for confirmation. The visual design follows the Figma file as described in [DESIGN.md](DESIGN.md); where Figma and this FSD disagree, this FSD wins.
 
 ### 2.1 Tempora Portal (`portal.<domain>`)
 | Screen | Route | Purpose | Roles |
@@ -981,11 +981,16 @@ These prove the PRD's core promises and are required to pass before merge.
 5. **Rollback:** redeploy the previous container image and Vercel deployment; because migrations are backward compatible, the database does not need to be rolled back.
 
 ### 10.3 Demo data and safeguards
-- Seed script creates the demo tenants (Lumen Wellness Studio, Harbor Physio Clinic), branches, services, therapists, working hours, 90 days of past bookings with invoices and payments, and upcoming bookings.
-- **Demo accounts**, one per role, use addresses at `@demo.<domain>`. Emails to these addresses are **not sent out**: they are stored and shown in a **public demo inbox** (`portal.<domain>/demo-inbox`, linked from every login page), so visitors can complete the email 2FA and see booking emails.
+- Seed script creates the demo tenants (Lumen Wellness Studio, Harbor Physio Clinic), branches, services, therapists, working hours, 90 days of past bookings with invoices and payments, and upcoming bookings (14 days).
+  - The data is built from the current time and the platform time zone only, with a fixed random seed: the same moment gives the same rows. It follows the database's rules: one active booking per therapist at a time, the 30-minute grid inside working hours, gapless invoice numbers per tenant and year, and statuses with their timestamps (completed and no-show marked, cancellations by the customer before payment or by the team with a reason, expired holds). Each booking also gets its audit history (its timeline), and the last two weeks' confirmation emails appear as sent.
+  - It runs with the owner role (it writes across tenants, so it bypasses RLS), in one transaction. Seeding removes the demo tenants with everything in them and creates them again, so **seeding is also the reset**; other tenants are not touched. Demo accounts are matched by email: one still used elsewhere (a visitor invited it to their own business) is kept and gets the demo password again. Everyone signed in with a demo account is logged out.
+  - It refuses to run when another tenant holds a demo slug or invoice prefix.
+  - `pnpm --filter @tempora/api demo:seed` seeds only when the demo is missing; `--reset` starts again. `docker compose up` runs it once after the migrations, so local changes survive a restart.
+- **Demo accounts**, one per role (owner, manager, staff, customer, platform admin), share one password (`DEMO_PASSWORD`). Locally they use `@veloria.test` addresses (a reserved `.test` domain) and the codes arrive in Mailpit. On the live site they use addresses at `@demo.<domain>`. Emails to these addresses are **not sent out**: they are stored and shown in a **public demo inbox** (`portal.<domain>/demo-inbox`, linked from every login page), so visitors can complete the email 2FA and see booking emails.
 - Emails to any other address are sent normally through the email provider.
 - **Demo platform admin** can only act on the demo tenants; tenants created by visitors through sign-up are hidden from it.
-- A nightly job resets the demo tenants to the seed state, so visitors can try destructive actions freely.
+- A nightly job resets the demo tenants to the seed state (`demo:seed --reset`), so visitors can try destructive actions freely.
+- The demo inbox, the demo platform admin's scope, the nightly reset and the visitor clean-up come with the deployment; until then the seed and the demo accounts work as above.
 - Visitor sign-ups are rate limited and cleaned up after 7 days of inactivity.
 
 ### 10.4 Environment variables
