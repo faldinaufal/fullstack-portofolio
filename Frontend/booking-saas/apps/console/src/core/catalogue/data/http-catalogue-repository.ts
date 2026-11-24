@@ -2,7 +2,13 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import type { ApiClient } from '@tempora/api-client';
-import { ServiceListSchema, ServiceSchema, TenantSettingsSchema } from '@tempora/contracts';
+import {
+  ImageUploadSchema,
+  ServiceListSchema,
+  ServiceSchema,
+  TenantSettingsSchema,
+} from '@tempora/contracts';
+import { putToStorage } from '../../shared/data/direct-upload';
 import { request } from '../../shared/data/to-request-error';
 import type { CatalogueRepository } from '../domain/catalogue';
 
@@ -18,6 +24,30 @@ export function createHttpCatalogueRepository(client: ApiClient): CatalogueRepos
           method: 'PATCH',
           schema: TenantSettingsSchema,
           body: input,
+          headers: { 'If-Match': String(version) },
+        }),
+      ),
+
+    uploadImage: (kind, version, file) =>
+      request(async () => {
+        const upload = await client.post(`${C}/tenant/${kind}/upload-url`, {
+          schema: ImageUploadSchema,
+          body: { contentType: file.type, sizeBytes: file.size },
+        });
+        await putToStorage(upload, file);
+        return client.request(`${C}/tenant/${kind}`, {
+          method: 'PUT',
+          schema: TenantSettingsSchema,
+          body: { key: upload.key },
+          headers: { 'If-Match': String(version) },
+        });
+      }),
+
+    removeImage: (kind, version) =>
+      request(() =>
+        client.request(`${C}/tenant/${kind}`, {
+          method: 'DELETE',
+          schema: TenantSettingsSchema,
           headers: { 'If-Match': String(version) },
         }),
       ),

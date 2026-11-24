@@ -49,14 +49,32 @@ export function signupProblems(input: SignupInput): Record<string, string> {
   const problems: Record<string, string> = {};
   if (input.name.trim().length < 2) problems.name = 'Enter your name.';
   if (!/^\S+@\S+\.\S+$/.test(input.email.trim())) problems.email = 'Enter a valid email address.';
-  const local = input.email.trim().toLowerCase().split('@')[0] ?? '';
   if (input.password.length < PASSWORD_MIN_LENGTH) {
     problems.password = `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-  } else if (local.length >= 3 && input.password.toLowerCase().includes(local)) {
+  } else if (containsEmail(input.password, input.email)) {
     problems.password = 'Must not contain your email address.';
   }
   if (input.phone && !/^\+[1-9]\d{6,14}$/.test(input.phone)) {
     problems.phone = 'Use the international format, e.g. +15550147123.';
   }
   return problems;
+}
+
+/** FSD 6.11: a password must not contain the part of the email before the `@`. */
+function containsEmail(password: string, email: string): boolean {
+  const local = email.trim().toLowerCase().split('@')[0] ?? '';
+  return local.length >= 3 && password.toLowerCase().includes(local);
+}
+
+/** Feedback while typing a new password: 0 = nothing typed, 1 = not allowed yet, 2–3 = allowed. */
+export type PasswordStrength = 0 | 1 | 2 | 3;
+
+/**
+ * How far a new password is past the rules (FSD 6.11). Only length and the email rule count,
+ * the same checks the API makes; 16 characters or more is shown as strong.
+ */
+export function passwordStrength(password: string, email = ''): PasswordStrength {
+  if (password.length === 0) return 0;
+  if (password.length < PASSWORD_MIN_LENGTH || containsEmail(password, email)) return 1;
+  return password.length >= 16 ? 3 : 2;
 }

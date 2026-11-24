@@ -10,6 +10,7 @@ import {
   PortalBookingListSchema,
   PortalInvoiceListSchema,
   PortalInvoiceSchema,
+  PortalInvoiceTotalsSchema,
   type PortalBooking,
   type PortalBookingDetail,
   type PortalInvoice,
@@ -38,11 +39,13 @@ export function toReservationSummary(dto: PortalBooking): ReservationSummary {
     branchName: dto.branchName,
     serviceName: dto.serviceName,
     therapist: dto.therapist,
+    therapistPhotoUrl: dto.therapistPhotoUrl,
     startsAt: new Date(dto.startsAt),
     endsAt: new Date(dto.endsAt),
     priceCents: dto.priceCents,
     timeZone: dto.timeZone,
     invoiceNumber: dto.invoiceNumber,
+    actions: dto.actions,
   };
 }
 
@@ -60,7 +63,6 @@ export function toReservation(dto: PortalBookingDetail): Reservation {
       paidAt: dto.invoice.paidAt ? new Date(dto.invoice.paidAt) : null,
     },
     payBy: dto.payBy ? new Date(dto.payBy) : null,
-    actions: dto.actions,
     rescheduling: dto.rescheduling && {
       remaining: dto.rescheduling.remaining,
       until: new Date(dto.rescheduling.until),
@@ -195,9 +197,12 @@ export function createHttpReservationRepository(client: ApiClient): ReservationR
         ),
       ),
 
-    invoices: (page) =>
+    invoices: ({ page, status, search }) =>
       request(async () => {
-        const dto = await client.get(`${PT}/invoices?page=${page}&pageSize=20`, {
+        const params = new URLSearchParams({ page: String(page), pageSize: '20' });
+        if (status) params.set('status', status);
+        if (search?.trim()) params.set('q', search.trim());
+        const dto = await client.get(`${PT}/invoices?${params}`, {
           schema: PortalInvoiceListSchema,
         });
         return {
@@ -208,11 +213,15 @@ export function createHttpReservationRepository(client: ApiClient): ReservationR
             status: item.status,
             amountCents: item.amountCents,
             issuedAt: new Date(item.issuedAt),
+            paidAt: optionalDate(item.paidAt),
             businessName: item.businessName,
             serviceName: item.serviceName,
           })),
         };
       }),
+
+    invoiceTotals: () =>
+      request(() => client.get(`${PT}/invoices/summary`, { schema: PortalInvoiceTotalsSchema })),
   };
 }
 

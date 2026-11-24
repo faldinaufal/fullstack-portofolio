@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import type { Metadata } from 'next';
-import { MyBookingsScreen } from '@/ui/reservation/reservation-screens';
+import { MyBookingsScreen } from '@/ui/reservation/my-bookings-screen';
 
 export const metadata: Metadata = { title: 'My bookings', robots: { index: false } };
 

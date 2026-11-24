@@ -3,85 +3,129 @@
 
 'use client';
 
-import { Icon } from '@tempora/ui';
+import { BusinessLogo, buttonVariants, Icon } from '@tempora/ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import type { BusinessCardViewModel } from '@/core/directory/presentation/featured-businesses.view-model';
 import { useFeaturedBusinesses } from '@/core/directory/presentation/use-featured-businesses';
 
-const BANNERS = ['bg-primary', 'bg-[#5e8aa0]'];
-
+/** Directory results: every active business, or those matching the hero search. */
 export function FeaturedBusinesses() {
   const search = useSearchParams().get('q')?.trim() || undefined;
   const { status, businesses } = useFeaturedBusinesses(search);
 
   return (
-    <div
-      className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-5"
-      aria-busy={status === 'loading'}
-    >
-      {status === 'loading' &&
-        [0, 1].map((key) => (
-          <div key={key} className="h-[300px] animate-pulse rounded-[20px] bg-surface-muted" />
-        ))}
-
-      {status === 'error' && (
-        <p role="alert" className="rounded-[20px] bg-danger-soft p-5 text-sm text-danger">
-          Businesses could not be loaded. Please try again.
+    <div className="flex flex-col gap-5">
+      {search && (
+        <p
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted"
+          aria-live="polite"
+        >
+          {status === 'ready' && (
+            <span>
+              {businesses.length} {businesses.length === 1 ? 'result' : 'results'} for “{search}”
+            </span>
+          )}
+          <Link href="/#businesses" className="font-semibold text-primary-text">
+            Clear search
+          </Link>
         </p>
       )}
 
-      {businesses.map((business, index) => (
-        <Link
-          key={business.id}
-          href={business.href}
-          className="flex flex-col overflow-hidden rounded-[20px] border border-border bg-surface text-foreground no-underline hover:border-primary"
-        >
-          <div
-            aria-hidden="true"
-            className={`relative h-[150px] overflow-hidden ${BANNERS[index % BANNERS.length]}`}
+      <div className="grid gap-5 lg:grid-cols-2" aria-busy={status === 'loading'}>
+        {status === 'loading' &&
+          [0, 1].map((key) => (
+            <div key={key} className="h-[300px] animate-pulse rounded-panel bg-surface-muted" />
+          ))}
+
+        {status === 'error' && (
+          <p
+            role="alert"
+            className="rounded-panel bg-danger-soft p-5 text-sm text-danger lg:col-span-2"
           >
-            <span className="absolute -top-10 -right-8 size-44 rounded-full bg-white/15" />
-            <span className="absolute bottom-[18px] left-5 flex size-14 items-center justify-center rounded-2xl bg-white text-xl font-extrabold text-[#2f5f78]">
-              {business.initial}
-            </span>
-          </div>
-          <div className="flex flex-col gap-2.5 p-5">
-            <p className="text-[19px] font-extrabold">{business.name}</p>
-            <p className="text-sm text-muted">{business.summary}</p>
-            <ul className="m-0 flex list-none flex-wrap gap-2 p-0" aria-label="Branches">
-              {business.branches.map((branch) => (
-                <li
-                  key={branch}
-                  className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-primary-text"
-                >
-                  {branch}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1.5 flex items-center gap-1.5 text-sm font-bold text-primary-text">
-              Book a session <Icon name="arrow-right" size={16} />
+            Businesses could not be loaded. Please try again.
+          </p>
+        )}
+
+        {businesses.map((business) => (
+          <BusinessCard key={business.id} business={business} />
+        ))}
+
+        {status === 'ready' && businesses.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-panel border border-dashed border-border p-10 text-center lg:col-span-2">
+            <Icon name="search" size={28} className="text-accent" />
+            <p className="font-bold">
+              {search ? `No business matches “${search}”` : 'No businesses are taking bookings yet'}
+            </p>
+            <p className="text-sm text-muted">
+              {search
+                ? 'Try another service, such as massage or physiotherapy.'
+                : 'Please check back soon.'}
             </p>
           </div>
-        </Link>
-      ))}
-
-      {status === 'ready' && search && businesses.length === 0 && (
-        <p className="text-muted">No business matches “{search}”.</p>
-      )}
-
-      {status === 'ready' && !search && (
-        <Link
-          href="/#for-business"
-          className="flex flex-col items-start justify-center gap-3 rounded-[20px] border-2 border-dashed border-border p-7 text-foreground no-underline hover:border-primary"
-        >
-          <Icon name="plus-circle" size={44} className="text-primary-text" strokeWidth={1.6} />
-          <p className="text-[19px] font-extrabold">Your business here</p>
-          <p className="text-sm leading-relaxed text-muted">
-            Take bookings and payments online with a branded booking page.
-          </p>
-          <p className="text-sm font-bold text-primary-text">List your business →</p>
-        </Link>
-      )}
+        )}
+      </div>
     </div>
+  );
+}
+
+function BusinessCard({ business }: Readonly<{ business: BusinessCardViewModel }>) {
+  const titleId = `business-${business.id}`;
+  return (
+    <article
+      aria-labelledby={titleId}
+      className="flex flex-col gap-5 rounded-panel border border-border-subtle bg-surface p-5 shadow-[0_1px_2px_rgba(31,28,27,0.04)] transition-shadow hover:shadow-[0_12px_32px_-14px_rgba(31,28,27,0.22)] sm:p-6"
+    >
+      <div className="flex items-start gap-4">
+        {/* The owner's logo, or the initials when none is uploaded (FSD 6.15). */}
+        <BusinessLogo name={business.name} url={business.logoUrl} className="size-14 text-lg" />
+        <div className="min-w-0">
+          <h3 id={titleId} className="text-xl font-bold tracking-tight">
+            {business.name}
+          </h3>
+          <p className="mt-1 text-sm text-muted">{business.summary}</p>
+        </div>
+      </div>
+
+      <p className="inline-flex items-center gap-1.5 self-start rounded-md bg-surface-muted px-2.5 py-1.5 text-xs font-semibold">
+        <Icon name="map-pin" size={14} className="shrink-0 text-accent" />
+        {business.branchLabel}
+      </p>
+
+      <div className="rounded-card bg-surface-muted p-4">
+        <p className="text-[11px] font-bold tracking-wider text-primary-text uppercase">Services</p>
+        <ul className="m-0 mt-2.5 flex list-none flex-wrap gap-2 p-0">
+          {business.services.map((service) => (
+            <li
+              key={service}
+              className="rounded-md border border-border-subtle bg-surface px-2.5 py-1 text-[13px] font-medium"
+            >
+              {service}
+            </li>
+          ))}
+          {business.moreServices > 0 && (
+            <li className="px-1 py-1 text-[13px] font-medium text-muted">
+              +{business.moreServices} more
+            </li>
+          )}
+        </ul>
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-1">
+        <Link
+          href={business.href}
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground hover:text-primary-text"
+        >
+          {business.branchLink}
+          <Icon name="chevron-right" size={16} />
+          <span className="sr-only"> of {business.name}</span>
+        </Link>
+        <Link href={business.bookHref} className={buttonVariants()}>
+          <Icon name="calendar" size={18} />
+          Book session
+          <span className="sr-only"> at {business.name}</span>
+        </Link>
+      </div>
+    </article>
   );
 }

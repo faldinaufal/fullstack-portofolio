@@ -14,6 +14,7 @@ import { toDateOnly, toWallTime } from '../branches/service.js';
 import { loadAvailabilityInput } from '../availability/load.js';
 import { notFound } from '../console-auth/access.js';
 import { availableSlots, todayIn } from '../availability/engine.js';
+import { imageUrl, type ObjectStorage } from '../../lib/storage/storage.js';
 
 /** "Daniel Kim" → "Daniel K.": enough for customers to choose, without the full name. */
 export function displayName(name: string): string {
@@ -36,6 +37,8 @@ export interface PublicCatalogueDeps {
   prisma: PrismaClient;
   /** Platform time zone (FSD 4.1 `APP_TIME_ZONE`). */
   timeZone: string;
+  /** Builds image URLs (FSD 6.15); null when no storage is configured. */
+  storage?: ObjectStorage | null;
   now?: () => Date;
 }
 
@@ -47,6 +50,7 @@ export interface PublicCatalogueDeps {
 export function createPublicCatalogue({
   prisma,
   timeZone,
+  storage = null,
   now = () => new Date(),
 }: PublicCatalogueDeps) {
   /** The tenant behind a slug, if it is public: not archived and bookable. */
@@ -126,7 +130,13 @@ export function createPublicCatalogue({
     async directory(query: string | undefined): Promise<Directory> {
       const pattern = query ? escapeLike(query) : null;
       const rows = await prisma.$queryRaw<
-        { slug: string; name: string; branch_names: string[]; service_names: string[] }[]
+        {
+          slug: string;
+          name: string;
+          branch_names: string[];
+          service_names: string[];
+          logo_key: string | null;
+        }[]
       >`SELECT * FROM public_directory(${pattern}, 50)`;
       return {
         items: rows.map((row) => ({
@@ -134,6 +144,7 @@ export function createPublicCatalogue({
           name: row.name,
           branchNames: row.branch_names,
           serviceNames: row.service_names,
+          logoUrl: imageUrl(storage, row.logo_key),
         })),
       };
     },
@@ -156,6 +167,13 @@ export function createPublicCatalogue({
           available: tenant.status === 'active',
           timeZone,
           maxAdvanceDays: tenant.maxAdvanceDays,
+          policy: {
+            minLeadHours: tenant.minLeadHours,
+            cancellationCutoffHours: tenant.cancellationCutoffHours,
+            maxCustomerReschedules: tenant.maxCustomerReschedules,
+          },
+          logoUrl: imageUrl(storage, tenant.logoKey),
+          coverUrl: imageUrl(storage, tenant.coverKey),
           branches: await publicBranches(tx, tenant.id),
           services: services.map(toPublicService),
         };
@@ -181,6 +199,7 @@ export function createPublicCatalogue({
           therapists: therapists.map((t) => ({
             id: t.id,
             displayName: displayName(t.teamAccount.name),
+            photoUrl: imageUrl(storage, t.photoKey),
             serviceIds: t.services.map((s) => s.serviceId),
           })),
           services: services.map(toPublicService),

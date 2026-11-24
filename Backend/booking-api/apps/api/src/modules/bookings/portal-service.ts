@@ -16,6 +16,7 @@ import { cancelBooking, closeCheckouts } from './cancel.js';
 import { createPortalInvoices } from './invoices.js';
 import { createReschedule } from './reschedule.js';
 import { portalBookingDetail, portalBookings } from './views.js';
+import type { ObjectStorage } from '../../lib/storage/storage.js';
 
 export interface PortalBookingServiceDeps {
   prisma: PrismaClient;
@@ -23,6 +24,8 @@ export interface PortalBookingServiceDeps {
   hashToken: TokenHasher;
   timeZone: string;
   portalUrl: string;
+  /** Builds therapist photo URLs (FSD 6.15); null without storage. */
+  storage?: ObjectStorage | null;
   now?: () => Date;
 }
 
@@ -45,16 +48,18 @@ export function createPortalBookingService({
   hashToken,
   timeZone,
   portalUrl,
+  storage = null,
   now = () => new Date(),
 }: PortalBookingServiceDeps) {
   const inTenant = <T>(tenantId: string, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId }, work);
+  const view = { timeZone, storage };
 
   const locate = (viewer: BookingViewer, bookingId: string | null) =>
     locateBooking(prisma, hashToken, viewer, bookingId, now());
 
   const load = (found: LocatedBooking) =>
-    inTenant(found.tenantId, (tx) => portalBookingDetail(tx, found.bookingId, now(), timeZone));
+    inTenant(found.tenantId, (tx) => portalBookingDetail(tx, found.bookingId, now(), view));
   const detailOf = async (found: LocatedBooking) => (await load(found)).detail;
 
   const core = {
@@ -69,8 +74,11 @@ export function createPortalBookingService({
         OR: [{ status: 'confirmed' }, { status: 'pending_payment', holdExpiresAt: { gt: at } }],
       };
       const where = query.when === 'upcoming' ? upcoming : { NOT: upcoming };
-      const { rows, total } = await withDbContext(prisma, { customerAccountId }, async (tx) => ({
-        total: await tx.booking.count({ where }),
+      const { rows, counts } = await withDbContext(prisma, { customerAccountId }, async (tx) => ({
+        counts: {
+          upcoming: await tx.booking.count({ where: upcoming }),
+          past: await tx.booking.count({ where: { NOT: upcoming } }),
+        },
         rows: await tx.booking.findMany({
           where,
           orderBy: { startsAt: query.when === 'upcoming' ? 'asc' : 'desc' },
@@ -84,9 +92,7 @@ export function createPortalBookingService({
       const items = new Map<string, PortalBookingList['items'][number]>();
       for (const tenantId of new Set(rows.map((r) => r.tenantId))) {
         const ids = rows.filter((r) => r.tenantId === tenantId).map((r) => r.id);
-        for (const booking of await inTenant(tenantId, (tx) =>
-          portalBookings(tx, ids, at, timeZone),
-        )) {
+        for (const booking of await inTenant(tenantId, (tx) => portalBookings(tx, ids, at, view))) {
           items.set(booking.id, booking);
         }
       }
@@ -94,7 +100,8 @@ export function createPortalBookingService({
         items: rows.flatMap((r) => items.get(r.id) ?? []),
         page: query.page,
         pageSize: query.pageSize,
-        total,
+        total: counts[query.when],
+        counts,
       };
     },
 
@@ -157,7 +164,7 @@ export function createPortalBookingService({
       timeZone,
       now,
     }),
-    ...createPortalInvoices({ prisma, inTenant, locate, timeZone }),
+    ...createPortalInvoices({ prisma, inTenant, locate, timeZone, now }),
   };
 }
 

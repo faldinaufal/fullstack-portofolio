@@ -3,6 +3,14 @@
 
 import { z } from 'zod';
 
+const STORAGE_KEYS = [
+  'S3_ENDPOINT',
+  'S3_BUCKET',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_PUBLIC_BASE_URL',
+] as const;
+
 const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -40,12 +48,35 @@ const EnvSchema = z
           return false;
         }
       }, 'Must be an IANA time zone, e.g. America/New_York.'),
+    /**
+     * Object storage for business images (FSD 6.15): Cloudflare R2 or the local SeaweedFS. Leave all unset
+     * to run without uploads; the pages then show initials instead of images.
+     */
+    S3_ENDPOINT: z.url().optional(),
+    /** Endpoint in upload URLs when browsers reach storage at another address. */
+    S3_UPLOAD_ENDPOINT: z.url().optional(),
+    S3_REGION: z.string().min(1).default('auto'),
+    S3_BUCKET: z.string().min(1).optional(),
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    S3_PUBLIC_BASE_URL: z.url().optional(),
   })
   // Half a Stripe setup would silently fall back to the demo provider: refuse to start instead.
   .refine((env) => !env.STRIPE_SECRET_KEY === !env.STRIPE_WEBHOOK_SECRET, {
     path: ['STRIPE_WEBHOOK_SECRET'],
     message: 'Set both STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET, or neither (demo payments).',
-  });
+  })
+  // Same for storage: a partial setup would fail on the first upload instead of at startup.
+  .refine(
+    (env) => {
+      const set = STORAGE_KEYS.filter((key) => env[key] !== undefined).length;
+      return set === 0 || set === STORAGE_KEYS.length;
+    },
+    {
+      path: ['S3_ENDPOINT'],
+      message: `Set all of ${STORAGE_KEYS.join(', ')}, or none (no uploads).`,
+    },
+  );
 
 export type Env = z.infer<typeof EnvSchema>;
 

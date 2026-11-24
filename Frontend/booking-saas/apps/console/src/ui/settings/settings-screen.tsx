@@ -14,11 +14,15 @@ import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { formText } from '@/ui/common/form-values';
 import { PageHeader } from '@/ui/common/page-header';
 import { RequestErrorAlert } from '@/ui/common/request-error';
+import { BusinessImagesCard } from './business-images-card';
 import { SupportAccessCard } from './support-access-card';
 
 type Settings = NonNullable<ReturnType<typeof useBusinessSettings>['data']>;
 
-/** FSD 2.2 Settings (owner): business name, booking settings (FSD 6.1), support access. */
+/**
+ * FSD 2.2 Settings (owner): business name, booking settings (FSD 6.1), logo and cover photo
+ * (FSD 6.15), support access.
+ */
 export function SettingsScreen() {
   const settings = useBusinessSettings();
   return (
@@ -36,6 +40,14 @@ export function SettingsScreen() {
             <BusinessSettingsForm key={settings.data.version} settings={settings.data} />
           </CardContent>
         </Card>
+      )}
+      {settings.data && (
+        <BusinessImagesCard
+          version={settings.data.version}
+          logoUrl={settings.data.logoUrl}
+          coverUrl={settings.data.coverUrl}
+          name={settings.data.name}
+        />
       )}
       <SupportAccessCard />
     </>

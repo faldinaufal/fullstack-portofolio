@@ -20,6 +20,7 @@ import { createPortalBookingService } from '../modules/bookings/portal-service.j
 import { createBookingService } from '../modules/bookings/service.js';
 import { createPortalAuthService } from '../modules/portal-auth/service.js';
 import { createPublicCatalogue } from '../modules/public/service.js';
+import { createMemoryStorage, type MemoryStorage } from '../lib/storage/memory-storage.js';
 import { createConsoleBookingService } from '../modules/console-bookings/service.js';
 import { createConsoleRecordsService } from '../modules/console-records/service.js';
 import { createConsoleLogService } from '../modules/console-logs/service.js';
@@ -87,6 +88,8 @@ export interface Harness {
   clock: { advance(ms: number): void; reset(): void };
   /** The demo payment provider, to build signed webhook events. */
   payments: DemoPaymentProvider;
+  /** In-memory object storage: `put` plays the browser's upload (FSD 6.15). */
+  storage: MemoryStorage;
   reset(): Promise<void>;
   close(): Promise<void>;
   /** Latest queued email of a template sent to an address. */
@@ -110,6 +113,7 @@ export async function createHarness(): Promise<Harness> {
     portalUrl: 'http://localhost:3000',
     now,
   });
+  const storage = createMemoryStorage();
   const rateLimiter = createPostgresRateLimiter(prisma, hashToken, now);
   const consoleBookings = createConsoleBookingService({
     prisma,
@@ -147,7 +151,12 @@ export async function createHarness(): Promise<Harness> {
       cookies: { secure: false, domain: undefined },
     },
     // New York observes daylight saving time, so the tests cover DST (FSD 9.2).
-    publicCatalogue: createPublicCatalogue({ prisma, timeZone: 'America/New_York', now }),
+    publicCatalogue: createPublicCatalogue({
+      prisma,
+      timeZone: 'America/New_York',
+      storage,
+      now,
+    }),
     bookings: {
       service: createBookingService({
         prisma,
@@ -155,6 +164,7 @@ export async function createHarness(): Promise<Harness> {
         hashToken,
         timeZone: 'America/New_York',
         portalUrl: 'http://localhost:3000',
+        storage,
         now,
       }),
       portal: createPortalBookingService({
@@ -163,6 +173,7 @@ export async function createHarness(): Promise<Harness> {
         hashToken,
         timeZone: 'America/New_York',
         portalUrl: 'http://localhost:3000',
+        storage,
         now,
       }),
     },
@@ -195,10 +206,10 @@ export async function createHarness(): Promise<Harness> {
       cookies: { secure: false, domain: undefined },
     },
     consoleModules: {
-      tenant: createTenantService({ prisma }),
+      tenant: createTenantService({ prisma, storage }),
       branches: createBranchService({ prisma, timeZone: 'America/New_York', now }),
       services: createServiceCatalogue({ prisma }),
-      schedules: createScheduleService({ prisma, timeZone: 'America/New_York', now }),
+      schedules: createScheduleService({ prisma, timeZone: 'America/New_York', storage, now }),
       bookings: consoleBookings,
       records: consoleRecords,
       reports: createReportService({ prisma, timeZone: 'America/New_York', now }),
@@ -220,6 +231,7 @@ export async function createHarness(): Promise<Harness> {
     prisma,
     owner,
     payments,
+    storage,
     clock: {
       advance: (ms) => {
         offsetMs += ms;

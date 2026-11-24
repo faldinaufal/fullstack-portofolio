@@ -6,8 +6,6 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { AppProviders } from '@/composition/app-providers';
 import { APP } from '@/ui/app-info';
-import { SiteFooter } from '@/ui/shell/site-footer';
-import { SiteHeader } from '@/ui/shell/site-header';
 import './globals.css';
 
 const sans = Plus_Jakarta_Sans({
@@ -25,12 +23,10 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     // next-themes sets the theme class before React hydrates.
     <html lang="en" className={sans.variable} suppressHydrationWarning>
-      <body className="min-h-dvh font-sans antialiased">
-        <AppProviders>
-          <SiteHeader />
-          {children}
-          <SiteFooter />
-        </AppProviders>
+      {/* Column layout: on short pages the footer's mt-auto keeps it at the bottom. */}
+      <body className="flex min-h-dvh flex-col font-sans antialiased">
+        {/* Header and footer come from the (site) layout; account pages in (auth) have none. */}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import type { Metadata } from 'next';
-import { MyInvoicesScreen } from '@/ui/reservation/invoice-screens';
+import { MyInvoicesScreen } from '@/ui/reservation/my-invoices-screen';
 
 export const metadata: Metadata = { title: 'Invoices', robots: { index: false } };
 

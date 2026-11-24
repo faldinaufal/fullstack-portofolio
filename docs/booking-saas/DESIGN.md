@@ -142,7 +142,8 @@ These parts of Figma contradict the PRD or FSD, or go beyond them. Keep the visu
 | Medical wording: "patient", "clinical", "practitioner", "care modality", "treatment suite" | Use "customer", "therapist", "service", "session", "branch" |
 | Ratings, reviews, "Validated Practice #042", "Certified practitioners", "Available Today" | Leave out. The directory shows name, type, branches and a "Book" action |
 | Rooms / suites ("Suite 402", "Studio 2A"), parking, arrival notes, concierge phone | Show the branch name, address and phone (`branches`) and opening hours |
-| Photos and hero images of the business | Tenant logo only (`logo_url`), with an initials fallback |
+| Several photos, galleries, stock images of the business | One cover photo and the logo, both uploaded by the owner (FSD 6.15). Without them: brand gradient and initials |
+| Therapist portraits from stock | One photo per therapist, uploaded in the Console (FSD 6.15). Without it: initials on the brand gradient |
 | Booking reference "#BK-9842" | No separate booking number. Show the invoice number (`LUM-2026-000412`) and the date / service |
 | "Download PDF receipt", "Download all invoices", "Send receipt by email" | Printable invoice page (`/bookings/[id]/invoice`, print stylesheet). The confirmation email is sent automatically |
 | Card on file, card brand and last 4 digits, auth code | Payment status and Stripe IDs only (Console invoice detail) |
@@ -175,7 +176,7 @@ Every FSD screen with its visual reference. "Compose" means there is no frame: b
 |---|---|---|
 | Home / directory | `/` | `1:615` Explore Practices (without ratings or insurance) |
 | For businesses | `/for-business` | Compose: Portal shell + hero and feature sections in the `1:615` style |
-| Business page | `/[tenant]` | `1:1025` Lumen Wellness. Add branches with address and **opening hours**, and the service list with duration and price |
+| Business page | `/[tenant]` | `1:1025` Lumen Wellness: cover hero (FSD 6.15), branch tabs with therapists ("Ines H." and their photo), service list with duration and price, info cards with address, phone, **opening hours** and booking policy. No ratings, rooms or parking |
 | Branch page | `/[tenant]/branches/[branch]` | Compose from `1:1025`: branch details, therapists ("Ines H."), services |
 | Book: service and therapist | `/[tenant]/book` | `1:1751` Minimalist Booking, step 1: **branch → service → therapist** |
 | Book: choose time | `/[tenant]/book/time` | `1:1751` / `1:2257` date strip and slot chips, 30-minute grid, horizon limited |
@@ -184,10 +185,10 @@ Every FSD screen with its visual reference. "Compose" means there is no frame: b
 | Payment result | `/bookings/[id]/confirmation` | `1:2052` Booking Confirmation. Add a "waiting for payment confirmation" state and an expired state |
 | Sign up / log in | `/signup`, `/login` | `1:2614`, `1:2532` (fixes from 4.1) |
 | Verify email, forgot / reset password | `/verify-email`, `/forgot-password`, `/reset-password` | Compose from the `1:2532` card layout |
-| My bookings | `/account/bookings` | `1:1633`. Add status chips for every status, "Pay now" on `pending_payment` |
+| My bookings | `/account/bookings` | `1:1633`. Therapist photo (or initials), status chips for every status, invoice number instead of a booking number, actions from the API: "Pay now" and "Cancel" on `pending_payment`, "Reschedule" when allowed |
 | Booking detail | `/account/bookings/[id]`, `/bookings/[id]` | Compose from `1:2052`: details, reschedule (with remaining count or the reason it is hidden), cancel if unpaid, invoice link |
 | Reschedule | `/bookings/[id]/reschedule` | `1:2257` (without "Any specialist") |
-| Invoices | `/account/invoices` | `1:1366` (statuses open / paid / void) |
+| Invoices | `/account/invoices` | `1:1366`: totals, search and status filter (open / paid / void), "View" opens the printable invoice. No PDF, refunds or HSA |
 | Invoice | `/bookings/[id]/invoice` | Compose: printable invoice from the receipt part of `1:2052` |
 | Profile and security | `/account/profile` | Compose: name, phone, password, active sessions, "Log out everywhere" |
 | Guest booking | `/manage/[token]` | Same as Booking detail, without the account menu |

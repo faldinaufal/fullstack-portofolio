@@ -47,6 +47,9 @@ model Tenant {
   maxCustomerReschedules  Int          @default(2) @map("max_customer_reschedules") @db.SmallInt
   /// Invoice number prefix, e.g. `LUM` (FSD 4.3, 6.10). Unique across tenants.
   invoicePrefix           String       @unique @map("invoice_prefix") @db.VarChar(6)
+  /// Object keys of the uploaded logo and cover photo (FSD 6.15); the URL is built from them.
+  logoKey                 String?      @map("logo_key") @db.VarChar(200)
+  coverKey                String?      @map("cover_key") @db.VarChar(200)
   version                 Int          @default(1)
   createdAt               DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -206,6 +209,8 @@ model Membership {
   /// Null for owners; required for managers and staff (check constraint in SQL).
   branchId      String?          @map("branch_id") @db.Uuid
   status        MembershipStatus @default(active)
+  /// Therapist photo (FSD 6.15): object key only; the API builds the public URL.
+  photoKey      String?          @map("photo_key") @db.VarChar(200)
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 

@@ -229,6 +229,17 @@ export function useRemoveTimeOff(id: string) {
   return useScheduleMutation(id, (timeOffId: string) => team.removeTimeOff(id, timeOffId));
 }
 
+/** Therapist photo (FSD 6.15): upload or remove, then show the new detail straight away. */
+export function useMemberPhoto(id: string) {
+  const { team } = useDependencies();
+  const queryClient = useQueryClient();
+  const onSuccess = (member: MemberDetail) => queryClient.setQueryData(memberKey(id), member);
+  return {
+    upload: useMutation({ mutationFn: (file: File) => team.uploadPhoto(id, file), onSuccess }),
+    remove: useMutation({ mutationFn: () => team.removePhoto(id), onSuccess }),
+  };
+}
+
 export function useInvitationPreview(token: string) {
   const { team } = useDependencies();
   return useQuery({
@@ -251,6 +262,7 @@ export function useAcceptInvitation(token: string) {
 }
 
 export { invitableRoles };
+export { PHOTO_RULE, photoProblem } from '../domain/team';
 
 /** Instant check of a week of working hours (the API also checks the branch hours). */
 export function workingHoursProblems(hours: DayInterval[]): Record<number, string> {

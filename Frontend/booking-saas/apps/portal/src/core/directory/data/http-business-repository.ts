@@ -18,7 +18,9 @@ export const toBusiness = (entry: DirectoryEntry): Business => ({
   slug: entry.slug,
   name: entry.name,
   offering: summarizeOffering(entry.serviceNames),
+  serviceNames: entry.serviceNames,
   branchNames: entry.branchNames,
+  logoUrl: entry.logoUrl,
 });
 
 /** `GET /v1/public/tenants`: the live directory. */

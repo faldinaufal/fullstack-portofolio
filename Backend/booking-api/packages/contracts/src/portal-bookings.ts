@@ -49,6 +49,8 @@ export const PortalBookingSchema = z
     branchName: z.string(),
     serviceName: z.string(),
     therapist: z.string(),
+    /** The therapist's photo (FSD 6.15); null shows the initials. */
+    therapistPhotoUrl: z.url().nullable(),
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
     priceCents: z.number().int(),
@@ -57,6 +59,8 @@ export const PortalBookingSchema = z
     /** Until when the slot is held for payment (pending bookings only). */
     holdExpiresAt: z.iso.datetime().nullable(),
     invoiceNumber: z.string(),
+    /** Allowed actions, decided by the API so every screen shows the same buttons. */
+    actions: z.object({ pay: z.boolean(), cancel: z.boolean(), reschedule: z.boolean() }),
   })
   .meta({ id: 'PortalBooking' });
 export type PortalBooking = z.infer<typeof PortalBookingSchema>;
@@ -101,8 +105,6 @@ export const PortalBookingDetailSchema = PortalBookingSchema.extend({
   invoice: BookingInvoiceSchema,
   /** Pay before this (the Checkout expiry, FSD 6.3); null when nothing is left to pay. */
   payBy: z.iso.datetime().nullable(),
-  /** Allowed actions, decided by the API so every screen shows the same buttons. */
-  actions: z.object({ pay: z.boolean(), cancel: z.boolean(), reschedule: z.boolean() }),
   /**
    * Confirmed bookings only (FSD 6.5): customer reschedules left and the cut-off, so the
    * Portal can say why rescheduling is not offered.
@@ -124,6 +126,8 @@ export const PortalBookingListSchema = z
     page: z.number().int(),
     pageSize: z.number().int(),
     total: z.number().int(),
+    /** Size of both tabs, for "Upcoming (2) · Past (5)". */
+    counts: z.object({ upcoming: z.number().int(), past: z.number().int() }),
   })
   .meta({ id: 'PortalBookingList' });
 export type PortalBookingList = z.infer<typeof PortalBookingListSchema>;
@@ -155,13 +159,20 @@ export const PortalInvoiceSummarySchema = z
     status: z.enum(['open', 'paid', 'void']),
     amountCents: z.number().int(),
     issuedAt: z.iso.datetime(),
+    paidAt: z.iso.datetime().nullable(),
     businessName: z.string(),
     serviceName: z.string(),
   })
   .meta({ id: 'PortalInvoiceSummary' });
 export type PortalInvoiceSummary = z.infer<typeof PortalInvoiceSummarySchema>;
 
+export const InvoiceStatusSchema = z.enum(['open', 'paid', 'void']);
+export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
+
 export const PortalInvoiceListQuerySchema = z.object({
+  status: InvoiceStatusSchema.optional(),
+  /** Invoice number, business or service name. */
+  q: z.string().trim().min(1).max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -176,6 +187,17 @@ export const PortalInvoiceListSchema = z
   })
   .meta({ id: 'PortalInvoiceList' });
 export type PortalInvoiceList = z.infer<typeof PortalInvoiceListSchema>;
+
+/** `GET /v1/portal/invoices/summary`: totals for the Invoices page (FSD 5.3). */
+export const PortalInvoiceTotalsSchema = z
+  .object({
+    /** Calendar year in the platform time zone, e.g. 2026. */
+    year: z.number().int(),
+    paid: z.object({ count: z.number().int(), amountCents: z.number().int() }),
+    open: z.object({ count: z.number().int(), amountCents: z.number().int() }),
+  })
+  .meta({ id: 'PortalInvoiceTotals' });
+export type PortalInvoiceTotals = z.infer<typeof PortalInvoiceTotalsSchema>;
 
 /** `GET /v1/portal/bookings/:id/invoice` (FSD 6.10): everything a printed invoice shows. */
 export const PortalInvoiceSchema = z

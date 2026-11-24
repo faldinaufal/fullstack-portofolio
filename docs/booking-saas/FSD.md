@@ -56,7 +56,7 @@ All apps live under one purchased domain, so session cookies are first-party and
 | Double-booking prevention | Layer 1: API checks opening hours, working hours, time off and overlaps and returns specific errors. Layer 2: a PostgreSQL `EXCLUSION` constraint (with `btree_gist`) on the therapist and the time range including the buffer, for active bookings only (`pending_payment`, `confirmed`) | The database rejects the second of two overlapping bookings atomically, so two simultaneous requests can never both succeed, even if both passed the API checks. The API translates the rejection into a "slot no longer available" error. |
 | Background jobs | pg-boss (job queue stored in PostgreSQL, in its own `pgboss` schema), run by a separate worker process, for delayed and scheduled jobs (hold expiry, reminders, cron). Emails use a **transactional outbox**: the API inserts a row into `email_messages` in the same transaction as the change that caused it, and the worker polls the table (`FOR UPDATE SKIP LOCKED`), sends and records the result | Jobs and emails are created in the same transaction as the booking or payment that caused them: if the booking is not saved, no email is queued, and if it is saved, the email is guaranteed to be sent (with retries). The outbox table doubles as the email delivery log, and the worker's role needs no rights outside it. No extra infrastructure. |
 | Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently. Behind a small `PaymentProvider` interface: without `STRIPE_SECRET_KEY` the API uses a **demo provider** whose checkout page is part of the Portal and whose "Pay" button emits a webhook signed in Stripe's format (HMAC-SHA256, `t=…,v1=…`) | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. The demo provider lets local development, CI and the public demo run the full flow (including signature checks, duplicates and late payments) without Stripe keys; both providers go through the same webhook handler. |
-| File storage | S3-compatible object storage: Cloudflare R2 in production and an S3-compatible server in Docker Compose locally (added with the first upload feature). Uploads use short-lived presigned URLs; the API validates type and size and stores only the object key | Files never pass through the API process, storage scales independently of the database, and the same code works against R2 and MinIO because both speak the S3 API. |
+| File storage | S3-compatible object storage: Cloudflare R2 in production and SeaweedFS (S3 API) in Docker Compose locally. Uploads use short-lived presigned `PUT` URLs signed for the declared type and size; after the upload the API checks the stored object (size, and the file's first bytes for its real type) and stores only the object key (6.15) | Files never pass through the API process, storage scales independently of the database, and the same code works against R2 and SeaweedFS because both speak the S3 API. R2 has no presigned `POST` (which could enforce a size range), so the size is signed into the URL and checked again afterwards. |
 | Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema, delivers the email outbox and, for hold expiry, may update `bookings`, `invoices` and `payments` and append to `audit_logs` (no read access to the audit log). Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
 | Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the purchased domain in production (chosen during implementation) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS; shared UI package with the design system (light/dark) | One framework for all three apps; server rendering for the public Portal pages, rich client interactions for the Console. |
@@ -94,7 +94,7 @@ Legend: ✅ allowed · 🏢 own branch only · 👤 own records only · 👁 rea
 | View tenant business data | 👁 with active support grant | — | — | — | — | — |
 | Grant / revoke support access | — | ✅ | — | — | — | — |
 | **Tenant settings** | | | | | | |
-| Business profile, logo, cancellation cut-off | — | ✅ | 👁 | — | — | — |
+| Business profile, logo and cover photo, cancellation cut-off | — | ✅ | 👁 | — | — | — |
 | Create / archive branch | — | ✅ | — | — | — | — |
 | Branch details, opening hours, closures | — | ✅ | 🏢 | — | — | — |
 | Service catalogue (create, edit, archive, price) | — | ✅ | 👁 | 👁 | 👁 public | 👁 public |
@@ -105,6 +105,7 @@ Legend: ✅ allowed · 🏢 own branch only · 👤 own records only · 👁 rea
 | Transfer ownership | — | ✅ | — | — | — | — |
 | Therapist working hours | — | ✅ | 🏢 | 👁 own | — | — |
 | Therapist time off | — | ✅ | 🏢 | 👤 | — | — |
+| Therapist photo (6.15) | — | ✅ | 🏢 | 👤 | — | — |
 | **Bookings** | | | | | | |
 | Search availability | — | ✅ | 🏢 | — | ✅ | ✅ |
 | Create booking (book and pay) | — | — | — | — | ✅ | ✅ |
@@ -143,7 +144,7 @@ Every screen supports light/dark mode and works from 360 px wide. List screens h
 |---|---|---|---|
 | Home / directory | `/` | Search and browse active businesses by name or type | Everyone |
 | For businesses | `/for-business` | Explains Tempora to business owners; links to Console sign-up | Everyone |
-| Business page | `/[tenant]` | Business profile, branches with address and hours, service catalogue with prices | Everyone |
+| Business page | `/[tenant]` | Cover photo and logo (6.15), branch tabs: therapists of the branch ("Ines H.", with their photo, 6.15), address, phone, opening hours and closures; service catalogue with duration and price; booking policy (lead time, cut-off, free reschedules) | Everyone |
 | Branch page | `/[tenant]/branches/[branch]` | Branch details, therapists, services offered | Everyone |
 | Book: choose service and therapist | `/[tenant]/book` | Step 1: branch → service → therapist | Everyone |
 | Book: choose time | `/[tenant]/book/time` | Step 2: date picker (horizon limited) and free 30-minute slots | Everyone |
@@ -152,11 +153,11 @@ Every screen supports light/dark mode and works from 360 px wide. List screens h
 | Payment result | `/bookings/[id]/confirmation` | Waits for the webhook, then shows confirmed / expired | Customer, guest (link) |
 | Sign up / log in | `/signup`, `/login` | Customer account | Everyone |
 | Verify email / reset password | `/verify-email`, `/forgot-password`, `/reset-password` | Account recovery | Customer |
-| My bookings | `/account/bookings` | Upcoming and past bookings across all businesses, with status | Customer |
+| My bookings | `/account/bookings` | Upcoming and past bookings across all businesses (tab counts), with the therapist's photo, status, invoice number and the allowed actions (pay, reschedule, cancel unpaid) | Customer |
 | Booking detail | `/account/bookings/[id]` | Details, reschedule (if allowed, shows remaining reschedules), cancel unpaid, invoice | Customer |
 | Booking | `/bookings/[id]` | Booking detail with pay, cancel, reschedule and invoice links, for the session or this tab's booking link | Customer, guest (link) |
 | Reschedule | `/bookings/[id]/reschedule` | Pick a new slot (same branch and service, therapist may change); shows how many reschedules are left | Customer, guest (link) |
-| Invoices | `/account/invoices` | Invoice list across businesses | Customer |
+| Invoices | `/account/invoices` | Invoice list across businesses: totals (paid this year, open), search, status filter | Customer |
 | Invoice | `/bookings/[id]/invoice` | Invoice detail, printable | Customer, guest (link) |
 | Profile and security | `/account/profile` | Name, phone, password, active sessions with "log out everywhere" | Customer |
 | Guest booking | `/manage/[token]` | Booking detail, pay, reschedule, cancel unpaid for guests | Guest |
@@ -182,11 +183,11 @@ The sidebar shows only what the active role may use. A tenant switcher appears w
 | Branches | `/branches` | List; create/archive (owner); detail with opening hours and closures | Owner, manager (own branch) |
 | Services | `/services` | Catalogue: create, edit, archive, price | Owner (edit), manager (read) |
 | Team | `/team` | Members by branch, roles, status; invite, deactivate, reactivate, change role, move; pending invitations | Owner, manager (staff of own branch) |
-| Team member detail | `/team/[id]` | Working hours, services performed, time off, upcoming bookings | Owner, manager (own branch) |
-| My schedule | `/schedule` | Own working hours (read) and time off (create/delete) | Staff |
+| Team member detail | `/team/[id]` | Photo (6.15), working hours, services performed, time off, upcoming bookings | Owner, manager (own branch) |
+| My schedule | `/schedule` | Own photo (6.15), working hours (read) and time off (create/delete) | Staff |
 | Audit log | `/audit` | Filterable log with before/after diff | Owner, manager (own branch) |
 | Email log | `/emails` | Sent/failed emails with error and retry status | Owner, manager (own branch) |
-| Settings | `/settings` | Business profile, logo, booking settings (lead time, horizon, cut-off, reschedules), support access, ownership transfer | Owner |
+| Settings | `/settings` | Business profile, logo and cover photo, booking settings (lead time, horizon, cut-off, reschedules), support access, ownership transfer | Owner |
 | Account | `/account` | Own name, password, active sessions, trusted devices (revoke) | Team |
 
 ### 2.3 Tempora Platform Admin (`admin.<domain>`)
@@ -252,7 +253,7 @@ Alternative paths:
 
 ### 3.4 Business sign-up and onboarding
 1. Console `/signup`: name, email, password, business name, slug → creates team account, tenant and owner membership in one transaction, then emails a 6-digit code exactly like a login. Entering the code proves the address (`email_verified_at` is set) and starts the session; no separate verification link is needed for team accounts.
-2. Onboarding wizard: business profile and logo → first branch with opening hours → services (duration, buffer, price) → invite team (optional, can skip). Each step saves through the regular endpoints, so leaving halfway loses nothing; until setup is complete the owner's dashboard shows a checklist of what is missing. (The logo upload is added together with object storage.)
+2. Onboarding wizard: business profile and logo → first branch with opening hours → services (duration, buffer, price) → invite team (optional, can skip). Each step saves through the regular endpoints, so leaving halfway loses nothing; until setup is complete the owner's dashboard shows a checklist of what is missing. (Logo and cover photo are optional and can be added later in Settings.)
 3. The tenant appears in the Portal directory once it has at least one branch, one service and one therapist with working hours.
 
 ### 3.5 Assisted onboarding (platform admin)
@@ -347,8 +348,8 @@ erDiagram
 #### Tenancy & team
 | Table | Key columns | Notes |
 |---|---|---|
-| `tenants` | `id`, `slug` (unique), `name`, `logo_url`, `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), `suspended_at`, `suspension_reason`, booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
-| `memberships` | `id`, `tenant_id`, `team_account_id`, `role` (`owner`/`manager`/`staff`), `branch_id` (null for owner), `status` (`active`/`deactivated`), `created_at` | Unique (`team_account_id`, `tenant_id`). Partial unique indexes: one active `owner` per tenant; one active `manager` per branch. Check: managers and staff must have a branch. |
+| `tenants` | `id`, `slug` (unique), `name`, `logo_key`, `cover_key` (object keys of the uploaded images, 6.15; the public URL is built from `S3_PUBLIC_BASE_URL`), `invoice_prefix` (unique, e.g. `LUM`), `status` (`active`/`suspended`), `suspended_at`, `suspension_reason`, booking settings (`min_lead_hours` default 4, `max_advance_days` default 30, `cancellation_cutoff_hours` default 24, `max_customer_reschedules` default 2), `version`, `archived_at` | Not RLS-scoped (public directory), but only public columns are exposed publicly. |
+| `memberships` | `id`, `tenant_id`, `team_account_id`, `role` (`owner`/`manager`/`staff`), `branch_id` (null for owner), `status` (`active`/`deactivated`), `photo_key` (therapist photo, 6.15), `created_at` | Unique (`team_account_id`, `tenant_id`). Partial unique indexes: one active `owner` per tenant; one active `manager` per branch. Check: managers and staff must have a branch. |
 | `invitations` | `id`, `tenant_id`, `email`, `role`, `branch_id`, `token_hash`, `invited_by_membership_id`, `created_at`, `expires_at`, `accepted_at`, `revoked_at` | Valid for 7 days. Accepting creates (or reuses) the team account and the membership. Status is derived (pending, expired, accepted, revoked). Partial unique index: at most one open invitation per tenant and email. |
 | `support_grants` | `id`, `tenant_id`, `granted_by_membership_id`, `starts_at`, `expires_at`, `revoked_at`, `expiry_recorded_at` | Lasts exactly 1, 24 or 72 h (check). At most one active grant per tenant: an exclusion constraint keeps the periods `[starts_at, coalesce(revoked_at, expires_at))` of one tenant from overlapping. Never deleted. `expiry_recorded_at` is set by the worker once the expiry is in the audit log. |
 
@@ -452,9 +453,9 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 ### 5.2 Public (`/v1/public`)
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/tenants` | Directory: search (`q`, business or service name) and list active tenants whose setup is complete | none |
-| GET | `/tenants/:slug` | Business profile, branches with opening hours and upcoming closures, services someone performs, platform time zone, booking horizon | none |
-| GET | `/tenants/:slug/branches/:branchId` | Branch details, therapists (first name and last initial, e.g. "Ines H."), services offered | none |
+| GET | `/tenants` | Directory: search (`q`, business or service name) and list active tenants whose setup is complete, with `logoUrl` | none |
+| GET | `/tenants/:slug` | Business profile with `logoUrl` and `coverUrl` (null when not uploaded), branches with opening hours and upcoming closures, services someone performs, platform time zone, booking policy (lead time, horizon, cut-off, free reschedules) | none |
+| GET | `/tenants/:slug/branches/:branchId` | Branch details, therapists (first name and last initial, e.g. "Ines H.", and `photoUrl`), services offered | none |
 | GET | `/tenants/:slug/availability` | Free slots: `branchId`, `serviceId`, `staffId` (required: no "any therapist"), `date` (`YYYY-MM-DD` in the platform time zone); `423` for a suspended tenant | none |
 | GET | `/demo-inbox` | Latest emails to `@demo.<domain>` addresses (filter by address); returns `404` unless `DEMO_MODE` is on | none |
 
@@ -476,14 +477,15 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | GET | `/me/sessions` | Active sessions | customer |
 | DELETE | `/me/sessions/:id` | Revoke one session | customer |
 | POST | `/bookings` | Create booking + invoice, start Checkout; body includes guest contact when not logged in; returns booking, `checkoutUrl` and an `accessToken` for this booking | customer or none (guest) · `Idempotency-Key` |
-| GET | `/bookings` | My bookings across tenants (`when=upcoming` or `past`, `page`, `pageSize`) | customer |
+| GET | `/bookings` | My bookings across tenants (`when=upcoming` or `past`, `page`, `pageSize`); each item carries its allowed `actions` (same rules as the detail) and `therapistPhotoUrl`, and `counts` gives the size of both tabs | customer |
 | GET | `/bookings/:id` | Booking detail with invoice, payment deadline and allowed actions | customer, guest token |
 | GET | `/guest/booking` | The booking a guest token belongs to (the `/manage/[token]` page) | guest token |
 | POST | `/bookings/:id/checkout` | Resume payment: return the active Checkout URL (nothing is created, so no `Idempotency-Key`) | customer, guest token |
 | GET | `/bookings/:id/reschedule-slots` | Free times for moving this booking (`date`, `staffId`): rules of 6.2, with the booking's own time not counted as taken | customer, guest token |
 | POST | `/bookings/:id/reschedule` | New `startsAt` (and optional `staffId`) | customer, guest token |
 | POST | `/bookings/:id/cancel` | Cancel an unpaid booking | customer, guest token |
-| GET | `/invoices` | My invoices across businesses (`page`, `pageSize`) | customer |
+| GET | `/invoices` | My invoices across businesses (`status` = `open`/`paid`/`void`, `q` = invoice number, business or service, `page`, `pageSize`), newest first | customer |
+| GET | `/invoices/summary` | Totals for the Invoices page: paid this calendar year (sum and count) and open (sum and count), in the platform time zone | customer |
 | GET | `/bookings/:id/invoice` | Invoice detail: business, billed to, line, status and dates (PDF later: `?format=pdf`). Same access rules as the booking | customer, guest token |
 
 Guest token: the secret from `/manage/[token]`, or the `accessToken` returned when booking, sent as `Authorization: Guest <token>`; it only grants access to its own booking. The Portal keeps the booking's `accessToken` in the tab's `sessionStorage` so the payment and confirmation pages work for guests (and for customers whose email is not verified yet) without putting the token in a URL that Stripe would see.
@@ -515,9 +517,10 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | GET | `/tenant` | Tenant profile and booking settings | owner, manager (read) |
-| PATCH | `/tenant` | Update profile, logo, booking settings | owner |
-| POST | `/tenant/logo/upload-url` | Presigned upload URL for a logo (PNG/JPEG/WebP/SVG, ≤ 1 MB) | owner |
-| PUT | `/tenant/logo` | Confirm the uploaded object (API checks type and size) and set it as logo | owner |
+| PATCH | `/tenant` | Update profile and booking settings | owner |
+| POST | `/tenant/:image/upload-url` | `image` = `logo` or `cover`. Body: `contentType`, `sizeBytes`. Returns a presigned `PUT` URL (5 minutes), the headers to send and the object key (6.15) | owner |
+| PUT | `/tenant/:image` | Body: `key`. Confirm the uploaded object (API checks size and real type) and set it; the previous image is deleted. `If-Match` | owner |
+| DELETE | `/tenant/:image` | Remove the logo or cover photo. `If-Match` | owner |
 | POST | `/tenant/transfer-ownership` | New owner + old owner's new state + password | owner |
 | GET | `/support-grants` | Current and past grants | owner |
 | POST | `/support-grants` | Grant support access (`durationHours`: 1, 24, 72); replaces an active grant | owner |
@@ -551,6 +554,9 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 | GET | `/members/:id/time-off` | List time off | owner, manager (own branch), staff (self) |
 | POST | `/members/:id/time-off` | Add time off (rejected if it overlaps active bookings) | owner, manager (own branch), staff (self) |
 | DELETE | `/members/:id/time-off/:timeOffId` | Remove time off | owner, manager (own branch), staff (self) |
+| POST | `/members/:id/photo/upload-url` | Presigned upload URL for the therapist photo (6.15) | owner, manager (own branch), staff (self) |
+| PUT | `/members/:id/photo` | Confirm the uploaded photo (`key`); returns the member detail | owner, manager (own branch), staff (self) |
+| DELETE | `/members/:id/photo` | Remove the photo | owner, manager (own branch), staff (self) |
 | GET | `/invitations` | Pending invitations | owner, manager (own branch) |
 | POST | `/invitations` | Invite (`email`, `role`, `branchId`) | owner; manager (staff, own branch) |
 | POST | `/invitations/:id/resend` | New token and expiry | owner, manager (own branch) |
@@ -785,11 +791,14 @@ Errors follow RFC 9457 (`type`, `title`, `status`, `detail`) plus a stable `code
 | `NOT_A_THERAPIST` | 409 | Schedule change for a member without a branch (owner) or deactivated |
 | `INVITATION_EXPIRED` | 410 | Rule 6.8 |
 | `IDEMPOTENCY_KEY_REUSED` | 422 | Same key, different body |
+| `UPLOAD_MISSING` | 422 | Confirming an image whose upload never arrived or whose link expired (6.15) |
+| `UPLOAD_INVALID` | 422 | The uploaded file is larger than allowed or is not the declared image type; the object is deleted (6.15) |
 | `TENANT_SUSPENDED` | 423 | Rule 6.9; also any Console write while the member's business is suspended |
 | `STEP_UP_REQUIRED` | 403 | Platform Admin action without a step-up in the last 10 minutes (6.11) |
 | `SUPPORT_ACCESS_REQUIRED` | 403 | Support view of a tenant without an active support grant (1.4) |
 | `RATE_LIMITED` | 429 | Rule 6.11 |
 | `PAYMENT_PROVIDER_UNAVAILABLE` | 503 | Rule 6.3 step 7 |
+| `STORAGE_UNAVAILABLE` | 503 | Image upload while no object storage is configured (6.15) |
 
 ### 6.14 Reports
 What the dashboard's numbers mean (FSD 2.2 Dashboard, PRD 5.6). All dates are in the platform time zone.
@@ -802,6 +811,23 @@ What the dashboard's numbers mean (FSD 2.2 Dashboard, PRD 5.6). All dates are in
 | **Utilization** | Booked minutes ÷ available minutes. Available: each day of the range, the therapist's working hours intersected with the branch's opening hours, minus closure days and time off. Booked: the session length (without buffer) of the bookings above. Per therapist, and per branch as the sum of its therapists. A therapist counts at the branch they belong to now. |
 | **No-show rate** | `no_show` ÷ (`completed` + `no_show`) of sessions that started in the period. Sessions not marked yet are not counted. |
 | **Payments pending** | `pending_payment` bookings whose hold has not run out. |
+
+### 6.15 Business images and therapist photos
+The owner can upload one **logo** and one **cover photo** in Settings, and every therapist (a manager or staff member at a branch) can have one **photo**, uploaded on their Team page by the owner, their branch manager or themselves (My schedule). All are optional; without them the Portal shows initials on a plain brand gradient.
+
+| | Logo | Cover photo | Therapist photo |
+|---|---|---|---|
+| Types | PNG, JPEG, WebP | JPEG, WebP, PNG | PNG, JPEG, WebP |
+| Max size | 1 MB | 4 MB | 1 MB |
+| Shown | Directory cards, business page | Business page hero | Business page therapist cards, My bookings |
+| Key | `tenants/<tenant id>/<logo or cover>/<random id>.<ext>` | same | `tenants/<tenant id>/staff/<membership id>/<random id>.<ext>` |
+| Endpoints | `/tenant/logo/…` | `/tenant/cover/…` | `/members/:id/photo/…` |
+
+1. **Ask for an upload URL** (`POST /tenant/:image/upload-url`): the API checks the declared type and size against the table, creates a key under the image's prefix (table) and signs a `PUT` URL valid for 5 minutes with that `Content-Type` and `Content-Length`. Storage rejects an upload with other values.
+2. **Upload**: the browser sends the file straight to storage; it never passes through the API.
+3. **Confirm** (`PUT` with the key): the key must sit under this image's prefix, so a key signed for another tenant, image kind or therapist is refused. The API reads the stored object's size and its first bytes (PNG, JPEG and WebP signatures) and rejects anything that does not match (`UPLOAD_INVALID`, the object is deleted). A missing object answers `UPLOAD_MISSING`.
+4. The key is saved (on the tenant, or on the therapist's membership) in the same transaction as the audit entry (`tenant.updated`, or `membership.photo_changed` for a photo; before/after keys). Business images use `If-Match` like every tenant setting; a photo has no version check, so two people replacing the same photo at once simply leave the later one. The previous object is deleted afterwards, best effort; an upload that is never confirmed stays unused (a lifecycle rule on the bucket can clear such objects).
+5. Public endpoints return full URLs (`S3_PUBLIC_BASE_URL` + key). Keys are random, so a replaced image gets a new URL and caches never show the old one.
 
 ## 7. Status / state flows
 
@@ -892,7 +918,7 @@ Database: every foreign key and every filter column used by list endpoints is in
 - **Secrets:** only in environment variables of each platform (Railway, Vercel, GitHub Actions); `.env.example` files list every variable without values; no secret is ever committed.
 - **Dependencies:** Dependabot updates and `pnpm audit` in CI; container images built from slim base images and run as a non-root user.
 - **Personal data:** logs never contain passwords, tokens, OTP codes, full emails or phone numbers (masked); staff see only what 1.2 allows.
-- **Uploads:** type and size validated by the API; logos served from object storage, never executed.
+- **Uploads:** raster images only (PNG, JPEG, WebP; no SVG, which can carry scripts). Type and size are signed into the upload URL and checked again on the stored object, including its first bytes (6.15). Images are served from the separate `files.<domain>` origin, never from an app origin, and never executed.
 
 ### 8.4 Accessibility
 - WCAG 2.2 level AA for all three apps.
@@ -966,7 +992,7 @@ These prove the PRD's core promises and are required to pass before merge.
 ### 10.1 Environments
 | Environment | Frontends | API, worker, database, storage | Stripe | Email | Purpose |
 |---|---|---|---|---|---|
-| **Local** | `docker compose up` (or `pnpm dev`) | Docker Compose: API, worker, PostgreSQL, Mailpit (object storage added with uploads) | Test mode + Stripe CLI webhook forwarding | Mailpit | Development |
+| **Local** | `docker compose up` (or `pnpm dev`) | Docker Compose: API, worker, PostgreSQL, Mailpit, SeaweedFS (object storage, S3 API) | Test mode + Stripe CLI webhook forwarding | Mailpit | Development |
 | **Preview** | Vercel preview per pull request | Railway PR environment with its own temporary database, seeded | Test mode | Captured (demo inbox only) | Review a change before merge |
 | **Production** | Vercel, custom subdomains | Railway (API and worker containers, PostgreSQL), Cloudflare R2 | Test mode | Email provider on the purchased domain | Public live demo |
 
@@ -1012,7 +1038,9 @@ Every service has a `.env.example` with these names and no values.
 | `SMTP_URL`, `EMAIL_FROM` | Worker: SMTP endpoint (Mailpit locally, the email provider in production) and sender |
 | `EMAIL_POLL_INTERVAL_MS` | Worker: how often the email outbox is checked when empty (default 2000) |
 | `TRUST_PROXY` | API: trust the hosting proxy's `X-Forwarded-For`, so rate limits see the client IP |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL` | Object storage (R2 / MinIO) |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Object storage (R2 / SeaweedFS). Unset: uploads answer `STORAGE_UNAVAILABLE` and pages show the fallbacks (6.15) |
+| `S3_UPLOAD_ENDPOINT` | Endpoint written into presigned upload URLs, when browsers reach storage at another address than the API does (Docker: `http://storage:8333` for the API, `http://localhost:8333` for the browser). Defaults to `S3_ENDPOINT` |
+| `S3_PUBLIC_BASE_URL` | Where browsers load uploaded images (`https://files.<domain>`) |
 | `SENTRY_DSN` | Error tracking |
 | `METRICS_TOKEN` | Bearer token for `/metrics` |
 | `DEMO_MODE`, `DEMO_EMAIL_DOMAIN` | Demo inbox and demo safeguards |
@@ -1029,5 +1057,5 @@ Every service has a `.env.example` with these names and no values.
 |---|---|
 | `portal.<domain>`, `console.<domain>`, `admin.<domain>` | Vercel projects |
 | `api.<domain>` | Railway API service |
-| `files.<domain>` | Cloudflare R2 public bucket (logos) |
+| `files.<domain>` | Cloudflare R2 public bucket (logos, cover photos and therapist photos) |
 | `demo.<domain>` | Email address domain only for demo accounts (no website) |

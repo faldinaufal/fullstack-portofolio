@@ -2,7 +2,10 @@
 // Copyright (c) 2026 Farhan Aldi Naufal
 
 import {
+  ConfirmImageRequestSchema,
   CreateTimeOffRequestSchema,
+  ImageUploadRequestSchema,
+  ImageUploadSchema,
   MemberDetailSchema,
   ReplaceMemberServicesRequestSchema,
   ReplaceWorkingHoursRequestSchema,
@@ -120,5 +123,53 @@ export const scheduleRoutes: FastifyPluginAsyncZod<{
       );
       return reply.status(204).send(null);
     },
+  );
+
+  // Therapist photo (FSD 6.15): sign an upload, confirm it, or remove the photo. Access is
+  // checked in the service: owner, the branch's manager, or the therapist themselves.
+  app.post(
+    '/members/:id/photo/upload-url',
+    {
+      preHandler: guard.require(),
+      schema: {
+        tags,
+        summary: 'Presigned upload URL for a therapist photo',
+        params: IdParams,
+        body: ImageUploadRequestSchema,
+        response: { 200: ImageUploadSchema, ...problems(400, 401, 403, 404, 409, 503) },
+      },
+    },
+    async (request) =>
+      service.requestPhotoUpload(guard.actor(request), request.params.id, request.body),
+  );
+
+  app.put(
+    '/members/:id/photo',
+    {
+      preHandler: guard.require(),
+      schema: {
+        tags,
+        summary: 'Confirm an uploaded therapist photo',
+        params: IdParams,
+        body: ConfirmImageRequestSchema,
+        response: { 200: MemberDetailSchema, ...problems(400, 401, 403, 404, 409, 422, 503) },
+      },
+    },
+    async (request) =>
+      service.confirmPhoto(guard.actor(request), request.params.id, request.body.key),
+  );
+
+  app.delete(
+    '/members/:id/photo',
+    {
+      preHandler: guard.require(),
+      schema: {
+        tags,
+        summary: 'Remove a therapist photo',
+        params: IdParams,
+        response: { 200: MemberDetailSchema, ...problems(401, 403, 404, 409) },
+      },
+    },
+    async (request) => service.removePhoto(guard.actor(request), request.params.id),
   );
 };

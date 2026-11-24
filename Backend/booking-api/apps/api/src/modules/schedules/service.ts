@@ -1,10 +1,20 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (c) 2026 Farhan Aldi Naufal
 
-import type { CreateTimeOffRequest, MemberDetail, TimeOff, WorkingHours } from '@tempora/contracts';
+import {
+  PHOTO_MAX_BYTES,
+  type CreateTimeOffRequest,
+  type ImageUpload,
+  type ImageUploadRequest,
+  type MemberDetail,
+  type TimeOff,
+  type WorkingHours,
+} from '@tempora/contracts';
 import { withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { AppError } from '../../lib/app-error.js';
 import { recordAudit } from '../../lib/audit.js';
+import { createImageUploads } from '../../lib/storage/image-upload.js';
+import { imageUrl, type ObjectStorage } from '../../lib/storage/storage.js';
 import { auditActor, fromWallTime, toWallTime } from '../branches/service.js';
 import {
   canEditSchedule,
@@ -46,13 +56,20 @@ const notATherapist = () =>
 export function createScheduleService({
   prisma,
   timeZone,
+  storage = null,
   now = () => new Date(),
 }: {
   prisma: PrismaClient;
   /** Platform time zone: working hours are wall-clock times in it. */
   timeZone: string;
+  /** Therapist photos (FSD 6.15); without storage, uploads answer `STORAGE_UNAVAILABLE`. */
+  storage?: ObjectStorage | null;
   now?: () => Date;
 }) {
+  const uploads = createImageUploads(storage);
+  /** `tenants/<tenant>/staff/<membership>`: one prefix per therapist. */
+  const photoPrefix = (actor: ConsoleActor, id: string) => `tenants/${actor.tenantId}/staff/${id}`;
+
   const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId: actor.tenantId, teamAccountId: actor.teamAccountId }, work);
 
@@ -92,6 +109,7 @@ export function createScheduleService({
     });
     return {
       ...toMember(member),
+      photoUrl: imageUrl(storage, member.photoKey),
       workingHours: hours.map((h) => ({
         weekday: h.weekday,
         startsAt: toWallTime(h.startsAt),
@@ -279,7 +297,53 @@ export function createScheduleService({
           before: toTimeOff(row),
         });
       }),
+
+    /**
+     * Therapist photo (FSD 6.15): the same people who manage the therapist's time off
+     * (owner, the branch manager, the therapist). Signing needs no database work, but the
+     * access check does, so it runs in the tenant context first.
+     */
+    requestPhotoUpload: async (
+      actor: ConsoleActor,
+      id: string,
+      input: ImageUploadRequest,
+    ): Promise<ImageUpload> => {
+      await inTenant(actor, (tx) => schedulable(tx, actor, id, canManageTimeOff));
+      return uploads.presign(photoPrefix(actor, id), PHOTO_MAX_BYTES, input);
+    },
+
+    confirmPhoto: async (actor: ConsoleActor, id: string, key: string) => {
+      await inTenant(actor, (tx) => schedulable(tx, actor, id, canManageTimeOff));
+      await uploads.verify(photoPrefix(actor, id), PHOTO_MAX_BYTES, key);
+      return setPhoto(actor, id, key);
+    },
+
+    removePhoto: (actor: ConsoleActor, id: string) => setPhoto(actor, id, null),
   };
+
+  /**
+   * Swaps the photo key with its audit entry, then deletes the replaced file. A photo has no
+   * version check: two people replacing the same photo at once simply leave the later one.
+   */
+  async function setPhoto(actor: ConsoleActor, id: string, key: string | null) {
+    const { result, replaced } = await inTenant(actor, async (tx) => {
+      const member = await schedulable(tx, actor, id, canManageTimeOff);
+      await tx.membership.update({ where: { id }, data: { photoKey: key } });
+      await recordAudit(tx, auditActor(actor), {
+        tenantId: actor.tenantId,
+        branchId: member.branchId,
+        action: 'membership.photo_changed',
+        entityType: 'membership',
+        entityId: id,
+        before: { photo: member.photoKey },
+        after: { photo: key },
+      });
+      const updated = await visibleMember(tx, actor, id);
+      return { result: await detail(tx, updated), replaced: member.photoKey };
+    });
+    if (replaced !== key) await uploads.discard(replaced);
+    return result;
+  }
 }
 
 export type ScheduleService = ReturnType<typeof createScheduleService>;

@@ -2,6 +2,7 @@
 #   docker compose up --build
 # Portal http://localhost:3000 · Console http://localhost:3001 · Platform Admin http://localhost:3002
 # API http://localhost:4000 (docs: /v1/docs) · Mailpit http://localhost:8025
+# Object storage (S3 API, images) http://localhost:8333
 #
 # Database passwords come from a local, git-ignored .env file next to this one:
 #   cp .env.example .env   (then choose your own passwords)
@@ -45,6 +46,21 @@ services:
       - '8025:8025' # web inbox
       - '1025:1025' # SMTP
 
+  # S3-compatible storage for logos and cover photos (FSD 6.15), like Cloudflare R2 in
+  # production. Browsers upload to it and load images from it, so its port is published.
+  storage:
+    image: chrislusf/seaweedfs:4.50
+    entrypoint: ['/bin/sh', '/docker/start.sh']
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env (see .env.example)}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in .env}
+      S3_BUCKET: tempora-files
+    volumes:
+      - storage-data:/data
+      - ./Backend/booking-api/docker/storage/start.sh:/docker/start.sh:ro
+    ports:
+      - '8333:8333'
+
   migrate:
     build:
       <<: *build
@@ -85,12 +101,22 @@ services:
       ADMIN_URL: http://localhost:3002
       TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET:?Set TOKEN_HASH_SECRET in .env (see .env.example)}
       APP_TIME_ZONE: America/New_York
+      # The API reaches storage inside Docker; browsers reach it on localhost.
+      S3_ENDPOINT: http://storage:8333
+      S3_UPLOAD_ENDPOINT: http://localhost:8333
+      S3_REGION: us-east-1
+      S3_BUCKET: tempora-files
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env (see .env.example)}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in .env}
+      S3_PUBLIC_BASE_URL: http://localhost:8333/tempora-files
     ports:
       - '4000:4000'
     # Not waiting for the seed: if it cannot run (see its log), the stack still starts.
     depends_on:
       migrate:
         condition: service_completed_successfully
+      storage:
+        condition: service_started
 
   worker:
     build:
@@ -134,3 +160,4 @@ services:
 
 volumes:
   postgres-data:
+  storage-data:

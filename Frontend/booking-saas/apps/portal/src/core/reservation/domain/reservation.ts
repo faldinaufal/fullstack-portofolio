@@ -17,12 +17,16 @@ export interface ReservationSummary {
   branchName: string;
   serviceName: string;
   therapist: string;
+  /** The therapist's photo (FSD 6.15); null shows the initials. */
+  therapistPhotoUrl: string | null;
   startsAt: Date;
   endsAt: Date;
   priceCents: number;
   /** Times are shown in this zone, not the visitor's. */
   timeZone: string;
   invoiceNumber: string;
+  /** Decided by the API, so every screen offers the same actions. */
+  actions: { pay: boolean; cancel: boolean; reschedule: boolean };
 }
 
 export interface Reservation extends ReservationSummary {
@@ -40,8 +44,6 @@ export interface Reservation extends ReservationSummary {
   };
   /** Pay before this; null when nothing is left to pay. */
   payBy: Date | null;
-  /** Decided by the API, so every screen offers the same actions. */
-  actions: { pay: boolean; cancel: boolean; reschedule: boolean };
   /** Confirmed bookings: customer reschedules left and the last moment to move it. */
   rescheduling: { remaining: number; until: Date } | null;
 }
@@ -51,14 +53,31 @@ export interface RescheduleSlot {
   endsAt: Date;
 }
 
+export type InvoiceStatus = 'open' | 'paid' | 'void';
+
 export interface InvoiceSummary {
   reservationId: string;
   number: string;
-  status: 'open' | 'paid' | 'void';
+  status: InvoiceStatus;
   amountCents: number;
   issuedAt: Date;
+  paidAt: Date | null;
   businessName: string;
   serviceName: string;
+}
+
+export interface InvoiceQuery {
+  page: number;
+  status?: InvoiceStatus | undefined;
+  /** Invoice number, business or service name. */
+  search?: string | undefined;
+}
+
+/** Totals on the Invoices page (FSD 5.3 `/invoices/summary`). */
+export interface InvoiceTotals {
+  year: number;
+  paid: { count: number; amountCents: number };
+  open: { count: number; amountCents: number };
 }
 
 export interface InvoicePage {
@@ -115,6 +134,8 @@ export interface ReservationPage {
   page: number;
   pageSize: number;
   total: number;
+  /** Size of both tabs. */
+  counts: { upcoming: number; past: number };
 }
 
 /** Implemented by the data layer; failures are `RequestError`s. */
@@ -140,7 +161,8 @@ export interface ReservationRepository {
     input: { startsAt: Date; staffId: string },
   ): Promise<Reservation>;
   invoice(id: string, accessToken: string | null): Promise<Invoice>;
-  invoices(page: number): Promise<InvoicePage>;
+  invoices(query: InvoiceQuery): Promise<InvoicePage>;
+  invoiceTotals(): Promise<InvoiceTotals>;
 }
 
 /**

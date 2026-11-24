@@ -12,6 +12,7 @@ export const DirectoryEntrySchema = z
     name: z.string(),
     branchNames: z.array(z.string()),
     serviceNames: z.array(z.string()),
+    logoUrl: z.url().nullable(),
   })
   .meta({ id: 'DirectoryEntry' });
 export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
@@ -58,6 +59,15 @@ export const PublicTenantSchema = z
     timeZone: z.string(),
     /** How many days ahead customers can book (FSD 6.1), for the date picker. */
     maxAdvanceDays: z.number().int(),
+    /** Booking policy shown on the business page (FSD 6.1, 6.5). */
+    policy: z.object({
+      minLeadHours: z.number().int(),
+      cancellationCutoffHours: z.number().int(),
+      maxCustomerReschedules: z.number().int(),
+    }),
+    /** Uploaded by the owner (FSD 6.15); null shows the initials and gradient fallback. */
+    logoUrl: z.url().nullable(),
+    coverUrl: z.url().nullable(),
     branches: z.array(PublicBranchSchema),
     services: z.array(PublicServiceSchema),
   })
@@ -69,6 +79,8 @@ export const PublicTherapistSchema = z
   .object({
     id: z.uuid(),
     displayName: z.string(),
+    /** Uploaded in the Console (FSD 6.15); null shows the initials. */
+    photoUrl: z.url().nullable(),
     serviceIds: z.array(z.uuid()),
   })
   .meta({ id: 'PublicTherapist' });

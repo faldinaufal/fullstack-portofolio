@@ -272,13 +272,22 @@ describe('My bookings (FSD 2.1, 5.3)', () => {
     await shopper.post(`${PT}/bookings/${cancelled.booking.id}/cancel`);
     await expectBooked(portalBrowser(h), bookingBody(b, at('16:00'))); // a guest, not hers
 
+    await pay(lumen.checkoutUrl);
+
     const upcoming = (await shopper.get(`${PT}/bookings?when=upcoming`)).json<{
-      items: { id: string; business: { slug: string } }[];
+      items: { id: string; business: { slug: string }; actions: object }[];
       total: number;
+      counts: { upcoming: number; past: number };
     }>();
     expect(upcoming.items.map((i) => i.id)).toEqual([lumen.booking.id, harbor.booking.id]);
     expect(upcoming.items.map((i) => i.business.slug)).toEqual(['lumen', 'harbor']);
     expect(upcoming.total).toBe(2);
+    expect(upcoming.counts).toEqual({ upcoming: 2, past: 1 });
+    // The list carries the same actions as the detail: paid → reschedule, unpaid → pay/cancel.
+    expect(upcoming.items.map((i) => i.actions)).toEqual([
+      { pay: false, cancel: false, reschedule: true },
+      { pay: true, cancel: true, reschedule: false },
+    ]);
 
     const past = (await shopper.get(`${PT}/bookings?when=past`)).json<{
       items: { id: string }[];
@@ -297,6 +306,50 @@ describe('My bookings (FSD 2.1, 5.3)', () => {
 
   it('needs a login', async () => {
     expect((await portalBrowser(h).get(`${PT}/bookings`)).statusCode).toBe(401);
+  });
+
+  it('My invoices filters by status and text, and totals paid this year and open', async () => {
+    const second = await bookableBusiness(h, SECOND_OWNER, PEOPLE.daniel);
+    const shopper = await signUpCustomer(h);
+    const paid = await expectBooked(shopper, customerBookingBody(b, at('10:00')));
+    await pay(paid.checkoutUrl);
+    const open = await expectBooked(
+      shopper,
+      customerBookingBody(second, nyTime(nextWeekday(2), '11:00')),
+    );
+    const voided = await expectBooked(shopper, customerBookingBody(b, at('14:00')));
+    await shopper.post(`${PT}/bookings/${voided.booking.id}/cancel`);
+    await expectBooked(portalBrowser(h), bookingBody(b, at('16:00'))); // someone else's
+
+    type List = { items: { bookingId: string; paidAt: string | null }[]; total: number };
+    const ids = async (query: string) =>
+      (await shopper.get(`${PT}/invoices?${query}`)).json<List>().items.map((i) => i.bookingId);
+
+    expect(await ids('status=paid')).toEqual([paid.booking.id]);
+    expect(await ids('status=open')).toEqual([open.booking.id]);
+    expect(await ids('status=void')).toEqual([voided.booking.id]);
+    expect(await ids('q=harbor')).toEqual([open.booking.id]); // business name
+    expect((await ids('q=deep tissue')).sort()).toEqual(
+      [paid.booking.id, open.booking.id, voided.booking.id].sort(),
+    ); // service name, any case
+    const number = (await shopper.get(`${PT}/invoices?status=paid`)).json<{
+      items: { number: string; paidAt: string | null }[];
+    }>().items[0]!;
+    expect(number.paidAt).not.toBeNull();
+    expect(await ids(`q=${number.number.toLowerCase()}`)).toEqual([paid.booking.id]);
+    expect((await shopper.get(`${PT}/invoices?status=refunded`)).statusCode).toBe(400);
+
+    const totals = (await shopper.get(`${PT}/invoices/summary`)).json();
+    expect(totals).toEqual({
+      year: Number(
+        new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'America/New_York' }).format(
+          new Date(),
+        ),
+      ),
+      paid: { count: 1, amountCents: 4217 },
+      open: { count: 1, amountCents: 4217 },
+    });
+    expect((await portalBrowser(h).get(`${PT}/invoices/summary`)).statusCode).toBe(401);
   });
 });
 

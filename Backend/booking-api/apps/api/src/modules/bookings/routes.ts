@@ -11,6 +11,7 @@ import {
   PortalBookingListSchema,
   PortalInvoiceListQuerySchema,
   PortalInvoiceListSchema,
+  PortalInvoiceTotalsSchema,
   PortalInvoiceSchema,
   RescheduleRequestSchema,
   RescheduleSlotsQuerySchema,
@@ -211,6 +212,19 @@ export const bookingRoutes: FastifyPluginAsyncZod<{
       },
     },
     async (request) => portal.invoices(guard.customer(request)!.customerAccountId, request.query),
+  );
+
+  app.get(
+    '/invoices/summary',
+    {
+      preHandler: guard.require,
+      schema: {
+        tags: ['portal-bookings'],
+        summary: 'Totals of my invoices: paid this year and still open',
+        response: { 200: PortalInvoiceTotalsSchema, ...problems(401) },
+      },
+    },
+    async (request) => portal.invoiceTotals(guard.customer(request)!.customerAccountId),
   );
 };
 
