@@ -1,0 +1,411 @@
+{
+  "global": {
+    "fontFamilies": {
+      "heading": {
+        "value": "Plus Jakarta Sans",
+        "type": "fontFamilies"
+      },
+      "body": {
+        "value": "Plus Jakarta Sans",
+        "type": "fontFamilies"
+      },
+      "mono": {
+        "value": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        "type": "fontFamilies"
+      }
+    },
+    "borderRadius": {
+      "none": {
+        "value": "0px",
+        "type": "borderRadius"
+      },
+      "sm": {
+        "value": "4px",
+        "type": "borderRadius"
+      },
+      "base": {
+        "value": "8px",
+        "type": "borderRadius"
+      },
+      "md": {
+        "value": "12px",
+        "type": "borderRadius"
+      },
+      "lg": {
+        "value": "16px",
+        "type": "borderRadius"
+      },
+      "full": {
+        "value": "9999px",
+        "type": "borderRadius"
+      }
+    },
+    "spacing": {
+      "xs": {
+        "value": "4px",
+        "type": "spacing"
+      },
+      "sm": {
+        "value": "8px",
+        "type": "spacing"
+      },
+      "md": {
+        "value": "12px",
+        "type": "spacing"
+      },
+      "lg": {
+        "value": "16px",
+        "type": "spacing"
+      },
+      "xl": {
+        "value": "24px",
+        "type": "spacing"
+      },
+      "2xl": {
+        "value": "32px",
+        "type": "spacing"
+      },
+      "3xl": {
+        "value": "48px",
+        "type": "spacing"
+      }
+    }
+  },
+  "light": {
+    "color": {
+      "primary": {
+        "value": "#df5a49",
+        "type": "color",
+        "description": "Brand primary accent (Lotus Terracotta)"
+      },
+      "primary-strong": {
+        "value": "#c2412f",
+        "type": "color",
+        "description": "Primary button fill and primary-coloured text (5.1:1 with white)"
+      },
+      "on-primary": {
+        "value": "#ffffff",
+        "type": "color",
+        "description": "Text/icon on primary color"
+      },
+      "on-primary-strong": {
+        "value": "#ffffff",
+        "type": "color",
+        "description": "Text/icon on primary-strong"
+      },
+      "primary-container": {
+        "value": "#fdeee9",
+        "type": "color",
+        "description": "Light tint container for active tags and soft highlights"
+      },
+      "on-primary-container": {
+        "value": "#9c3022",
+        "type": "color",
+        "description": "Text/icon on primary container"
+      },
+      "surface": {
+        "value": "#fbf9f7",
+        "type": "color",
+        "description": "Base warm canvas background"
+      },
+      "surface-dim": {
+        "value": "#dbdad8",
+        "type": "color",
+        "description": "Subtle borders and dividers"
+      },
+      "surface-bright": {
+        "value": "#fbf9f7",
+        "type": "color",
+        "description": "Bright surface level"
+      },
+      "surface-container-lowest": {
+        "value": "#ffffff",
+        "type": "color",
+        "description": "Pure white card/sheet containers"
+      },
+      "surface-container-low": {
+        "value": "#f5f3f1",
+        "type": "color",
+        "description": "Muted section container background"
+      },
+      "surface-container": {
+        "value": "#eeebe8",
+        "type": "color",
+        "description": "Default container surface"
+      },
+      "surface-container-high": {
+        "value": "#e8e5e2",
+        "type": "color",
+        "description": "High-emphasis container / hover background"
+      },
+      "on-surface": {
+        "value": "#1f1c1b",
+        "type": "color",
+        "description": "Primary high-contrast dark text"
+      },
+      "on-surface-variant": {
+        "value": "#73706e",
+        "type": "color",
+        "description": "Secondary muted label/caption text"
+      },
+      "outline": {
+        "value": "#dbdad8",
+        "type": "color",
+        "description": "Border line tone"
+      },
+      "outline-variant": {
+        "value": "#eceae7",
+        "type": "color",
+        "description": "Hairline separator tone"
+      },
+      "outline-strong": {
+        "value": "#8a8582",
+        "type": "color",
+        "description": "Form-field borders (3:1 non-text contrast)"
+      },
+      "status": {
+        "success": {
+          "value": "#10b981",
+          "type": "color",
+          "description": "Success/Confirmed status tone"
+        },
+        "success-bg": {
+          "value": "#ecfdf5",
+          "type": "color",
+          "description": "Success pill background"
+        },
+        "success-text": {
+          "value": "#047857",
+          "type": "color",
+          "description": "Success pill label text"
+        },
+        "warning": {
+          "value": "#f59e0b",
+          "type": "color",
+          "description": "Pending/Hold status tone"
+        },
+        "warning-bg": {
+          "value": "#fffbeb",
+          "type": "color",
+          "description": "Warning pill background"
+        },
+        "warning-text": {
+          "value": "#b45309",
+          "type": "color",
+          "description": "Warning pill label text"
+        },
+        "neutral": {
+          "value": "#6b7280",
+          "type": "color",
+          "description": "Void/Inactive status tone"
+        },
+        "neutral-bg": {
+          "value": "#f3f4f6",
+          "type": "color",
+          "description": "Neutral pill background"
+        },
+        "neutral-text": {
+          "value": "#4b5563",
+          "type": "color",
+          "description": "Neutral pill label text"
+        },
+        "danger": {
+          "value": "#dc2626",
+          "type": "color",
+          "description": "No-show/Failed/Needs-attention status tone; destructive button fill"
+        },
+        "danger-bg": {
+          "value": "#fef2f2",
+          "type": "color",
+          "description": "Danger pill background"
+        },
+        "danger-text": {
+          "value": "#b91c1c",
+          "type": "color",
+          "description": "Danger pill label text"
+        }
+      }
+    }
+  },
+  "dark": {
+    "color": {
+      "primary": {
+        "value": "#ef7a69",
+        "type": "color",
+        "description": "Brand accent on dark: text, icons, focus ring"
+      },
+      "primary-strong": {
+        "value": "#ef7a69",
+        "type": "color",
+        "description": "Primary button fill on dark"
+      },
+      "on-primary": {
+        "value": "#1f1c1b",
+        "type": "color",
+        "description": "Text/icon on primary (dark text on light terracotta)"
+      },
+      "on-primary-strong": {
+        "value": "#1f1c1b",
+        "type": "color",
+        "description": "Text/icon on primary-strong"
+      },
+      "primary-container": {
+        "value": "#4a201a",
+        "type": "color",
+        "description": "Dark tint for active tags and soft highlights"
+      },
+      "on-primary-container": {
+        "value": "#ffd9d2",
+        "type": "color",
+        "description": "Text/icon on primary container"
+      },
+      "surface": {
+        "value": "#1a1716",
+        "type": "color",
+        "description": "Base warm dark background"
+      },
+      "surface-dim": {
+        "value": "#3a3532",
+        "type": "color",
+        "description": "Subtle borders and dividers"
+      },
+      "surface-bright": {
+        "value": "#1a1716",
+        "type": "color",
+        "description": "Bright surface level"
+      },
+      "surface-container-lowest": {
+        "value": "#221e1c",
+        "type": "color",
+        "description": "Card/sheet containers"
+      },
+      "surface-container-low": {
+        "value": "#262220",
+        "type": "color",
+        "description": "Muted section container background"
+      },
+      "surface-container": {
+        "value": "#2d2826",
+        "type": "color",
+        "description": "Default container surface"
+      },
+      "surface-container-high": {
+        "value": "#36302d",
+        "type": "color",
+        "description": "High-emphasis container / hover background"
+      },
+      "on-surface": {
+        "value": "#f3eeeb",
+        "type": "color",
+        "description": "Primary high-contrast light text"
+      },
+      "on-surface-variant": {
+        "value": "#b0a9a5",
+        "type": "color",
+        "description": "Secondary muted label/caption text"
+      },
+      "outline": {
+        "value": "#3a3532",
+        "type": "color",
+        "description": "Border line tone"
+      },
+      "outline-variant": {
+        "value": "#2b2725",
+        "type": "color",
+        "description": "Hairline separator tone"
+      },
+      "outline-strong": {
+        "value": "#7a726e",
+        "type": "color",
+        "description": "Form-field borders (3:1 non-text contrast)"
+      },
+      "status": {
+        "success": {
+          "value": "#34d399",
+          "type": "color",
+          "description": "Success/Confirmed status tone"
+        },
+        "success-bg": {
+          "value": "#0f2e24",
+          "type": "color",
+          "description": "Success pill background"
+        },
+        "success-text": {
+          "value": "#6ee7b7",
+          "type": "color",
+          "description": "Success pill label text"
+        },
+        "warning": {
+          "value": "#fbbf24",
+          "type": "color",
+          "description": "Pending/Hold status tone"
+        },
+        "warning-bg": {
+          "value": "#33260a",
+          "type": "color",
+          "description": "Warning pill background"
+        },
+        "warning-text": {
+          "value": "#fcd34d",
+          "type": "color",
+          "description": "Warning pill label text"
+        },
+        "neutral": {
+          "value": "#9ca3af",
+          "type": "color",
+          "description": "Void/Inactive status tone"
+        },
+        "neutral-bg": {
+          "value": "#2a2b2e",
+          "type": "color",
+          "description": "Neutral pill background"
+        },
+        "neutral-text": {
+          "value": "#d1d5db",
+          "type": "color",
+          "description": "Neutral pill label text"
+        },
+        "danger": {
+          "value": "#f87171",
+          "type": "color",
+          "description": "No-show/Failed/Needs-attention tone; destructive button fill"
+        },
+        "danger-bg": {
+          "value": "#3b1414",
+          "type": "color",
+          "description": "Danger pill background"
+        },
+        "danger-text": {
+          "value": "#fca5a5",
+          "type": "color",
+          "description": "Danger pill label text"
+        }
+      }
+    }
+  },
+  "$themes": [
+    {
+      "id": "light",
+      "name": "Light",
+      "selectedTokenSets": {
+        "global": "enabled",
+        "light": "enabled"
+      }
+    },
+    {
+      "id": "dark",
+      "name": "Dark",
+      "selectedTokenSets": {
+        "global": "enabled",
+        "dark": "enabled"
+      }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": [
+      "global",
+      "light",
+      "dark"
+    ]
+  }
+}
