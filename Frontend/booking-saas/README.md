@@ -62,7 +62,7 @@ Demo repositories (`core/<feature>/data/demo-*-repository.ts`) implement the sam
 
 | Package | Purpose |
 |---|---|
-| `packages/ui` | Design system: steel-blue theme tokens (light/dark), Button, Card, Badge, KPI card, bar chart, horizontal bar list, SVG line chart and month calendar (no chart library; every chart also renders its data as a table for screen readers), search field, icons, a mobile navigation drawer (native modal `<dialog>`), and the dashboard shell shared by Console and Platform Admin |
+| `packages/ui` | Design system: steel-blue theme tokens (light/dark), Button, Card, Badge, KPI card, bar chart, horizontal bar list, SVG line chart and month calendar (no chart library; every chart also renders its data as a table for screen readers), search field, a select (single or multiple, optional checkboxes on the left, any icon on the right, "Select all"; ARIA combobox with full keyboard support, works in forms and inside dialogs), icons, a mobile navigation drawer (native modal `<dialog>`), and the dashboard shell shared by Console and Platform Admin |
 | `packages/api-client` | `fetch` wrapper: sends cookies, adds the CSRF token to state-changing requests (refreshed once when it expires), validates every response against the API contract, converts failures into `ApiError` with a stable code |
 | `Backend/booking-api/packages/contracts` | API contract (Zod schemas and types), owned by the API |
 

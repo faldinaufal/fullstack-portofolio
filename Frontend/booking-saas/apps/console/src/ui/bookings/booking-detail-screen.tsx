@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
   ConfirmDialog,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -289,15 +289,15 @@ function MoveDrawer({
         <p className="m-0 text-sm text-muted">
           Now {formatWhen(booking, tz)} with {booking.therapist.name}. The customer is emailed.
         </p>
-        <SelectField
+        <Select
           label="Therapist"
           options={[
             ...(mode === 'reassign' ? [{ value: '', label: 'Choose a therapist' }] : []),
             ...therapists.map((t) => ({ value: t.id, label: t.name })),
           ]}
           value={staffId}
-          onChange={(e) => {
-            setStaffId(e.target.value);
+          onValueChange={(value) => {
+            setStaffId(value);
             setTime(null);
           }}
         />

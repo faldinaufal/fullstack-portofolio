@@ -13,7 +13,7 @@ import {
   CardTitle,
   ConfirmDialog,
   Icon,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -255,7 +255,7 @@ function InvitePanel({ open, onClose }: Readonly<{ open: boolean; onClose: () =>
             </Alert>
           )}
           <TextField label="Email" name="email" type="email" required error={error?.fields.email} />
-          <SelectField
+          <Select
             label="Role"
             name="role"
             options={roles.map((role) => ({
@@ -268,7 +268,7 @@ function InvitePanel({ open, onClose }: Readonly<{ open: boolean; onClose: () =>
                 : 'Each branch has at most one manager.'
             }
           />
-          <SelectField
+          <Select
             label="Branch"
             name="branchId"
             options={branchOptions}
@@ -326,7 +326,7 @@ function ChangeMemberPanel({
     <SidePanel open title={`Change ${member.name}`} onClose={onClose}>
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <RequestErrorAlert error={error} />
-        <SelectField
+        <Select
           label="Role"
           name="role"
           defaultValue={member.role}
@@ -335,7 +335,7 @@ function ChangeMemberPanel({
             { value: 'staff', label: 'Staff (therapist)' },
           ]}
         />
-        <SelectField
+        <Select
           label="Branch"
           name="branchId"
           defaultValue={member.branchId ?? undefined}
@@ -362,7 +362,7 @@ function ChangeMemberPanel({
                 {option.label}
               </label>
             ))}
-            <SelectField label="Move to (if moving)" name="moveTo" options={branchOptions} />
+            <Select label="Move to (if moving)" name="moveTo" options={branchOptions} />
           </fieldset>
         )}
         <Button type="submit" size="lg" disabled={update.isPending}>

@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
   ConfirmDialog,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -84,7 +84,7 @@ export function TenantsScreen() {
             value={query.q ?? ''}
             onChange={(e) => set({ q: e.target.value || undefined })}
           />
-          <SelectField
+          <Select
             label="Status"
             options={[
               { value: '', label: 'All' },
@@ -93,7 +93,7 @@ export function TenantsScreen() {
               { value: 'suspended', label: 'Suspended' },
             ]}
             value={query.status ?? ''}
-            onChange={(e) => set({ status: (e.target.value || undefined) as TenantFilter })}
+            onValueChange={(value) => set({ status: (value || undefined) as TenantFilter })}
           />
         </CardContent>
       </Card>

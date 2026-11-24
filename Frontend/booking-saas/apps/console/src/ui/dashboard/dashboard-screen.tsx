@@ -16,7 +16,7 @@ import {
   HBarList,
   KpiCard,
   LineChart,
-  SelectField,
+  Select,
 } from '@tempora/ui';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
@@ -87,14 +87,14 @@ export function DashboardScreen() {
           </div>
           {member.role === 'owner' && (branches.data?.length ?? 0) > 1 && (
             <div className="min-w-[180px]">
-              <SelectField
+              <Select
                 label="Branch"
                 options={[
                   { value: '', label: 'All branches' },
                   ...(branches.data ?? []).map((b) => ({ value: b.id, label: b.name })),
                 ]}
                 value={branchId ?? ''}
-                onChange={(e) => setBranchId(e.target.value || undefined)}
+                onValueChange={(value) => setBranchId(value || undefined)}
               />
             </div>
           )}

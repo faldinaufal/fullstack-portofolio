@@ -10,7 +10,7 @@ import {
   buttonVariants,
   Card,
   CardContent,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -124,11 +124,11 @@ export function AuditLogScreen() {
             value={filters.actor ?? ''}
             onChange={(e) => set({ actor: e.target.value || undefined })}
           />
-          <SelectField
+          <Select
             label="What"
             options={[{ value: '', label: 'Everything' }, ...ACTION_GROUPS]}
             value={filters.action ?? ''}
-            onChange={(e) => set({ action: e.target.value || undefined })}
+            onValueChange={(value) => set({ action: value || undefined })}
           />
           <TextField
             label="From"
@@ -225,7 +225,7 @@ export function EmailLogScreen() {
             value={filters.q ?? ''}
             onChange={(e) => set({ q: e.target.value || undefined })}
           />
-          <SelectField
+          <Select
             label="Status"
             options={[
               { value: '', label: 'All statuses' },
@@ -235,7 +235,7 @@ export function EmailLogScreen() {
               })),
             ]}
             value={filters.status ?? ''}
-            onChange={(e) => set({ status: (e.target.value || undefined) as EmailStatus })}
+            onValueChange={(value) => set({ status: (value || undefined) as EmailStatus })}
           />
         </CardContent>
       </Card>

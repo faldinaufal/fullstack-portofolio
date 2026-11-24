@@ -10,7 +10,7 @@ import {
   buttonVariants,
   Card,
   CardContent,
-  SelectField,
+  Select,
   TextField,
 } from '@tempora/ui';
 import Link from 'next/link';
@@ -67,21 +67,21 @@ export function BookingsScreen() {
             value={filters.q ?? ''}
             onChange={(e) => set({ q: e.target.value || undefined })}
           />
-          <SelectField
+          <Select
             label="Status"
             options={STATUS_OPTIONS}
             value={filters.status ?? ''}
-            onChange={(e) => set({ status: (e.target.value || undefined) as BookingStatus })}
+            onValueChange={(value) => set({ status: (value || undefined) as BookingStatus })}
           />
           {member.role === 'owner' && (
-            <SelectField
+            <Select
               label="Branch"
               options={[
                 { value: '', label: 'All branches' },
                 ...(branches.data ?? []).map((b) => ({ value: b.id, label: b.name })),
               ]}
               value={filters.branchId ?? ''}
-              onChange={(e) => set({ branchId: e.target.value || undefined })}
+              onValueChange={(value) => set({ branchId: value || undefined })}
             />
           )}
           <TextField

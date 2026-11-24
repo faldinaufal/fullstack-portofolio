@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Alert, Button, Card, CardContent, SelectField } from '@tempora/ui';
+import { Alert, Button, Card, CardContent, Select } from '@tempora/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useCurrentMember } from '@/core/auth/presentation/use-auth';
@@ -100,11 +100,11 @@ export function CalendarScreen() {
           </span>
           {member.role === 'owner' && (branches.data?.length ?? 0) > 1 && (
             <div className="ml-auto min-w-[200px]">
-              <SelectField
+              <Select
                 label="Branch"
                 options={(branches.data ?? []).map((b) => ({ value: b.id, label: b.name }))}
                 value={branchId ?? calendar.data?.branch.id ?? ''}
-                onChange={(e) => setBranchId(e.target.value)}
+                onValueChange={(value) => setBranchId(value)}
               />
             </div>
           )}
