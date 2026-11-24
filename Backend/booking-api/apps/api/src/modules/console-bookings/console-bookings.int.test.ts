@@ -15,6 +15,7 @@ import {
 } from '../../test/booking-flows.js';
 import { C, consoleFlows, MEMBER_PASSWORD, OWNER, PEOPLE } from '../../test/console-flows.js';
 import { createHarness, type Harness, type TestBrowser } from '../../test/harness.js';
+import { addDays } from '../reports/calc.js';
 
 const HOUR = 3_600_000;
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -297,7 +298,8 @@ describe('calendar (FSD 2.2)', () => {
     expect(own.therapists.map((t) => t.id)).toEqual([daniel.id]);
     expect(own.bookings).toEqual([]);
 
-    const tooLong = await b.owner.get(`${C}/calendar?from=${monday}&to=${nextWeekday(1, 20)}`);
+    // Three weeks, whatever weekday the tests run on (two Mondays can be only 14 days apart).
+    const tooLong = await b.owner.get(`${C}/calendar?from=${monday}&to=${addDays(monday, 20)}`);
     expect(tooLong.statusCode).toBe(400);
   });
 });

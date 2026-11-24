@@ -138,6 +138,31 @@ DATABASE_URL=postgresql://tempora_app:local-app@localhost:5432/tempora \
 
 Then put the same URLs in `packages/db/.env` and `apps/api/.env`. For the integration tests, set `TEST_DATABASE_URL` (the `tempora_app` URL), `TEST_DATABASE_OWNER_URL` (the owner URL) and `TEST_JOBS_DATABASE_URL` (`tempora_jobs`); the tests empty the tables they use, so keep a separate database for data you want to keep.
 
+### Demo data
+
+`docker compose up` seeds two fictional businesses (Lumen Wellness Studio with three branches,
+Harbor Physio Clinic with two): services, therapists and their hours, customers, about 2,200
+bookings over the last 90 days and the next 14 with invoices, payments and their history.
+It seeds once; your local changes survive a restart. To start again:
+
+```bash
+docker compose run --rm seed node dist/scripts/seed-demo.js --reset
+# or, outside Docker (owner role):
+DATABASE_MIGRATION_URL=postgresql://tempora:<owner password>@localhost:5432/tempora \
+  pnpm --filter @tempora/api demo:seed --reset
+```
+
+| Role | App | Email | Who |
+|---|---|---|---|
+| Owner | Console | `owner@veloria.test` | Ines Halvorsen, Lumen Wellness Studio |
+| Manager | Console | `manager@veloria.test` | Daniel Kim, Downtown branch |
+| Staff (therapist) | Console | `therapist@veloria.test` | Mira Santos, Downtown branch |
+| Customer | Portal | `customer@veloria.test` | Lena Fischer, books at both businesses |
+| Platform admin | Platform Admin | `admin@veloria.test` | Noah Castellanos |
+
+Password for all of them: `tempora-demo-2026`. The Console and Platform Admin ask for an emailed
+code at login: locally it arrives in Mailpit (http://localhost:8025).
+
 ### Create a platform admin
 
 Platform admins are created only by a server command, never through the API:

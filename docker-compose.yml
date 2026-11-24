@@ -55,6 +55,21 @@ services:
       postgres:
         condition: service_healthy
 
+  # Demo businesses and accounts (FSD 10.3), once: an existing demo is kept. Start again with
+  #   docker compose run --rm seed node dist/scripts/seed-demo.js --reset
+  seed:
+    build:
+      <<: *build
+      target: api
+    command: ['node', 'dist/scripts/seed-demo.js']
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tempora:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}@postgres:5432/tempora
+      APP_TIME_ZONE: America/New_York
+      PORTAL_URL: http://localhost:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   api:
     build:
       <<: *build
@@ -72,6 +87,7 @@ services:
       APP_TIME_ZONE: America/New_York
     ports:
       - '4000:4000'
+    # Not waiting for the seed: if it cannot run (see its log), the stack still starts.
     depends_on:
       migrate:
         condition: service_completed_successfully

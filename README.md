@@ -31,8 +31,10 @@ pnpm lint                              # ESLint, including architecture rules
 pnpm headers:check                     # every source file carries the license header
 pnpm turbo run build typecheck test    # every package, in dependency order, cached
 cp .env.example .env                   # local database passwords
-docker compose up --build              # Tempora: database, API, worker and the three apps
+docker compose up --build              # Tempora: database, demo data, API, worker and the three apps
 ```
+
+Demo logins (owner, manager, therapist, customer, platform admin) are listed in the [API README](Backend/booking-api/README.md#demo-data).
 
 CI runs the same checks on every pull request, plus migrations and a smoke test against a real PostgreSQL, and builds every Docker image.
 
