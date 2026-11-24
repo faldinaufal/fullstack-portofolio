@@ -14,6 +14,7 @@ import { createPrismaHealthRepository } from './modules/health/repository.js';
 import { createHmac } from 'node:crypto';
 import { createDemoPaymentProvider } from './lib/payments/demo-provider.js';
 import { createStripePaymentProvider } from './lib/payments/stripe-provider.js';
+import { createS3Storage } from './lib/storage/s3-storage.js';
 import { createAdminAuthService } from './modules/admin-auth/service.js';
 import { createAdminService } from './modules/admin/service.js';
 import { createPortalBookingService } from './modules/bookings/portal-service.js';
@@ -48,6 +49,23 @@ const payments =
         secret: createHmac('sha256', env.TOKEN_HASH_SECRET).update('demo-payments').digest('hex'),
         portalUrl: env.PORTAL_URL,
       });
+// Object storage for business images (FSD 6.15); without it, uploads are unavailable.
+const storage =
+  env.S3_ENDPOINT &&
+  env.S3_BUCKET &&
+  env.S3_ACCESS_KEY_ID &&
+  env.S3_SECRET_ACCESS_KEY &&
+  env.S3_PUBLIC_BASE_URL
+    ? createS3Storage({
+        endpoint: env.S3_ENDPOINT,
+        ...(env.S3_UPLOAD_ENDPOINT && { uploadEndpoint: env.S3_UPLOAD_ENDPOINT }),
+        region: env.S3_REGION,
+        bucket: env.S3_BUCKET,
+        accessKeyId: env.S3_ACCESS_KEY_ID,
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+        publicBaseUrl: env.S3_PUBLIC_BASE_URL,
+      })
+    : null;
 const rateLimiter = createPostgresRateLimiter(prisma, hashToken);
 // Shared by the Console and the Platform Admin's support views (same queries, FSD 1.4).
 const consoleBookings = createConsoleBookingService({
@@ -72,7 +90,7 @@ const app = await buildApp({
     }),
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
-  publicCatalogue: createPublicCatalogue({ prisma, timeZone: env.APP_TIME_ZONE }),
+  publicCatalogue: createPublicCatalogue({ prisma, timeZone: env.APP_TIME_ZONE, storage }),
   bookings: {
     service: createBookingService({
       prisma,
@@ -80,6 +98,7 @@ const app = await buildApp({
       hashToken,
       timeZone: env.APP_TIME_ZONE,
       portalUrl: env.PORTAL_URL,
+      storage,
     }),
     portal: createPortalBookingService({
       prisma,
@@ -87,6 +106,7 @@ const app = await buildApp({
       hashToken,
       timeZone: env.APP_TIME_ZONE,
       portalUrl: env.PORTAL_URL,
+      storage,
     }),
   },
   admin: {
@@ -115,10 +135,10 @@ const app = await buildApp({
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
   consoleModules: {
-    tenant: createTenantService({ prisma }),
+    tenant: createTenantService({ prisma, storage }),
     branches: createBranchService({ prisma, timeZone: env.APP_TIME_ZONE }),
     services: createServiceCatalogue({ prisma }),
-    schedules: createScheduleService({ prisma, timeZone: env.APP_TIME_ZONE }),
+    schedules: createScheduleService({ prisma, timeZone: env.APP_TIME_ZONE, storage }),
     bookings: consoleBookings,
     records: consoleRecords,
     reports: createReportService({ prisma, timeZone: env.APP_TIME_ZONE }),

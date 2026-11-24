@@ -41,6 +41,9 @@ export const TenantSettingsSchema = z
     status: z.enum(['active', 'suspended']),
     version: z.number().int(),
     bookingSettings: BookingSettingsSchema,
+    /** Uploaded images (FSD 6.15); null until the owner adds one. */
+    logoUrl: z.url().nullable(),
+    coverUrl: z.url().nullable(),
     setup: SetupStatusSchema,
   })
   .meta({ id: 'TenantSettings' });
@@ -53,6 +56,50 @@ export const UpdateTenantRequestSchema = z
   })
   .meta({ id: 'UpdateTenantRequest' });
 export type UpdateTenantRequest = z.infer<typeof UpdateTenantRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Business images (FSD 6.15)
+// ---------------------------------------------------------------------------
+
+export const TenantImageKindSchema = z.enum(['logo', 'cover']);
+export type TenantImageKind = z.infer<typeof TenantImageKindSchema>;
+
+/** Raster images only: SVG can carry scripts (FSD 8.3). */
+export const ImageContentTypeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+export type ImageContentType = z.infer<typeof ImageContentTypeSchema>;
+
+/** Largest accepted file per image kind, in bytes (FSD 6.15). */
+export const IMAGE_MAX_BYTES: Record<TenantImageKind, number> = {
+  logo: 1024 * 1024,
+  cover: 4 * 1024 * 1024,
+};
+
+/** Largest accepted therapist photo, in bytes (FSD 6.15). */
+export const PHOTO_MAX_BYTES = 1024 * 1024;
+
+export const ImageUploadRequestSchema = z
+  .object({
+    contentType: ImageContentTypeSchema,
+    sizeBytes: z.number().int().min(1),
+  })
+  .meta({ id: 'ImageUploadRequest' });
+export type ImageUploadRequest = z.infer<typeof ImageUploadRequestSchema>;
+
+/** Send the file with `PUT uploadUrl` and exactly these headers, then confirm with `key`. */
+export const ImageUploadSchema = z
+  .object({
+    uploadUrl: z.url(),
+    headers: z.record(z.string(), z.string()),
+    key: z.string(),
+    expiresAt: z.iso.datetime(),
+  })
+  .meta({ id: 'ImageUpload' });
+export type ImageUpload = z.infer<typeof ImageUploadSchema>;
+
+export const ConfirmImageRequestSchema = z
+  .object({ key: z.string().min(1).max(200) })
+  .meta({ id: 'ConfirmImageRequest' });
+export type ConfirmImageRequest = z.infer<typeof ConfirmImageRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // Service catalogue (FSD 6.12)
@@ -169,6 +216,8 @@ export type CreateTimeOffRequest = z.infer<typeof CreateTimeOffRequestSchema>;
 
 /** `GET /members/:id`: the member plus their schedule (FSD 2.2 Team member detail). */
 export const MemberDetailSchema = MemberSchema.extend({
+  /** Therapist photo shown to customers (FSD 6.15); null when none was uploaded. */
+  photoUrl: z.url().nullable(),
   workingHours: z.array(WorkingHoursSchema),
   services: z.array(z.object({ id: z.uuid(), name: z.string() })),
   /** Time off that ends now or later. */

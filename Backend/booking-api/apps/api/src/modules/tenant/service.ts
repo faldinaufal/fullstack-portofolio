@@ -4,9 +4,11 @@
 import type { SetupStatus, TenantSettings, UpdateTenantRequest } from '@tempora/contracts';
 import { withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { recordAudit } from '../../lib/audit.js';
+import { imageUrl, type ObjectStorage } from '../../lib/storage/storage.js';
 import { versionConflict } from '../../lib/route-schemas.js';
 import { auditActor } from '../branches/service.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
+import { createTenantImages } from './images.js';
 
 /**
  * Setup is complete when customers could book something (FSD 3.4 step 3): an active branch,
@@ -39,7 +41,11 @@ export async function setupStatus(tx: Tx, tenantId: string): Promise<SetupStatus
 
 type TenantRow = Awaited<ReturnType<Tx['tenant']['findUniqueOrThrow']>>;
 
-function toSettings(tenant: TenantRow, setup: SetupStatus): TenantSettings {
+export function toSettings(
+  tenant: TenantRow,
+  setup: SetupStatus,
+  storage: ObjectStorage | null,
+): TenantSettings {
   return {
     id: tenant.id,
     name: tenant.name,
@@ -52,12 +58,23 @@ function toSettings(tenant: TenantRow, setup: SetupStatus): TenantSettings {
       cancellationCutoffHours: tenant.cancellationCutoffHours,
       maxCustomerReschedules: tenant.maxCustomerReschedules,
     },
+    logoUrl: imageUrl(storage, tenant.logoKey),
+    coverUrl: imageUrl(storage, tenant.coverKey),
     setup,
   };
 }
 
-/** Business profile and booking settings (FSD 2.2 Settings, 5.4 `/tenant`, 6.1). */
-export function createTenantService({ prisma }: { prisma: PrismaClient }) {
+export interface TenantServiceDeps {
+  prisma: PrismaClient;
+  /** Null when no object storage is configured: uploads are unavailable (FSD 6.15). */
+  storage: ObjectStorage | null;
+}
+
+/**
+ * Business profile, images and booking settings (FSD 2.2 Settings, 5.4 `/tenant`, 6.1,
+ * 6.15).
+ */
+export function createTenantService({ prisma, storage }: TenantServiceDeps) {
   const inTenant = <T>(actor: ConsoleActor, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId: actor.tenantId, teamAccountId: actor.teamAccountId }, work);
 
@@ -65,7 +82,7 @@ export function createTenantService({ prisma }: { prisma: PrismaClient }) {
     get: (actor: ConsoleActor) =>
       inTenant(actor, async (tx) => {
         const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId } });
-        return toSettings(tenant, await setupStatus(tx, actor.tenantId));
+        return toSettings(tenant, await setupStatus(tx, actor.tenantId), storage);
       }),
 
     /** Owner only; optimistic locking like every versioned record (FSD 4.1). */
@@ -93,7 +110,10 @@ export function createTenantService({ prisma }: { prisma: PrismaClient }) {
         if (count === 0) throw versionConflict('business');
         const after = await tx.tenant.findUniqueOrThrow({ where: { id: actor.tenantId } });
         const setup = await setupStatus(tx, actor.tenantId);
-        const [beforeDto, afterDto] = [toSettings(before, setup), toSettings(after, setup)];
+        const [beforeDto, afterDto] = [
+          toSettings(before, setup, storage),
+          toSettings(after, setup, storage),
+        ];
         await recordAudit(tx, auditActor(actor), {
           tenantId: actor.tenantId,
           action: 'tenant.updated',
@@ -104,6 +124,8 @@ export function createTenantService({ prisma }: { prisma: PrismaClient }) {
         });
         return afterDto;
       }),
+
+    ...createTenantImages({ inTenant, storage }),
   };
 }
 

@@ -29,6 +29,7 @@ import {
   slotError,
 } from './rules.js';
 import { portalBooking } from './views.js';
+import type { ObjectStorage } from '../../lib/storage/storage.js';
 
 const MINUTE = 60_000;
 
@@ -57,6 +58,8 @@ export interface BookingServiceDeps {
   hashToken: TokenHasher;
   timeZone: string;
   portalUrl: string;
+  /** Builds therapist photo URLs (FSD 6.15); null without storage. */
+  storage?: ObjectStorage | null;
   now?: () => Date;
 }
 
@@ -67,10 +70,12 @@ export function createBookingService({
   hashToken,
   timeZone,
   portalUrl,
+  storage = null,
   now = () => new Date(),
 }: BookingServiceDeps) {
   const inTenant = <T>(tenantId: string, work: (tx: Tx) => Promise<T>) =>
     withDbContext(prisma, { tenantId }, work, { timeoutMs: 15_000 });
+  const view = { timeZone, storage };
   const emailContext = { hashToken, portalUrl, timeZone };
 
   /** A new access token for a booking created earlier (idempotent replay by the same sender). */
@@ -327,7 +332,7 @@ export function createBookingService({
           },
         });
         return {
-          booking: await portalBooking(tx, booking.id, now(), timeZone),
+          booking: await portalBooking(tx, booking.id, now(), view),
           checkoutUrl: checkout.url,
         };
       });

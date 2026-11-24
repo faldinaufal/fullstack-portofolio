@@ -40,7 +40,8 @@ Node.js 24 · TypeScript · Fastify 5 · Zod 4 · PostgreSQL 17 · Prisma 7 · p
 | Active bookings block changes | Time off, working hours, opening hours, closures, deactivating or moving a member and archiving a service or branch answer `409 HAS_ACTIVE_BOOKINGS` with the bookings in the way (FSD 6.8), under the same per-therapist lock as booking |
 | Auto-complete | Worker job every hour: confirmed sessions not marked within 24 h of their end become `completed`, audited with the system as actor |
 | Reschedule | `POST /v1/portal/bookings/:id/reschedule` for confirmed bookings (FSD 6.5): cut-off and limit checked, the booking moved in place (same invoice and payment), both therapists locked in ID order, the same availability rules as booking with the booking's own time not counted as taken, "booking moved" email |
-| Invoices | `GET /v1/portal/invoices` (across businesses) and `GET /v1/portal/bookings/:id/invoice` with the same access as the booking |
+| Invoices | `GET /v1/portal/invoices` (across businesses, filter by status and by invoice number, business or service), `GET /v1/portal/invoices/summary` (paid this year, still open) and `GET /v1/portal/bookings/:id/invoice` with the same access as the booking |
+| Business images | Logo, cover photo and therapist photos (FSD 6.15), one shared upload path: presigned S3 `PUT` signed for the declared type and size, then the stored object is checked again (size, and its first bytes for the real type: PNG, JPEG or WebP, no SVG) before the key is saved with an audit entry; the replaced file is deleted. One `ObjectStorage` interface with an S3 client (Cloudflare R2, SeaweedFS locally) and an in-memory version for the integration tests |
 | Reminders | Queued in the email outbox at payment with a future send time, naming the booking and the start time it was written for; the worker sends it only if the booking is still confirmed at that time, otherwise marks it `skipped` |
 | Hold expiry | Worker job every minute: one SQL statement expires unpaid holds, voids their invoices, expires the Checkout record and audits it; safe to run twice or concurrently. The worker role may update only these tables and append to the audit log |
 | Public API | `/v1/public`: directory (search by business or service), business and branch pages, availability; bookability decided by `SECURITY DEFINER` SQL functions so RLS stays intact |
@@ -93,7 +94,7 @@ Requirements: Node.js 24+, pnpm 10, Docker.
 ```bash
 # from the repository root
 cp .env.example .env          # choose local passwords
-docker compose up --build     # PostgreSQL, migrations, API, worker, the three apps, Mailpit
+docker compose up --build     # PostgreSQL, migrations, API, worker, the three apps, Mailpit, storage
 ```
 
 The first build takes about a minute and a half (it downloads the dependencies once); after
@@ -161,7 +162,9 @@ DATABASE_MIGRATION_URL=postgresql://tempora:<owner password>@localhost:5432/temp
 | Platform admin | Platform Admin | `admin@veloria.test` | Noah Castellanos |
 
 Password for all of them: `tempora-demo-2026`. The Console and Platform Admin ask for an emailed
-code at login: locally it arrives in Mailpit (http://localhost:8025).
+code at login: locally it arrives in Mailpit (http://localhost:8025). Every other team login
+(each manager and therapist of both businesses) is listed in
+[DEMO-ACCOUNTS.md](../../docs/booking-saas/DEMO-ACCOUNTS.md).
 
 ### Create a platform admin
 
