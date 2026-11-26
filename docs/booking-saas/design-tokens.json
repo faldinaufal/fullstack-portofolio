@@ -76,12 +76,12 @@
       "primary": {
         "value": "#df5a49",
         "type": "color",
-        "description": "Brand primary accent (Lotus Terracotta)"
+        "description": "Brand primary (Lotus Terracotta): button fills, sidebar, accents"
       },
       "primary-strong": {
         "value": "#c2412f",
         "type": "color",
-        "description": "Primary button fill and primary-coloured text (5.1:1 with white)"
+        "description": "Primary-coloured small text (5.1:1 on white)"
       },
       "on-primary": {
         "value": "#ffffff",
@@ -173,6 +173,11 @@
           "value": "#ecfdf5",
           "type": "color",
           "description": "Success pill background"
+        },
+        "success-container": {
+          "value": "#a7f3d0",
+          "type": "color",
+          "description": "Fill of the large confirmation check (payment result); success-text icon on it"
         },
         "success-text": {
           "value": "#047857",
@@ -329,6 +334,11 @@
           "value": "#0f2e24",
           "type": "color",
           "description": "Success pill background"
+        },
+        "success-container": {
+          "value": "#065f46",
+          "type": "color",
+          "description": "Fill of the large confirmation check (payment result); success-text icon on it"
         },
         "success-text": {
           "value": "#6ee7b7",

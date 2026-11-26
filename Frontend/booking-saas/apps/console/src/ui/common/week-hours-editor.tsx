@@ -75,7 +75,7 @@ export function WeekHoursEditor({
         return (
           <div
             key={weekday}
-            className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-muted/50 px-3 py-2"
+            className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-muted px-3 py-2"
           >
             <label className="flex w-36 items-center gap-2.5 text-sm font-semibold">
               <input

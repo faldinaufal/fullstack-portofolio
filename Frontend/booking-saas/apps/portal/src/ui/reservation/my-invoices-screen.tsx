@@ -67,7 +67,7 @@ export function MyInvoicesScreen() {
         customer && (
           <>
             <span className="tracking-wide text-primary-text uppercase">Billing</span>
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-primary/40" />
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
             <span>{customer.name}</span>
           </>
         )
@@ -159,7 +159,7 @@ export function MyInvoicesScreen() {
             className="flex flex-col gap-px border-t border-border-subtle"
           >
             {[0, 1, 2].map((row) => (
-              <div key={row} className="h-20 animate-pulse bg-surface-muted/60" />
+              <div key={row} className="h-20 animate-pulse bg-surface-muted" />
             ))}
           </div>
         )}
@@ -186,7 +186,7 @@ export function MyInvoicesScreen() {
             <caption className="sr-only">
               Invoices{filtered ? ', filtered' : ''}, page {page} of {pages}
             </caption>
-            <thead className="hidden border-y border-border-subtle bg-surface-muted/60 text-left text-xs font-semibold tracking-wider uppercase md:table-header-group">
+            <thead className="hidden border-y border-border-subtle bg-surface-muted text-left text-xs font-semibold tracking-wider uppercase md:table-header-group">
               <tr>
                 <th scope="col" className="px-5 py-4">
                   Invoice #
@@ -278,7 +278,7 @@ export function MyInvoicesScreen() {
         </nav>
       )}
 
-      <div className="flex flex-col gap-3 rounded-panel border border-border-subtle bg-surface-muted/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-panel border border-border-subtle bg-surface-muted p-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm sm:text-[15px]">
           <span className="font-semibold">Need a PDF?</span>{' '}
           <span className="text-muted">

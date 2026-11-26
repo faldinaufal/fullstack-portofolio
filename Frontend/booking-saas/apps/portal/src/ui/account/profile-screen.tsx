@@ -208,7 +208,7 @@ function SessionsCard() {
         {sessions.data?.map((session) => (
           <div
             key={session.id}
-            className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted/50 px-4 py-3"
+            className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted px-4 py-3"
           >
             <span>
               <span className="block font-bold">{session.device}</span>

@@ -146,9 +146,7 @@ Every screen supports light/dark mode and works from 360 px wide. List screens h
 | For businesses | `/for-business` | Explains Tempora to business owners; links to Console sign-up | Everyone |
 | Business page | `/[tenant]` | Cover photo and logo (6.15), branch tabs: therapists of the branch ("Ines H.", with their photo, 6.15), address, phone, opening hours and closures; service catalogue with duration and price; booking policy (lead time, cut-off, free reschedules) | Everyone |
 | Branch page | `/[tenant]/branches/[branch]` | Branch details, therapists, services offered | Everyone |
-| Book: choose service and therapist | `/[tenant]/book` | Step 1: branch → service → therapist | Everyone |
-| Book: choose time | `/[tenant]/book/time` | Step 2: date picker (horizon limited) and free 30-minute slots | Everyone |
-| Book: details | `/[tenant]/book/details` | Step 3: log in, sign up or continue as guest; notes; summary with price | Everyone |
+| Book a session | `/[tenant]/book` | One page, three steps: service → therapist (photo, "Ines H.") → date (horizon limited, closed days disabled) and a free 30-minute slot; the branch comes from the business page and can be switched. A summary beside the steps shows the choices and price and takes a login (log in / sign up and come back) or the guest details, plus notes, then "Pay". Choices live in the URL query, so a reload or the way back from the login keeps them. The hold starts when the booking is created on "Pay" (6.3). The old step URLs `/book/time` and `/book/details` redirect here | Everyone |
 | Payment pending | `/bookings/[id]/pay` | Countdown to hold expiry, "Pay now" (Stripe Checkout), "Cancel" | Customer, guest (link) |
 | Payment result | `/bookings/[id]/confirmation` | Waits for the webhook, then shows confirmed / expired | Customer, guest (link) |
 | Sign up / log in | `/signup`, `/login` | Customer account | Everyone |

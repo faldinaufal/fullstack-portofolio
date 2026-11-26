@@ -238,7 +238,7 @@ function ClosuresCard({ branch, editable }: Readonly<{ branch: Detail; editable:
             {branch.closures.map((closure) => (
               <li
                 key={closure.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted/50 px-3 py-2.5"
+                className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted px-3 py-2.5"
               >
                 <span>
                   <span className="block text-sm font-bold">{closure.reason}</span>
@@ -313,7 +313,7 @@ function ArchiveCard({ branch }: Readonly<{ branch: Detail }>) {
   const error = toRequestErrorView(archive.error);
 
   return (
-    <Card className="border-danger/40">
+    <Card className="border-danger">
       <CardHeader>
         <CardTitle>Archive branch</CardTitle>
       </CardHeader>

@@ -3,8 +3,7 @@
 
 'use client';
 
-import { Badge, Card, Icon } from '@tempora/ui';
-import Link from 'next/link';
+import { Card, Icon } from '@tempora/ui';
 import { useSearchParams } from 'next/navigation';
 import {
   useReservation,
@@ -19,6 +18,7 @@ import {
   ReservationUnavailable,
 } from './reservation-parts';
 import { useRequireCustomer } from './account-page';
+import { ConfirmedView } from './confirmation-view';
 
 /** FSD 2.1 `/bookings/[id]/pay`: countdown, "Pay now", "Cancel". */
 export function PayScreen({ id }: Readonly<{ id: string }>) {
@@ -48,23 +48,7 @@ export function ConfirmationScreen({ id }: Readonly<{ id: string }>) {
   if (reservation.isError) return <ReservationUnavailable />;
   const data = reservation.data;
 
-  if (data.status === 'confirmed') {
-    return (
-      <ReservationPage>
-        <div className="flex flex-col gap-2">
-          <Badge tone="success" dot className="self-start">
-            Paid
-          </Badge>
-          <h1 className="text-[32px] leading-tight font-extrabold">You’re booked!</h1>
-          <p className="m-0 text-muted">A confirmation with your invoice is on its way by email.</p>
-        </div>
-        <ReservationSummaryCard reservation={data} />
-        <Link href="/account/bookings" className="font-semibold text-primary-text">
-          See all my bookings
-        </Link>
-      </ReservationPage>
-    );
-  }
+  if (data.status === 'confirmed') return <ConfirmedView reservation={data} />;
   if (data.status === 'pending_payment') {
     return (
       <ReservationPage>

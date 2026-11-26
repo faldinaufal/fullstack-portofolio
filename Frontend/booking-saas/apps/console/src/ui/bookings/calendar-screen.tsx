@@ -167,7 +167,7 @@ function DayView({ data, date }: Readonly<{ data: CalendarData; date: string }>)
               {hours.map((hour) => (
                 <div
                   key={hour}
-                  className="absolute inset-x-0 border-t border-border/60"
+                  className="absolute inset-x-0 border-t border-border-subtle"
                   style={{ top: (hour - FIRST_HOUR) * 60 * SCALE }}
                 />
               ))}

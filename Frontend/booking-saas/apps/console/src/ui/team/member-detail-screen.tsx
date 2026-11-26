@@ -182,7 +182,7 @@ function MemberServicesCard({ member }: Readonly<{ member: Detail }>) {
               {active.map((service) => (
                 <label
                   key={service.id}
-                  className="flex items-center gap-3 rounded-xl bg-surface-muted/50 px-3 py-2.5 text-sm"
+                  className="flex items-center gap-3 rounded-xl bg-surface-muted px-3 py-2.5 text-sm"
                 >
                   <input
                     type="checkbox"
@@ -259,7 +259,7 @@ function TimeOffCard({ member }: Readonly<{ member: Detail }>) {
             {member.timeOffRows.map((entry) => (
               <li
                 key={entry.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted/50 px-3 py-2.5"
+                className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted px-3 py-2.5"
               >
                 <span>
                   <span className="block text-sm font-bold">{entry.reason}</span>

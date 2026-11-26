@@ -321,7 +321,7 @@ function SetupCard() {
   const settings = useBusinessSettings(me.role === 'owner');
   if (me.role !== 'owner' || !settings.data || settings.data.setup.complete) return null;
   return (
-    <Card className="flex flex-wrap items-center justify-between gap-5 border-primary/40 p-5">
+    <Card className="flex flex-wrap items-center justify-between gap-5 border-primary p-5">
       <div className="flex flex-col gap-3">
         <p className="text-lg font-extrabold">Finish setting up {settings.data.name}</p>
         <SetupChecklist setup={settings.data.setup} />
