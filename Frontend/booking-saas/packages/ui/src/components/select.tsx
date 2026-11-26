@@ -345,7 +345,7 @@ export function Select(props: Readonly<SelectProps>) {
           tabIndex={-1}
           // Keeps focus on the button while choosing with the pointer.
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-surface p-1 text-foreground shadow-[0_14px_34px_rgba(23,38,47,0.16)]"
+          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-surface p-1 text-foreground shadow-[0_14px_34px_rgba(31,28,27,0.16)]"
         >
           {hasAll && (
             <li

@@ -40,8 +40,8 @@ The look comes from the Figma file. Exact values are in [design-tokens.json](des
 
 | Group | Token | Light | Dark | Use |
 |---|---|---|---|---|
-| Brand | `primary` | `#df5a49` | `#ef7a69` | Lotus Terracotta: accent, icons, large text, focus ring |
-| | `primary-strong` * | `#c2412f` | `#ef7a69` | Primary button fill, primary-coloured small text |
+| Brand | `primary` | `#df5a49` | `#ef7a69` | Lotus Terracotta: primary button fill, Console sidebar, accent, icons, large text, focus ring. White labels on it reach 3.6:1, so they are semibold |
+| | `primary-strong` * | `#c2412f` | `#ef7a69` | Primary-coloured small text (links, prices, eyebrows): 4.5:1 on the light surfaces |
 | | `on-primary` / `on-primary-strong` * | `#ffffff` | `#1f1c1b` | Text and icons on the two above (dark mode uses dark text on light terracotta) |
 | | `primary-container` | `#fdeee9` | `#4a201a` | Active tags, selected slot, soft highlights |
 | | `on-primary-container` | `#9c3022` | `#ffd9d2` | Text on `primary-container` |
@@ -57,6 +57,7 @@ The look comes from the Figma file. Exact values are in [design-tokens.json](des
 | | `outline-variant` | `#eceae7` | `#2b2725` | Hairline separators |
 | | `outline-strong` * | `#8a8582` | `#7a726e` | Form-field borders (3:1) |
 | Success | `status.success` / `-bg` / `-text` * | `#10b981` / `#ecfdf5` / `#047857` | `#34d399` / `#0f2e24` / `#6ee7b7` | `confirmed`, `paid`, `succeeded`, `completed` |
+| | `status.success-container` | `#a7f3d0` | `#065f46` | Inner circle of the large check on the payment result (inside a `-bg` halo); the check is `-text` |
 | Warning | `status.warning` / `-bg` / `-text` * | `#f59e0b` / `#fffbeb` / `#b45309` | `#fbbf24` / `#33260a` / `#fcd34d` | `pending_payment`, `open`, `pending` |
 | Neutral | `status.neutral` / `-bg` / `-text` * | `#6b7280` / `#f3f4f6` / `#4b5563` | `#9ca3af` / `#2a2b2e` / `#d1d5db` | `expired`, `void`, `cancelled` |
 | Danger * | `status.danger` / `-bg` / `-text` | `#dc2626` / `#fef2f2` / `#b91c1c` | `#f87171` / `#3b1414` / `#fca5a5` | `no_show`, `failed`, `needs_attention`; destructive buttons |
@@ -178,16 +179,14 @@ Every FSD screen with its visual reference. "Compose" means there is no frame: b
 | For businesses | `/for-business` | Compose: Portal shell + hero and feature sections in the `1:615` style |
 | Business page | `/[tenant]` | `1:1025` Lumen Wellness: cover hero (FSD 6.15), branch tabs with therapists ("Ines H." and their photo), service list with duration and price, info cards with address, phone, **opening hours** and booking policy. No ratings, rooms or parking |
 | Branch page | `/[tenant]/branches/[branch]` | Compose from `1:1025`: branch details, therapists ("Ines H."), services |
-| Book: service and therapist | `/[tenant]/book` | `1:1751` Minimalist Booking, step 1: **branch → service → therapist** |
-| Book: choose time | `/[tenant]/book/time` | `1:1751` / `1:2257` date strip and slot chips, 30-minute grid, horizon limited |
-| Book: details | `/[tenant]/book/details` | Compose: log in / sign up / continue as guest, notes, summary with price, "Continue to payment" |
+| Book a session | `/[tenant]/book` | `1:1751` Minimalist Booking: business header with "Switch" (branch), numbered cards Service → Therapist → Date & time, sticky summary with Guest / Log in tabs and "Pay $…". No ratings, room or full names (4.2); the header says the time is held 30 min while paying instead of a running timer, because the hold only starts when the booking is created |
 | Payment pending | `/bookings/[id]/pay` | Compose: 30-minute countdown, "Pay now" (Stripe Checkout), "Cancel booking" |
-| Payment result | `/bookings/[id]/confirmation` | `1:2052` Booking Confirmation. Add a "waiting for payment confirmation" state and an expired state |
+| Payment result | `/bookings/[id]/confirmation` | `1:2052` Booking Confirmation: success chip and check, "You’re all booked, {first name}!", one card with the invoice number (in place of the booking reference), therapist photo + business and branch, scheduled time and service tiles, payment summary without a tax line, "View invoice" and "View in My bookings" (guests: "Manage this booking"), and a reschedule-until pill when rescheduling is allowed. No "Add to calendar" or PDF button. Add a "waiting for payment confirmation" state and an expired state |
 | Sign up / log in | `/signup`, `/login` | `1:2614`, `1:2532` (fixes from 4.1) |
 | Verify email, forgot / reset password | `/verify-email`, `/forgot-password`, `/reset-password` | Compose from the `1:2532` card layout |
 | My bookings | `/account/bookings` | `1:1633`. Therapist photo (or initials), status chips for every status, invoice number instead of a booking number, actions from the API: "Pay now" and "Cancel" on `pending_payment`, "Reschedule" when allowed |
 | Booking detail | `/account/bookings/[id]`, `/bookings/[id]` | Compose from `1:2052`: details, reschedule (with remaining count or the reason it is hidden), cancel if unpaid, invoice link |
-| Reschedule | `/bookings/[id]/reschedule` | `1:2257` (without "Any specialist") |
+| Reschedule | `/bookings/[id]/reschedule` | `1:2257`: back button, "Choose a new time", "change online until" pill; current-booking card with the invoice number (no booking reference), status, "N of M free reschedules remaining", time, therapist ("Ines H."), branch and address (no room) and the paid price; numbered steps Therapist (branch therapists who perform the service, without "Any specialist") → Date → start times grouped Morning / Afternoon / Evening; selected-time bar; "no extra payment" note, "Keep the current time" and "Confirm new time" |
 | Invoices | `/account/invoices` | `1:1366`: totals, search and status filter (open / paid / void), "View" opens the printable invoice. No PDF, refunds or HSA |
 | Invoice | `/bookings/[id]/invoice` | Compose: printable invoice from the receipt part of `1:2052` |
 | Profile and security | `/account/profile` | Compose: name, phone, password, active sessions, "Log out everywhere" |

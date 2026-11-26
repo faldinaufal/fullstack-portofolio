@@ -19,7 +19,7 @@
  *   border-subtle        outline-variant (hairlines)
  *   border-strong        outline-strong (form fields, 3:1)
  *   accent               primary (icons, large text, focus ring)
- *   primary              primary-strong (button fills, 4.5:1 with its label)
+ *   primary              primary (button fills and sidebar)
  *   primary-text         primary-strong (small brand-coloured text)
  *   primary-container    primary-container / on-primary-container
  *   success|warning|danger|info  status.*-text, with *-soft = status.*-bg
@@ -44,9 +44,10 @@
   --border-strong: #8a8582;
   --ring: #df5a49;
 
-  /* Brand: Lotus Terracotta. accent = icons and large text; primary = filled buttons. */
+  /* Brand: Lotus Terracotta. Filled buttons and the sidebar use #df5a49 (3.6:1 with white,
+     so their labels are semibold). Small brand-coloured text stays darker for 4.5:1. */
   --accent: #df5a49;
-  --primary: #c2412f;
+  --primary: #df5a49;
   --primary-foreground: #ffffff;
   --primary-text: #c2412f;
   --primary-container: #fdeee9;
@@ -54,7 +55,7 @@
 
   /* Dashboard navigation (Console, Platform Admin). */
   --rail: #ffffff;
-  --sidebar: #c2412f;
+  --sidebar: #df5a49;
   --sidebar-foreground: #ffffff;
   --sidebar-muted: #fdeee9;
   --sidebar-active: #fbf9f7;
@@ -67,6 +68,8 @@
   /* Status: text colour + soft background, all pairs at least 4.5:1. */
   --success: #047857;
   --success-soft: #ecfdf5;
+  /* Stronger success fill for one large confirmation mark; `success` icons on it reach 4.6:1. */
+  --success-container: #a7f3d0;
   --warning: #b45309;
   --warning-soft: #fffbeb;
   --danger: #b91c1c;
@@ -112,6 +115,7 @@
 
   --success: #6ee7b7;
   --success-soft: #0f2e24;
+  --success-container: #065f46;
   --warning: #fcd34d;
   --warning-soft: #33260a;
   --danger: #fca5a5;
@@ -153,6 +157,7 @@
   --color-chart-2: var(--chart-2);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-success-container: var(--success-container);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);

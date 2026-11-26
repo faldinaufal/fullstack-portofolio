@@ -304,7 +304,5 @@ function BookingCard({ item, upcoming }: Readonly<{ item: ReservationView; upcom
 }
 
 function Dot({ className = '' }: Readonly<{ className?: string }>) {
-  return (
-    <li aria-hidden="true" className={`size-1 rounded-full bg-muted opacity-60 ${className}`} />
-  );
+  return <li aria-hidden="true" className={`size-1 rounded-full bg-border ${className}`} />;
 }

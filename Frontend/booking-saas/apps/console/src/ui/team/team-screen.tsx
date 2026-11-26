@@ -178,7 +178,7 @@ function InvitationsCard() {
         {invitations.data?.map((invitation) => (
           <div
             key={invitation.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-muted/50 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-muted px-4 py-3"
           >
             <span>
               <span className="block font-bold">{invitation.email}</span>

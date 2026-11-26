@@ -3,7 +3,7 @@
 
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { ChooseScreen } from '@/ui/booking/choose-screen';
+import { BookScreen } from '@/ui/booking/book-screen';
 
 export const metadata: Metadata = { title: 'Book a session' };
 
@@ -12,7 +12,7 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ tena
   return (
     // The choices live in the URL query, which is only known in the browser.
     <Suspense>
-      <ChooseScreen slug={tenant} />
+      <BookScreen slug={tenant} />
     </Suspense>
   );
 }
