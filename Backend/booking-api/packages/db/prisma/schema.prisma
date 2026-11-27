@@ -777,6 +777,22 @@ model EmailMessage {
   @@map("email_messages")
 }
 
+/// Demo inbox (FSD 4.3, 10.3): with DEMO_MODE on, the worker renders emails to the demo address
+/// domain into this table instead of sending them. Public by design (only demo addresses land
+/// here), so no tenant and no RLS; kept 24 h and at most the newest 500.
+model DemoEmail {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  toEmail   String   @map("to_email") @db.VarChar(254)
+  template  String   @db.VarChar(60)
+  subject   String   @db.VarChar(300)
+  textBody  String   @map("text_body")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([toEmail, createdAt])
+  @@index([createdAt])
+  @@map("demo_emails")
+}
+
 /// Rate-limit counter shared by every API container (FSD 8.2). One row per counted event;
 /// the key is an HMAC, so emails and IP addresses are not stored in clear.
 model RateLimitHit {

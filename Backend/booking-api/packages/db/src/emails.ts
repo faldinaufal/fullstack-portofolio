@@ -68,3 +68,15 @@ export interface OutboxEmail<T extends EmailTemplate = EmailTemplate> {
 
 /** Maximum delivery attempts before a message is marked `failed` (FSD 8.5). */
 export const EMAIL_MAX_ATTEMPTS = 5;
+
+/** The demo inbox keeps a day of emails, at most this many (FSD 4.3). */
+export const DEMO_INBOX_LIMIT = 500;
+export const DEMO_INBOX_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether an address belongs to the demo address domain (FSD 10.3): its emails go to the public
+ * demo inbox instead of being sent. The worker and the API decide with this one rule.
+ */
+export function isDemoAddress(email: string, demoDomain: string): boolean {
+  return email.trim().toLowerCase().endsWith(`@${demoDomain.toLowerCase()}`);
+}

@@ -4,9 +4,21 @@ Three independent full-stack projects, each built from scratch with fictional da
 
 | # | Project | Frontend | Backend | Status | Live demo |
 |---|---|---|---|---|---|
-| 1 | **Tempora — Booking & Invoicing SaaS**: multi-tenant, roles, conflict-free booking, invoices, Stripe (test mode), dashboard charts | [`Frontend/booking-saas`](Frontend/booking-saas) · Next.js, TypeScript, Tailwind (3 apps) | [`Backend/booking-api`](Backend/booking-api) · Node.js (TypeScript), Fastify, PostgreSQL, Prisma, Docker | In progress | - |
+| 1 | **Tempora — Booking & Invoicing SaaS**: multi-tenant, roles, conflict-free booking, invoices, Stripe (test mode), dashboard charts | [`Frontend/booking-saas`](Frontend/booking-saas) · Next.js, TypeScript, Tailwind (3 apps) | [`Backend/booking-api`](Backend/booking-api) · Node.js (TypeScript), Fastify, PostgreSQL, Prisma, Docker | In progress | [tempora.faldinaufal.web.id](https://tempora.faldinaufal.web.id) |
 | 2 | **Company Website**: landing, services, blog, contact form, content admin, animations | [`Frontend/company-website`](Frontend/company-website) · Next.js, TypeScript, Tailwind, Framer Motion | [`Backend/company-website-supabase`](Backend/company-website-supabase) · Supabase (Postgres, Auth, RLS, Storage, Edge Functions) | Planned | - |
 | 3 | **AI Document Chat (RAG)**: upload documents, streaming answers with sources, chat history | [`Frontend/ai-chat`](Frontend/ai-chat) · Next.js, TypeScript, Tailwind | [`Backend/ai-chat-api`](Backend/ai-chat-api) · Python FastAPI, PostgreSQL + pgvector | Planned | - |
+
+## Try the Tempora demo
+
+Everything in the demo is fictional, and the data is shared by every visitor.
+
+| App | URL | Demo login |
+|---|---|---|
+| Portal (customers) | https://tempora.faldinaufal.web.id | `customer@demo.tempora.faldinaufal.web.id` |
+| Console (business team) | https://console.tempora.faldinaufal.web.id | `owner@…`, `manager@…` or `therapist@demo.tempora.faldinaufal.web.id` |
+| Platform Admin | https://admin.tempora.faldinaufal.web.id | `admin@demo.tempora.faldinaufal.web.id` |
+
+The password for every account is `tempora-demo-2026`. Each login page lists its demo accounts with a **Use** button that fills in the form. The Console and Platform Admin then ask for a 6-digit code sent by email. Demo addresses have no real mailbox, so their emails go to the public [demo inbox](https://tempora.faldinaufal.web.id/demo-inbox). Open it, take the newest code and copy it with one click. Every demo account is listed in [DEMO-ACCOUNTS.md](docs/booking-saas/DEMO-ACCOUNTS.md).
 
 ## Repository layout
 

@@ -3,12 +3,18 @@
 
 'use client';
 
-import { Button, TextField } from '@tempora/ui';
+import { Button, DemoAccounts, fillLoginForm, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, type SubmitEvent } from 'react';
+import { useEffect, useRef, type SubmitEvent } from 'react';
 import { toErrorView } from '@/core/auth/presentation/auth-messages';
 import { useLogin, useSession } from '@/core/auth/presentation/use-auth';
+import {
+  DEMO_ACCOUNTS,
+  DEMO_INBOX_URL,
+  DEMO_MODE,
+  DEMO_PASSWORD,
+} from '@/core/shared/presentation/demo';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
 import { formText } from '@/ui/common/form-values';
@@ -18,6 +24,7 @@ export function LoginScreen() {
   const session = useSession();
   const login = useLogin();
   const error = toErrorView(login.error);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (session.status === 'signed-in') router.replace('/');
@@ -47,7 +54,7 @@ export function LoginScreen() {
         </>
       }
     >
-      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+      <form ref={formRef} className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <FormError error={error} />
         <TextField
           label="Email"
@@ -73,6 +80,15 @@ export function LoginScreen() {
           {login.isPending ? 'Checking…' : 'Continue'}
         </Button>
       </form>
+      {DEMO_MODE && (
+        <DemoAccounts
+          className="mt-6"
+          accounts={DEMO_ACCOUNTS}
+          password={DEMO_PASSWORD}
+          inboxUrl={DEMO_INBOX_URL}
+          onUse={(account, password) => fillLoginForm(formRef.current, account.email, password)}
+        />
+      )}
     </AuthLayout>
   );
 }

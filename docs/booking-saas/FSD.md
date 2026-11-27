@@ -59,7 +59,7 @@ flowchart LR
 | Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently. Behind a small `PaymentProvider` interface: without `STRIPE_SECRET_KEY` the API uses a **demo provider** whose checkout page is part of the Portal and whose "Pay" button emits a webhook signed in Stripe's format (HMAC-SHA256, `t=…,v1=…`) | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. The demo provider lets local development, CI and the public demo run the full flow (including signature checks, duplicates and late payments) without Stripe keys; both providers go through the same webhook handler. |
 | File storage | S3-compatible object storage: SeaweedFS (S3 API) in Docker Compose, locally and on the VPS, served to browsers at `files.<domain>`; Cloudflare R2 works with the same settings if storage moves off the server. Uploads use short-lived presigned `PUT` URLs signed for the declared type and size; after the upload the API checks the stored object (size, and the file's first bytes for its real type) and stores only the object key (6.15) | Files never pass through the API process, storage can move independently of the database, and the same code works against R2 and SeaweedFS because both speak the S3 API. R2 has no presigned `POST` (which could enforce a size range), so the size is signed into the URL and checked again afterwards. |
 | Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema, delivers the email outbox and, for hold expiry, may update `bookings`, `invoices` and `payments` and append to `audit_logs` (no read access to the audit log). Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
-| Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the portfolio domain in production (chosen during implementation). Until the demo inbox (10.3) and the provider are in place, the VPS runs a private Mailpit that keeps every email on the server (reachable only through an SSH tunnel) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. The private Mailpit lets the live site run before email delivery is set up, without ever mailing a real address. |
+| Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the portfolio domain in production (chosen during implementation). With `DEMO_MODE` on, emails to the demo address domain never reach SMTP: the worker renders them into the public demo inbox (10.3). Until the provider is chosen, the VPS sends every other email to a private Mailpit that keeps it on the server (reachable only through an SSH tunnel) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. The demo inbox goes through the same outbox, templates and retries as real email, only the last step differs. The private Mailpit lets the live site run before email delivery is set up, without ever mailing a real address. |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS; shared UI package with the design system (light/dark) | One framework for all three apps; server rendering for the public Portal pages, rich client interactions for the Console. |
 | Frontend code organization | Each app separates `core` from `ui`. `core/<feature>/` has three layers: **domain** (entities, pure rules, repository interfaces, use cases; plain TypeScript), **data** (repository implementations calling the API, DTOs from `contracts`, DTO ⇄ entity mappers), **presentation** (hooks and view-models, no JSX). `ui` holds routes and components and only talks to `presentation`. Each app has its own `core`; shared code lives in packages (`ui`, `api-client`, `contracts`) | Business rules on the client can be unit-tested without rendering, the UI can change (e.g. after the Figma designs) without touching logic, and each app only contains the use cases it actually needs. |
 | Backend code organization | Feature modules: `modules/<feature>/{routes, service, repository}` plus shared plugins (auth, tenancy, errors). Routes validate and map HTTP, services hold business rules and transactions, repositories hold Prisma queries | A simple, common Node.js layout; business rules stay in services so they can be tested without HTTP. |
@@ -160,7 +160,7 @@ Every screen supports light/dark mode and works from 360 px wide. List screens h
 | Invoice | `/bookings/[id]/invoice` | Invoice detail, printable | Customer, guest (link) |
 | Profile and security | `/account/profile` | Name, phone, password, active sessions with "log out everywhere" | Customer |
 | Guest booking | `/manage/[token]` | Booking detail, pay, reschedule, cancel unpaid for guests | Guest |
-| Demo inbox | `/demo-inbox` | Emails sent to `@demo.<domain>` accounts (OTP codes, booking emails); only when `DEMO_MODE` is on (10.3) | Everyone |
+| Demo inbox | `/demo-inbox` | Emails sent to the demo address domain (OTP codes, reset links, booking emails), newest first, refreshed every 5 seconds. Filter by address (the five demo accounts as shortcuts, or any address of the domain, e.g. from `?to=`); the reader shows the subject, recipient, time and text with clickable links, and a 6-digit code gets a copy button. Not indexed by search engines; not found unless `DEMO_MODE` is on (10.3) | Everyone |
 
 ### 2.2 Tempora Console (`console.<domain>`)
 The sidebar shows only what the active role may use. A tenant switcher appears when the account has several memberships.
@@ -398,6 +398,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | `email_messages` | `id`, `tenant_id` (null for account emails), `booking_id`, `branch_id`, `to_email`, `template`, `booking_starts_at`, `payload` (jsonb), `status` (`queued`/`sent`/`failed`/`skipped`), `attempts`, `next_attempt_at`, `last_error`, `provider_message_id`, `created_at`, `sent_at` | Outbox and delivery log in one table (0.2), shown to owners and managers. `payload` holds the template data (it can contain a code or a link) and is erased as soon as the message is sent or finally fails. The API cannot delete rows. `branch_id` names the branch an email is about (every booking email, staff invitations) for the managers' email log; it is kept apart from `booking_id`, which only scheduled emails carry. Scheduled emails (the booking reminder) are queued with a future `next_attempt_at`; a row with `booking_id` is only sent while that booking is still `confirmed` and still starts at `booking_starts_at`, otherwise it becomes `skipped` (6.5). |
 | `rate_limit_hits` | `id`, `bucket`, `key_hash`, `created_at` | One row per counted event (8.2). The key (email, IP, account) is HMAC-hashed, so it is never stored in clear. |
 | `idempotency_keys` | `key`, `subject`, `request_hash`, `response_status`, `response_body`, `created_at`, `expires_at` | Replaying a request with the same key returns the stored response; the same key with a different body returns `422`. Kept for 24 h. |
+| `demo_emails` | `id`, `to_email`, `template`, `subject`, `text_body`, `created_at` | Demo inbox (10.3): the rendered emails to the demo address domain, written by the worker in place of sending them. Kept 24 h and at most the newest 500; older rows are removed when a new one arrives. No tenant and no RLS: everything in it is public by design, and nothing but demo addresses can land in it. |
 | `pgboss.*` | managed by pg-boss | Job queue tables. |
 
 ### 4.4 Row-Level Security
@@ -420,6 +421,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 - **Booking-link policy** (`booking_access_tokens`, read only): the one row whose `token_hash` matches `app.booking_token_hash`. The API checks expiry and revocation, then switches to that booking's tenant context. Customer requests work the same way: the booking is found through the customer policy, then loaded in its tenant's context.
 - **Linking guest bookings:** when a customer verifies their email, the `SECURITY DEFINER` function `link_guest_bookings(account_id)` attaches every unlinked `tenant_customers` row with the account's **verified** email (across tenants) and revokes the booking links of those bookings. It reads the email from the account row itself, never from the caller.
 - **Email outbox** (`email_messages`): tenant policy for the API; account emails (no tenant) may be inserted by the API but not read back; the worker role `tempora_jobs` has a policy to deliver every message and may only `SELECT`/`UPDATE` this table.
+- **Demo inbox** (`demo_emails`): no RLS (public by design, see 4.3). The worker role may only `INSERT` and `DELETE`, the API role only `SELECT`.
 - **Support expiry** (`support_grants`): the worker role may read grants and set `expiry_recorded_at` (column grant), nothing else.
 - **Hold expiry** (`bookings`, `invoices`, `payments`): the worker role has a cross-tenant policy with `SELECT`/`UPDATE` only (no insert, no delete) and may `INSERT` into `audit_logs`. `DELETE` is revoked from the API role on these tables: bookings and invoices change status, they are never removed.
 - **Public directory:** whether a tenant is bookable needs rows of several tenant-owned tables across tenants. Two `SECURITY DEFINER` functions (`tenant_is_bookable`, `public_directory`) run as the table owner and return only public facts (yes/no, names, slugs), never protected rows; their `search_path` is pinned and only `tempora_app` may execute them.
@@ -456,7 +458,7 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_no_overlap
 | GET | `/tenants/:slug` | Business profile with `logoUrl` and `coverUrl` (null when not uploaded), branches with opening hours and upcoming closures, services someone performs, platform time zone, booking policy (lead time, horizon, cut-off, free reschedules) | none |
 | GET | `/tenants/:slug/branches/:branchId` | Branch details, therapists (first name and last initial, e.g. "Ines H.", and `photoUrl`), services offered | none |
 | GET | `/tenants/:slug/availability` | Free slots: `branchId`, `serviceId`, `staffId` (required: no "any therapist"), `date` (`YYYY-MM-DD` in the platform time zone); `423` for a suspended tenant | none |
-| GET | `/demo-inbox` | Latest emails to `@demo.<domain>` addresses (filter by address); returns `404` unless `DEMO_MODE` is on | none |
+| GET | `/demo-inbox` | The newest 50 demo-inbox emails (`to`, optional: one address of the demo domain, otherwise `400 VALIDATION_FAILED`): `id`, `to`, `subject`, `text`, `receivedAt`, plus the demo `domain`. Read-only and cheap (one indexed query), like the other public endpoints; returns `404` unless `DEMO_MODE` is on | none |
 
 ### 5.3 Portal (`/v1/portal`)
 | Method | Endpoint | Description | Auth |
@@ -993,7 +995,7 @@ These prove the PRD's core promises and are required to pass before merge.
 | Environment | Frontends | API, worker, database, storage | Stripe | Email | Purpose |
 |---|---|---|---|---|---|
 | **Local** | `docker compose up` (or `pnpm dev`) | Docker Compose: API, worker, PostgreSQL, Mailpit, SeaweedFS (object storage, S3 API) | Test mode + Stripe CLI webhook forwarding | Mailpit | Development |
-| **Production** | VPS, Docker Compose behind Caddy (`Backend/booking-api/deploy`) | Same VPS: API, worker, PostgreSQL, SeaweedFS | Demo provider until Stripe test keys are added | Private Mailpit on the VPS until the demo inbox and the email provider (0.2 Email) | Public live demo |
+| **Production** | VPS, Docker Compose behind Caddy (`Backend/booking-api/deploy`) | Same VPS: API, worker, PostgreSQL, SeaweedFS | Demo provider until Stripe test keys are added | Demo inbox for demo addresses; everything else to a private Mailpit on the VPS until the email provider is chosen (0.2 Email) | Public live demo |
 
 There is no per-pull-request preview environment: a pull request is verified by CI, including the images and the composed stack, before it can reach `main`.
 
@@ -1013,11 +1015,13 @@ There is no per-pull-request preview environment: a pull request is verified by 
   - It runs with the owner role (it writes across tenants, so it bypasses RLS), in one transaction. Seeding removes the demo tenants with everything in them and creates them again, so **seeding is also the reset**; other tenants are not touched. Demo accounts are matched by email: one still used elsewhere (a visitor invited it to their own business) is kept and gets the demo password again. Everyone signed in with a demo account is logged out.
   - It refuses to run when another tenant holds a demo slug or invoice prefix.
   - `pnpm --filter @tempora/api demo:seed` seeds only when the demo is missing; `--reset` starts again. `docker compose up` runs it once after the migrations, so local changes survive a restart.
-- **Demo accounts**, one per role (owner, manager, staff, customer, platform admin), share one password (`DEMO_PASSWORD`). Locally they use `@veloria.test` addresses (a reserved `.test` domain) and the codes arrive in Mailpit. On the live site they use addresses at `@demo.<domain>`. Emails to these addresses are **not sent out**: they are stored and shown in a **public demo inbox** (`<domain>/demo-inbox`, linked from every login page), so visitors can complete the email 2FA and see booking emails.
+- **Demo accounts**, one per role (owner, manager, staff, customer, platform admin), share one password (`DEMO_PASSWORD`). Every address the seed creates (accounts and the fictional customers) uses one domain: `DEMO_EMAIL_DOMAIN`, by default `veloria.test` (a reserved `.test` domain, used locally with Mailpit) and `demo.<domain>` on the live site.
+- **Demo inbox** (`DEMO_MODE` on, as on the live site): emails to `DEMO_EMAIL_DOMAIN` are **not sent out**. The worker renders them like any email and stores the result in `demo_emails`; the **public demo inbox** (`<domain>/demo-inbox`) shows them, so visitors can complete the email 2FA and see booking emails. Anyone can read it, which is the point: only demo addresses land there, and a sign-up with a demo address is just another demo account.
+- **Login hints** (`NEXT_PUBLIC_DEMO_MODE` on): the Portal, Console and Platform Admin login pages show the demo accounts of that app with the shared password and a "Use" button that fills the form; the code screens of the Console and Platform Admin link to the demo inbox when the code went to a demo address (the newest email is on top; the screen only knows the masked address).
 - Emails to any other address are sent normally through the email provider.
 - **Demo platform admin** can only act on the demo tenants; tenants created by visitors through sign-up are hidden from it.
 - A nightly job resets the demo tenants to the seed state (`demo:seed --reset`), so visitors can try destructive actions freely.
-- The demo inbox, the demo platform admin's scope, the nightly reset and the visitor clean-up come with the deployment; until then the seed and the demo accounts work as above.
+- The demo platform admin's scope, the nightly reset and the visitor clean-up are not built yet; until then the seed and the demo accounts work as above.
 - Visitor sign-ups are rate limited and cleaned up after 7 days of inactivity.
 
 ### 10.4 Environment variables
@@ -1044,7 +1048,7 @@ Every service has a `.env.example` with these names and no values.
 | `S3_PUBLIC_BASE_URL` | Where browsers load uploaded images (`https://files.<domain>`) |
 | `SENTRY_DSN` | Error tracking |
 | `METRICS_TOKEN` | Bearer token for `/metrics` |
-| `DEMO_MODE`, `DEMO_EMAIL_DOMAIN` | Demo inbox and demo safeguards |
+| `DEMO_MODE`, `DEMO_EMAIL_DOMAIN` | API and worker: demo inbox and demo safeguards; seed: `DEMO_EMAIL_DOMAIN` is the domain of every demo address |
 
 **Frontends (each app)**
 | Variable | Purpose |
@@ -1053,7 +1057,9 @@ Every service has a `.env.example` with these names and no values.
 | `NEXT_PUBLIC_APP_TIME_ZONE` | Console and Platform Admin: the platform time zone, the same as the API's `APP_TIME_ZONE` |
 | `NEXT_PUBLIC_CONSOLE_URL` | Portal: Console origin for the "List your business" link |
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser error tracking |
-| `NEXT_PUBLIC_DEMO_MODE` | Show demo account hints and the demo inbox link |
+| `NEXT_PUBLIC_DEMO_MODE` | Show demo account hints and the demo inbox link; the Portal's `/demo-inbox` exists only with it |
+| `NEXT_PUBLIC_DEMO_EMAIL_DOMAIN`, `NEXT_PUBLIC_DEMO_PASSWORD` | The demo accounts shown in the login hints (same values as the seed's) |
+| `NEXT_PUBLIC_PORTAL_URL` | Console and Platform Admin: Portal origin, for the demo inbox link |
 
 `NEXT_PUBLIC_*` values are compiled into the browser bundles, so they are Docker build arguments, not runtime settings.
 

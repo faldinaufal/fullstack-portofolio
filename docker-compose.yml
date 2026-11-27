@@ -20,6 +20,7 @@ x-build: &build
     NEXT_PUBLIC_API_URL: http://localhost:4000
     NEXT_PUBLIC_CONSOLE_URL: http://localhost:3001
     NEXT_PUBLIC_APP_TIME_ZONE: America/New_York
+    NEXT_PUBLIC_PORTAL_URL: http://localhost:3000
 
 services:
   postgres:

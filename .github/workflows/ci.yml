@@ -152,6 +152,10 @@ jobs:
             echo "API_URL=https://api.${DOMAIN}"
             echo "CONSOLE_URL=https://console.${DOMAIN}"
             echo "APP_TIME_ZONE=${TIME_ZONE:-America/New_York}"
+            echo "PORTAL_URL=https://${DOMAIN}"
+            # The live site is the public demo (FSD 10.3), as in deploy/compose.yml.
+            echo "DEMO_MODE=true"
+            echo "DEMO_EMAIL_DOMAIN=demo.${DOMAIN}"
           } >> "$GITHUB_ENV"
       # All six images in one bake, sharing the install and the builds (docker-bake.hcl).
       - uses: docker/bake-action@v6

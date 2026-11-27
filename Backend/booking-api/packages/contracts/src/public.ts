@@ -111,3 +111,31 @@ export const AvailabilitySchema = z
   })
   .meta({ id: 'Availability' });
 export type Availability = z.infer<typeof AvailabilitySchema>;
+
+/** Demo inbox (FSD 5.2, 10.3): emails to the demo address domain, public by design. */
+export const DemoInboxQuerySchema = z.object({
+  /** One address of the demo domain; all of them when left out. */
+  to: z.string().trim().toLowerCase().max(254).optional(),
+});
+export type DemoInboxQuery = z.infer<typeof DemoInboxQuerySchema>;
+
+export const DemoEmailSchema = z
+  .object({
+    id: z.uuid(),
+    to: z.string(),
+    subject: z.string(),
+    /** The plain-text version of the email, as the worker rendered it. */
+    text: z.string(),
+    receivedAt: z.iso.datetime(),
+  })
+  .meta({ id: 'DemoEmail' });
+export type DemoEmail = z.infer<typeof DemoEmailSchema>;
+
+export const DemoInboxSchema = z
+  .object({
+    /** The demo address domain, e.g. `demo.example.com`. */
+    domain: z.string(),
+    items: z.array(DemoEmailSchema),
+  })
+  .meta({ id: 'DemoInbox' });
+export type DemoInbox = z.infer<typeof DemoInboxSchema>;

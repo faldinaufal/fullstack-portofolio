@@ -7,6 +7,8 @@ import {
   Alert,
   Button,
   buttonVariants,
+  DemoAccounts,
+  fillLoginForm,
   Icon,
   PasswordField,
   TextField,
@@ -27,6 +29,7 @@ import {
   useVerifyEmail,
   type PasswordStrength,
 } from '@/core/account/presentation/use-account';
+import { DEMO_ACCOUNTS, DEMO_MODE, DEMO_PASSWORD } from '@/core/shared/presentation/demo';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { formText } from '@/ui/common/form-values';
 import { RequestErrorAlert } from '@/ui/common/request-error';
@@ -46,6 +49,7 @@ export function LoginScreen() {
   const error = toRequestErrorView(login.error, {
     INVALID_CREDENTIALS: 'The email or password is incorrect.',
   });
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (customer.data) router.replace(next);
@@ -71,7 +75,7 @@ export function LoginScreen() {
       }
     >
       {/* No "remember me": a Portal session lasts 30 days anyway (FSD 6.11). */}
-      <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+      <form ref={formRef} className="flex flex-col gap-5" onSubmit={submit} noValidate>
         <RequestErrorAlert error={error} />
         <TextField
           label="Email address"
@@ -99,6 +103,16 @@ export function LoginScreen() {
           {!login.isPending && <Icon name="arrow-right" size={18} />}
         </Button>
       </form>
+      {DEMO_MODE && (
+        <DemoAccounts
+          className="mt-6"
+          accounts={DEMO_ACCOUNTS}
+          password={DEMO_PASSWORD}
+          inboxUrl="/demo-inbox"
+          inboxLead="Booking emails and reset links arrive in the"
+          onUse={(account, password) => fillLoginForm(formRef.current, account.email, password)}
+        />
+      )}
     </AccountCard>
   );
 }

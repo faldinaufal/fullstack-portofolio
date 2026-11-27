@@ -29,6 +29,23 @@ variable "APP_TIME_ZONE" {
   default = "America/New_York"
 }
 
+variable "PORTAL_URL" {
+  default = "http://localhost:3000"
+}
+
+# The public demo (FSD 10.3): login hints and the demo inbox. Must match the seed's settings.
+variable "DEMO_MODE" {
+  default = "false"
+}
+
+variable "DEMO_EMAIL_DOMAIN" {
+  default = "veloria.test"
+}
+
+variable "DEMO_PASSWORD" {
+  default = "tempora-demo-2026"
+}
+
 # Links the pushed images to the repository on GitHub Container Registry.
 variable "SOURCE_URL" {
   default = "https://github.com/faldinaufal/fullstack-portofolio"
@@ -47,9 +64,13 @@ target "_common" {
   context    = "."
   dockerfile = "Dockerfile"
   args = {
-    NEXT_PUBLIC_API_URL       = API_URL
-    NEXT_PUBLIC_CONSOLE_URL   = CONSOLE_URL
-    NEXT_PUBLIC_APP_TIME_ZONE = APP_TIME_ZONE
+    NEXT_PUBLIC_API_URL           = API_URL
+    NEXT_PUBLIC_CONSOLE_URL       = CONSOLE_URL
+    NEXT_PUBLIC_APP_TIME_ZONE     = APP_TIME_ZONE
+    NEXT_PUBLIC_PORTAL_URL        = PORTAL_URL
+    NEXT_PUBLIC_DEMO_MODE         = DEMO_MODE
+    NEXT_PUBLIC_DEMO_EMAIL_DOMAIN = DEMO_EMAIL_DOMAIN
+    NEXT_PUBLIC_DEMO_PASSWORD     = DEMO_PASSWORD
   }
   labels = {
     "org.opencontainers.image.source" = SOURCE_URL

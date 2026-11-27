@@ -162,7 +162,11 @@ DATABASE_MIGRATION_URL=postgresql://tempora:<owner password>@localhost:5432/temp
 | Platform admin | Platform Admin | `admin@veloria.test` | Noah Castellanos |
 
 Password for all of them: `tempora-demo-2026`. The Console and Platform Admin ask for an emailed
-code at login: locally it arrives in Mailpit (http://localhost:8025). Every other team login
+code at login: locally it arrives in Mailpit (http://localhost:8025). On the live demo the addresses
+end in `@demo.<domain>` (`DEMO_EMAIL_DOMAIN`) and, with `DEMO_MODE=true`, the worker stores their
+emails in `demo_emails` instead of sending them. The Portal shows them at `/demo-inbox`
+(`GET /v1/public/demo-inbox`). The worker may only add and delete those rows and the API may only
+read them (separate database roles), and the worker keeps just the last 24 hours, at most 500 emails. Every other team login
 (each manager and therapist of both businesses) is listed in
 [DEMO-ACCOUNTS.md](../../docs/booking-saas/DEMO-ACCOUNTS.md).
 
