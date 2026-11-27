@@ -50,25 +50,30 @@ async function clear(tx: Tx, plan: DemoPlan) {
   const teamEmails = plan.teamAccounts.map((a) => a.email);
   const customerEmails = plan.customerAccounts.map((a) => a.email);
   const adminEmails = plan.platformAdmins.map((a) => a.email);
+  // The plan's account IDs are fixed, so an account seeded under another email domain
+  // (DEMO_EMAIL_DOMAIN changed) still holds them: match by ID as well as by address.
+  const teamIds = plan.teamAccounts.map((a) => a.id!);
+  const customerIds = plan.customerAccounts.map((a) => a.id!);
+  const adminIds = plan.platformAdmins.map((a) => a.id!);
 
   // Sign-ins first: a session must keep exactly one subject, so it cannot outlive its account.
   await tx.$executeRaw`
     DELETE FROM otp_challenges
-    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}))
-       OR platform_admin_id IN (SELECT id FROM platform_admins WHERE email = ANY(${adminEmails}))`;
+    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}) OR id = ANY(${teamIds}::uuid[]))
+       OR platform_admin_id IN (SELECT id FROM platform_admins WHERE email = ANY(${adminEmails}) OR id = ANY(${adminIds}::uuid[]))`;
   await tx.$executeRaw`
     DELETE FROM sessions
     WHERE membership_id IN (SELECT id FROM memberships WHERE tenant_id = ANY(${tenants}::uuid[]))
-       OR team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}))
-       OR customer_account_id IN (SELECT id FROM customer_accounts WHERE email = ANY(${customerEmails}))
-       OR platform_admin_id IN (SELECT id FROM platform_admins WHERE email = ANY(${adminEmails}))`;
+       OR team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}) OR id = ANY(${teamIds}::uuid[]))
+       OR customer_account_id IN (SELECT id FROM customer_accounts WHERE email = ANY(${customerEmails}) OR id = ANY(${customerIds}::uuid[]))
+       OR platform_admin_id IN (SELECT id FROM platform_admins WHERE email = ANY(${adminEmails}) OR id = ANY(${adminIds}::uuid[]))`;
   await tx.$executeRaw`
     DELETE FROM trusted_devices
-    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}))`;
+    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}) OR id = ANY(${teamIds}::uuid[]))`;
   await tx.$executeRaw`
     DELETE FROM auth_tokens
-    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}))
-       OR customer_account_id IN (SELECT id FROM customer_accounts WHERE email = ANY(${customerEmails}))`;
+    WHERE team_account_id IN (SELECT id FROM team_accounts WHERE email = ANY(${teamEmails}) OR id = ANY(${teamIds}::uuid[]))
+       OR customer_account_id IN (SELECT id FROM customer_accounts WHERE email = ANY(${customerEmails}) OR id = ANY(${customerIds}::uuid[]))`;
 
   for (const table of TENANT_TABLES) {
     await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE tenant_id = ANY($1::uuid[])`, tenants);
@@ -77,12 +82,12 @@ async function clear(tx: Tx, plan: DemoPlan) {
 
   // Accounts nobody else uses any more.
   await tx.$executeRaw`
-    DELETE FROM team_accounts a WHERE email = ANY(${teamEmails})
+    DELETE FROM team_accounts a WHERE (email = ANY(${teamEmails}) OR id = ANY(${teamIds}::uuid[]))
       AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.team_account_id = a.id)`;
   await tx.$executeRaw`
-    DELETE FROM customer_accounts a WHERE email = ANY(${customerEmails})
+    DELETE FROM customer_accounts a WHERE (email = ANY(${customerEmails}) OR id = ANY(${customerIds}::uuid[]))
       AND NOT EXISTS (SELECT 1 FROM tenant_customers c WHERE c.customer_account_id = a.id)`;
-  await tx.$executeRaw`DELETE FROM platform_admins WHERE email = ANY(${adminEmails})`;
+  await tx.$executeRaw`DELETE FROM platform_admins WHERE email = ANY(${adminEmails}) OR id = ANY(${adminIds}::uuid[])`;
 }
 
 /** Creates the accounts that are missing, resets the others; returns plan ID → real ID. */

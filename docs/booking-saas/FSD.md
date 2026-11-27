@@ -1068,7 +1068,7 @@ Every service has a `.env.example` with these names and no values.
 |---|---|
 | `DOMAIN` | The project's host (`<domain>`); every other URL is derived from it |
 | `ACME_EMAIL` | Contact address for Let's Encrypt certificate notices |
-| `IMAGE_OWNER`, `IMAGE_TAG` | Which images to run: `ghcr.io/<owner>/tempora-<service>:<tag>` (the deploy script passes the commit SHA) |
+| `IMAGE_OWNER`, `IMAGE_TAG` | Which images to run: `ghcr.io/<owner>/tempora-<service>:<tag>` (the deploy script runs the commit SHA and writes it here, so commands run by hand use the same images) |
 | `POSTGRES_PASSWORD`, `TEMPORA_APP_PASSWORD`, `TEMPORA_JOBS_PASSWORD` | Database roles |
 | `TOKEN_HASH_SECRET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | As above |
 | `APP_TIME_ZONE` | As above |

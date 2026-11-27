@@ -178,9 +178,11 @@ docker stats --no-stream                # memory per container
 docker compose run --rm seed --reset    # put the demo back to its seed state
 ```
 
+Commands like these use the images of the last deploy: `deploy.sh` writes its commit SHA to `IMAGE_TAG` in `.env`.
+
 **Roll back:** in GitHub Actions, open an earlier successful run on `main` and re-run its `deploy` job, or on the server run `sh /opt/tempora/deploy/deploy.sh <older sha>`. Migrations are backward compatible, so the database stays as it is.
 
-**Emails** stay on the server until the demo inbox exists. Read them from your computer through a tunnel: `ssh -L 8025:localhost:8025 deploy@<server>`, then open `http://localhost:8025`.
+**Emails** to demo addresses (`@demo.<domain>`) appear in the public demo inbox at `https://<domain>/demo-inbox`. Every other email stays on the server in Mailpit until an email provider is chosen. Read them from your computer through a tunnel: `ssh -L 8025:localhost:8025 deploy@<server>`, then open `http://localhost:8025`.
 
 **Restore a backup:**
 
