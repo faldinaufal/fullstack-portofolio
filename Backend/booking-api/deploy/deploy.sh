@@ -12,11 +12,21 @@
 set -eu
 
 sha="${1:?Usage: deploy.sh <commit sha>}"
+case "$sha" in
+  *[!0-9a-f]*) echo "Not a commit SHA: $sha" >&2; exit 1 ;;
+esac
 cd "$(dirname "$0")"
 
 export IMAGE_TAG="$sha"
 docker compose pull --quiet
 docker compose up -d --remove-orphans
+# Record the running version in .env, so commands run by hand (`docker compose run --rm seed`)
+# use these images too instead of an old `latest` left on the server.
+if grep -q '^IMAGE_TAG=' .env; then
+  sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$sha/" .env
+else
+  echo "IMAGE_TAG=$sha" >> .env
+fi
 # Keep the disk from filling up with old images (the running ones are kept).
 docker image prune -f > /dev/null
 

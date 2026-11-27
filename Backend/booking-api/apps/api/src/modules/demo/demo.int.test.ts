@@ -27,7 +27,7 @@ beforeEach(async () => {
   await h.reset();
 });
 
-const seed = (reset = false) =>
+const seed = (reset = false, emailDomain?: string) =>
   seedDemo(
     h.owner,
     {
@@ -35,6 +35,7 @@ const seed = (reset = false) =>
       timeZone: 'America/New_York',
       passwordHash,
       portalUrl: 'http://localhost:3000',
+      ...(emailDomain && { emailDomain }),
     },
     { reset },
   );
@@ -160,6 +161,19 @@ describe('demo seed (FSD 10.3)', () => {
       );
       expect(row!.n, table_name).toBe(0);
     }
+  });
+
+  it('a reset under another email domain moves every demo account to it', async () => {
+    await seed();
+    expect((await seed(true, 'demo.tempora.test')).seeded).toBe(true);
+
+    const owner = await consoleLogin('owner@demo.tempora.test');
+    expect((await owner.get(`${C}/reports/overview`)).statusCode).toBe(200);
+    const [left] = await h.owner.$queryRaw<[{ n: number }]>`
+      SELECT ((SELECT count(*) FROM team_accounts WHERE email LIKE '%@veloria.test')
+            + (SELECT count(*) FROM customer_accounts WHERE email LIKE '%@veloria.test')
+            + (SELECT count(*) FROM platform_admins WHERE email LIKE '%@veloria.test'))::int AS n`;
+    expect(left.n).toBe(0);
   });
 
   it('refuses to seed over another business that holds a demo address', async () => {
