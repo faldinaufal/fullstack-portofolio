@@ -21,6 +21,8 @@ import { createPortalBookingService } from './modules/bookings/portal-service.js
 import { createBookingService } from './modules/bookings/service.js';
 import { createPortalAuthService } from './modules/portal-auth/service.js';
 import { createPublicCatalogue } from './modules/public/service.js';
+import { createPrismaDemoInboxRepository } from './modules/demo-inbox/repository.js';
+import { createDemoInboxService } from './modules/demo-inbox/service.js';
 import { createConsoleBookingService } from './modules/console-bookings/service.js';
 import { createConsoleRecordsService } from './modules/console-records/service.js';
 import { createConsoleLogService } from './modules/console-logs/service.js';
@@ -91,6 +93,14 @@ const app = await buildApp({
     cookies: { secure: env.NODE_ENV === 'production', domain: env.COOKIE_DOMAIN },
   },
   publicCatalogue: createPublicCatalogue({ prisma, timeZone: env.APP_TIME_ZONE, storage }),
+  // FSD 10.3: the route exists only on a demo deployment.
+  ...(env.DEMO_MODE &&
+    env.DEMO_EMAIL_DOMAIN && {
+      demoInbox: createDemoInboxService({
+        repository: createPrismaDemoInboxRepository(prisma),
+        domain: env.DEMO_EMAIL_DOMAIN,
+      }),
+    }),
   bookings: {
     service: createBookingService({
       prisma,

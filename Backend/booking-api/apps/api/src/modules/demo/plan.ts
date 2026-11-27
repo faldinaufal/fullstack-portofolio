@@ -144,6 +144,29 @@ export interface DemoPlanInput {
   portalUrl: string;
   /** Invoice prefix per demo slug when the usual one is taken by another business. */
   invoicePrefixes?: Partial<Record<string, string>>;
+  /**
+   * Domain of every demo address (FSD 10.3 `DEMO_EMAIL_DOMAIN`): the reserved `veloria.test`
+   * by default, `demo.<domain>` on the live site, where the demo inbox shows their emails.
+   */
+  emailDomain?: string;
+}
+
+/** The domain the demo world is written with (world.ts). */
+export const DEFAULT_DEMO_EMAIL_DOMAIN = 'veloria.test';
+
+/** `owner@veloria.test` → `owner@demo.example.com`. */
+export const withEmailDomain = (email: string, domain: string) =>
+  email.replace(/@[^@]+$/, `@${domain}`);
+
+/** Every address in the plan moves to `domain`: accounts, customers and the email log. */
+function moveEmails(plan: DemoPlan, domain: string) {
+  const move = <T extends { email: string }>(row: T) =>
+    (row.email = withEmailDomain(row.email, domain));
+  plan.teamAccounts.forEach(move);
+  plan.customerAccounts.forEach(move);
+  plan.tenantCustomers.forEach(move);
+  plan.platformAdmins.forEach(move);
+  for (const email of plan.emails) email.toEmail = withEmailDomain(email.toEmail, domain);
 }
 
 export function buildDemoPlan({
@@ -152,6 +175,7 @@ export function buildDemoPlan({
   passwordHash,
   portalUrl,
   invoicePrefixes = {},
+  emailDomain = DEFAULT_DEMO_EMAIL_DOMAIN,
 }: DemoPlanInput): DemoPlan {
   const rng = random(4217);
   const counter: Record<number, number> = {};
@@ -647,5 +671,6 @@ export function buildDemoPlan({
     }
   });
 
+  if (emailDomain !== DEFAULT_DEMO_EMAIL_DOMAIN) moveEmails(plan, emailDomain);
   return plan;
 }

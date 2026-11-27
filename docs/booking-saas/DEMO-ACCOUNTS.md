@@ -1,6 +1,21 @@
 # Tempora — Demo accounts
 
-Every login created by the demo seed (`Backend/booking-api/apps/api/src/modules/demo/world.ts`). All people, businesses and email addresses are fictional; `.test` is a reserved domain, so no email ever leaves your machine.
+Every login created by the demo seed (`Backend/booking-api/apps/api/src/modules/demo/world.ts`). All people, businesses and email addresses are fictional. Locally they end in `@veloria.test`: `.test` is a reserved domain, so no email ever leaves your machine.
+
+## Live demo
+
+The live site uses the same accounts. Only the domain is different: `owner@veloria.test` is `owner@demo.tempora.faldinaufal.web.id` there, and so on for every address on this page.
+
+| App | Live URL |
+|---|---|
+| Portal (customers) | https://tempora.faldinaufal.web.id/login |
+| Console (owner, manager, staff) | https://console.tempora.faldinaufal.web.id/login |
+| Platform Admin | https://admin.tempora.faldinaufal.web.id/login |
+| Demo inbox (codes, reset links, booking emails) | https://tempora.faldinaufal.web.id/demo-inbox |
+
+Every login page lists its demo accounts with a **Use** button that fills in the form. Emails to demo addresses are not sent. They appear in the public demo inbox, newest first, and stay there for 24 hours. The inbox refreshes on its own and has a copy button for login codes. Everything you do on the live demo is visible to other visitors, so do not enter real personal data.
+
+## Locally
 
 **Password for every account:** `tempora-demo-2026` (set `DEMO_PASSWORD` before seeding to change it).
 
@@ -11,7 +26,7 @@ Every login created by the demo seed (`Backend/booking-api/apps/api/src/modules/
 | Platform Admin | http://localhost:3002/login | Email + password, then a 6-digit code (and again before sensitive actions) |
 | Mailpit (codes, reset links, booking emails) | http://localhost:8025 | No login |
 
-Console and Platform Admin send the 6-digit code by email: open Mailpit and use the newest message. In the Console you can tick "Trust this device for 30 days" to skip the code next time.
+Console and Platform Admin send the 6-digit code by email. Locally, open Mailpit and use the newest message. To try the live setup locally, set `DEMO_MODE=true` for the API and worker and `NEXT_PUBLIC_DEMO_MODE=true` for the apps (see their `.env.example`); emails then go to http://localhost:3000/demo-inbox. In the Console you can tick "Trust this device for 30 days" to skip the code next time.
 
 ## Main accounts (one per role)
 

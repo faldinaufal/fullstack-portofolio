@@ -14,7 +14,8 @@ export interface Queryable {
 }
 
 export interface Mailer {
-  send(message: RenderedEmail & { to: string }): Promise<{ messageId: string }>;
+  /** `template` lets a mailer keep track of what it delivered (the demo inbox does). */
+  send(message: RenderedEmail & { to: string; template: string }): Promise<{ messageId: string }>;
 }
 
 interface ClaimedRow {
@@ -126,7 +127,11 @@ export function createOutboxProcessor({
             row.template as EmailTemplate,
             row.payload as EmailPayloads[EmailTemplate],
           );
-          const { messageId } = await mailer.send({ ...rendered, to: row.to_email });
+          const { messageId } = await mailer.send({
+            ...rendered,
+            to: row.to_email,
+            template: row.template,
+          });
           await markSent(row.id, messageId);
           sent += 1;
           logger.info(context, 'Email sent');

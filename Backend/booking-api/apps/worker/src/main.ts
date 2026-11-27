@@ -7,6 +7,7 @@ import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import { pino } from 'pino';
 import { loadEnv } from './config/env.js';
+import { createDemoInboxMailer } from './email/demo-inbox.js';
 import { createSmtpMailer } from './email/mailer.js';
 import { createOutboxProcessor } from './email/outbox.js';
 import { createAutoCompleteHandler } from './jobs/auto-complete.js';
@@ -65,9 +66,14 @@ const outboxPool = new pg.Pool({
   max: 2,
   application_name: 'tempora-worker-outbox',
 });
+const smtp = createSmtpMailer({ url: env.SMTP_URL, from: env.EMAIL_FROM });
 const outbox = createOutboxProcessor({
   db: outboxPool,
-  mailer: createSmtpMailer({ url: env.SMTP_URL, from: env.EMAIL_FROM }),
+  // FSD 10.3: on a demo deployment, emails to demo addresses land in the public demo inbox.
+  mailer:
+    env.DEMO_MODE && env.DEMO_EMAIL_DOMAIN
+      ? createDemoInboxMailer({ db: outboxPool, domain: env.DEMO_EMAIL_DOMAIN, fallback: smtp })
+      : smtp,
   logger,
   batchSize: OUTBOX_BATCH_SIZE,
 });

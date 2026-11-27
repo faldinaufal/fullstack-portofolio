@@ -10,6 +10,7 @@
  *
  * DATABASE_MIGRATION_URL (owner) is required. DEMO_PASSWORD sets the demo accounts' password
  * (default below, as listed in the README); APP_TIME_ZONE and PORTAL_URL as for the API.
+ * DEMO_EMAIL_DOMAIN moves every demo address to that domain (FSD 10.3; `demo.<domain>` live).
  */
 import { parseArgs } from 'node:util';
 import { createPrismaClient } from '@tempora/db';
@@ -39,6 +40,9 @@ try {
         process.env.DEMO_PASSWORD ?? DEFAULT_PASSWORD,
       ),
       portalUrl: process.env.PORTAL_URL ?? 'http://localhost:3000',
+      ...(process.env.DEMO_EMAIL_DOMAIN && {
+        emailDomain: process.env.DEMO_EMAIL_DOMAIN.trim().toLowerCase(),
+      }),
     },
     { reset: values.reset },
   );

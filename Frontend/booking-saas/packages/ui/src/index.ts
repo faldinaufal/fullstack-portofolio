@@ -21,6 +21,13 @@ export {
   type ShellNavItem,
   type ShellRailItem,
 } from './components/dashboard-shell.js';
+export {
+  DemoAccounts,
+  type DemoAccount,
+  DemoInboxNotice,
+  fillLoginForm,
+  type DemoAccountsProps,
+} from './components/demo-accounts.js';
 export { Drawer, type DrawerProps } from './components/drawer.js';
 export { HBarList, type HBarItem, type HBarListProps } from './components/hbar-list.js';
 export { TemporaLogo, TemporaMark, TemporaWordmark } from './components/brand.js';

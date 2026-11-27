@@ -14,6 +14,28 @@ const plan = buildDemoPlan({ now, timeZone: TZ, passwordHash: 'hash', portalUrl:
 const ACTIVE = new Set(['pending_payment', 'confirmed']);
 
 describe('demo plan (FSD 10.3)', () => {
+  it('moves every address to the demo email domain on request (live: demo.<domain>)', () => {
+    const live = buildDemoPlan({
+      now,
+      timeZone: TZ,
+      passwordHash: 'hash',
+      portalUrl: 'http://p',
+      emailDomain: 'demo.tempora.test',
+    });
+    const emails = [
+      ...live.teamAccounts.map((a) => a.email),
+      ...live.customerAccounts.map((a) => a.email),
+      ...live.platformAdmins.map((a) => a.email),
+      ...live.tenantCustomers.map((c) => c.email),
+      ...live.emails.map((e) => e.toEmail),
+    ];
+    expect(emails.length).toBeGreaterThan(50);
+    expect(emails.every((e) => e.endsWith('@demo.tempora.test'))).toBe(true);
+    expect(live.customerAccounts[0]!.email).toBe('customer@demo.tempora.test');
+    // Only the addresses differ; the rest of the world is the same.
+    expect(live.bookings).toEqual(plan.bookings);
+  });
+
   it('is the same every time for the same moment', () => {
     const again = buildDemoPlan({ now, timeZone: TZ, passwordHash: 'hash', portalUrl: 'http://p' });
     expect(again).toEqual(plan);

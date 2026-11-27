@@ -6,6 +6,7 @@
 import { createContext, useContext } from 'react';
 import type { AccountRepository } from '../../account/domain/account';
 import type { BookingRepository } from '../../booking/domain/booking';
+import type { DemoInboxRepository } from '../../demo-inbox/domain/demo-inbox';
 import type { ListFeaturedBusinesses } from '../../directory/domain/list-featured-businesses';
 import type { GetApiStatus } from '../../health/domain/get-api-status';
 import type { DemoCheckoutRepository } from '../../reservation/domain/demo-checkout';
@@ -27,6 +28,7 @@ export interface Dependencies {
   reservations: ReservationRepository;
   bookingAccess: BookingAccessStore;
   demoCheckout: DemoCheckoutRepository;
+  demoInbox: DemoInboxRepository;
 }
 
 export const DependenciesContext = createContext<Dependencies | null>(null);

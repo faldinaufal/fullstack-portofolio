@@ -60,6 +60,19 @@ const EnvSchema = z
     S3_ACCESS_KEY_ID: z.string().min(1).optional(),
     S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     S3_PUBLIC_BASE_URL: z.url().optional(),
+    /** Public demo (FSD 10.3): turns on `GET /v1/public/demo-inbox`. */
+    DEMO_MODE: z.stringbool().default(false),
+    /** Domain of every demo address, e.g. `demo.example.com`; required with DEMO_MODE. */
+    DEMO_EMAIL_DOMAIN: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9.-]+\.[a-z0-9-]+$/, 'Must be a domain name, e.g. demo.example.com.')
+      .optional(),
+  })
+  .refine((env) => !env.DEMO_MODE || env.DEMO_EMAIL_DOMAIN !== undefined, {
+    path: ['DEMO_EMAIL_DOMAIN'],
+    message: 'Set DEMO_EMAIL_DOMAIN when DEMO_MODE is on.',
   })
   // Half a Stripe setup would silently fall back to the demo provider: refuse to start instead.
   .refine((env) => !env.STRIPE_SECRET_KEY === !env.STRIPE_WEBHOOK_SECRET, {

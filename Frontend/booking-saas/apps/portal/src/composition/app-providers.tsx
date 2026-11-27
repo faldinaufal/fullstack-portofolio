@@ -9,6 +9,7 @@ import { ThemeProvider } from '@tempora/ui';
 import { useState, type ReactNode } from 'react';
 import { createHttpAccountRepository } from '@/core/account/data/http-account-repository';
 import { createHttpBookingRepository } from '@/core/booking/data/http-booking-repository';
+import { createHttpDemoInboxRepository } from '@/core/demo-inbox/data/http-demo-inbox-repository';
 import { createHttpBusinessRepository } from '@/core/directory/data/http-business-repository';
 import { createListFeaturedBusinesses } from '@/core/directory/domain/list-featured-businesses';
 import { createHttpApiStatusRepository } from '@/core/health/data/http-api-status-repository';
@@ -38,6 +39,7 @@ function createDependencies(): Dependencies {
     reservations: createHttpReservationRepository(apiClient),
     bookingAccess: createSessionAccessStore(),
     demoCheckout: createHttpDemoCheckoutRepository(apiClient),
+    demoInbox: createHttpDemoInboxRepository(apiClient),
   };
 }
 

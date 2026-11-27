@@ -50,6 +50,8 @@ import { supportGrantRoutes, supportViewRoutes } from './modules/support/routes.
 import type { SupportViewService } from './modules/support/views.js';
 import type { HealthRepository } from './modules/health/repository.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { demoInboxRoutes } from './modules/demo-inbox/routes.js';
+import type { DemoInboxService } from './modules/demo-inbox/service.js';
 import { createHealthService } from './modules/health/service.js';
 import { registerErrorHandling } from './plugins/errors.js';
 import { registerOpenApi } from './plugins/openapi.js';
@@ -81,6 +83,8 @@ export interface AppDependencies {
   };
   /** Portal pages before login (`/v1/public`). */
   publicCatalogue?: PublicCatalogue;
+  /** Public demo inbox (`/v1/public/demo-inbox`), only with DEMO_MODE on (FSD 10.3). */
+  demoInbox?: DemoInboxService;
   /** Console business modules; need `consoleAuth`. */
   consoleModules?: {
     tenant: TenantService;
@@ -104,6 +108,7 @@ export async function buildApp({
   consoleAuth,
   consoleModules,
   publicCatalogue,
+  demoInbox,
   portalAuth,
   bookings,
   admin,
@@ -154,6 +159,10 @@ export async function buildApp({
 
   if (publicCatalogue) {
     await app.register(publicRoutes, { prefix: '/v1/public', service: publicCatalogue });
+  }
+
+  if (demoInbox) {
+    await app.register(demoInboxRoutes, { prefix: '/v1/public', service: demoInbox });
   }
 
   if (admin) {

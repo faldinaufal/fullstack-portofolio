@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Alert, Button, buttonVariants, TextField } from '@tempora/ui';
+import { Alert, Button, buttonVariants, DemoInboxNotice, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type SubmitEvent } from 'react';
@@ -15,6 +15,7 @@ import {
   useResendCode,
   useVerifyCode,
 } from '@/core/auth/presentation/use-auth';
+import { DEMO_INBOX_URL, isDemoAddress } from '@/core/shared/presentation/demo';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
 
@@ -70,6 +71,7 @@ export function VerifyCodeScreen() {
     >
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <FormError error={error} />
+        {isDemoAddress(challenge.sentTo) && <DemoInboxNotice href={DEMO_INBOX_URL} />}
         {resend.isSuccess && !resend.isPending && (
           <Alert tone="success">A new code is on its way.</Alert>
         )}

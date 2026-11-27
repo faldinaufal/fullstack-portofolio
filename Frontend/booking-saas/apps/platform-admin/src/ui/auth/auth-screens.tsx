@@ -3,16 +3,33 @@
 
 'use client';
 
-import { Alert, Button, Card, CardContent, TemporaMark, TextField } from '@tempora/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  DemoAccounts,
+  DemoInboxNotice,
+  fillLoginForm,
+  TemporaMark,
+  TextField,
+} from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, type ReactNode, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type SubmitEvent } from 'react';
 import {
   useAdminSession,
   useLogin,
   useResendCode,
   useVerifyLogin,
 } from '@/core/auth/presentation/use-admin-auth';
+import {
+  DEMO_ACCOUNTS,
+  DEMO_INBOX_URL,
+  DEMO_MODE,
+  DEMO_PASSWORD,
+  isDemoAddress,
+} from '@/core/shared/presentation/demo';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 
@@ -44,6 +61,7 @@ export function LoginScreen() {
   const router = useRouter();
   const session = useAdminSession();
   const login = useLogin();
+  const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (session.status === 'signed-in') router.replace('/');
   }, [session.status, router]);
@@ -64,7 +82,7 @@ export function LoginScreen() {
 
   return (
     <AuthLayout title="Log in" description="Operators only. A code is emailed at every login.">
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form ref={formRef} className="flex flex-col gap-4" onSubmit={submit}>
         <RequestErrorAlert error={toRequestErrorView(login.error)} />
         <TextField label="Email" name="email" type="email" autoComplete="username" required />
         <TextField
@@ -78,6 +96,14 @@ export function LoginScreen() {
           {login.isPending ? 'Checking…' : 'Continue'}
         </Button>
       </form>
+      {DEMO_MODE && (
+        <DemoAccounts
+          accounts={DEMO_ACCOUNTS}
+          password={DEMO_PASSWORD}
+          inboxUrl={DEMO_INBOX_URL}
+          onUse={(account, password) => fillLoginForm(formRef.current, account.email, password)}
+        />
+      )}
     </AuthLayout>
   );
 }
@@ -119,6 +145,7 @@ export function VerifyScreen() {
     >
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <RequestErrorAlert error={toRequestErrorView(verify.error)} />
+        {isDemoAddress(sentTo) && <DemoInboxNotice href={DEMO_INBOX_URL} />}
         {resend.isSuccess && (
           <Alert tone="success">If a code was sent, a new one is on its way.</Alert>
         )}
