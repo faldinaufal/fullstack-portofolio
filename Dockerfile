@@ -58,9 +58,13 @@ RUN --mount=type=cache,id=tempora-pnpm,target=/pnpm/store \
 
 # ---- frontend-build: the three Next.js apps ----
 FROM deps AS frontend-build
-# Compiled into the browser bundles, so it is a build argument (the host-facing API URL).
+# Compiled into the browser bundles, so they are build arguments (host-facing URLs, FSD 10.4).
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+ARG NEXT_PUBLIC_CONSOLE_URL=http://localhost:3001
+ARG NEXT_PUBLIC_APP_TIME_ZONE=America/New_York
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_CONSOLE_URL=${NEXT_PUBLIC_CONSOLE_URL} \
+    NEXT_PUBLIC_APP_TIME_ZONE=${NEXT_PUBLIC_APP_TIME_ZONE} \
     NEXT_SKIP_TYPECHECK=1 \
     NEXT_BUILD_CPUS=2
 COPY Backend/booking-api/packages/contracts ./Backend/booking-api/packages/contracts

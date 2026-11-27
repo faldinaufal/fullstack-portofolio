@@ -5,9 +5,10 @@ on:
   push:
     branches: [main]
 
+# A newer push cancels a pull request's run; on main it waits, so a deploy never stops halfway.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -122,14 +123,101 @@ jobs:
     name: Docker images
     runs-on: ubuntu-latest
     needs: verify
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # On main, once a production domain is set, the images are built with the production URLs
+      # and pushed (FSD 10.2); otherwise they are only built, to prove they still build.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TEMPORA_DOMAIN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # docker-bake.hcl reads these variables from the environment.
+      - name: Production build settings
+        if: env.PUBLISH == 'true'
+        env:
+          DOMAIN: ${{ vars.TEMPORA_DOMAIN }}
+          TIME_ZONE: ${{ vars.TEMPORA_APP_TIME_ZONE }}
+        run: |
+          {
+            echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/"
+            echo "TAGS=${GITHUB_SHA},latest"
+            echo "API_URL=https://api.${DOMAIN}"
+            echo "CONSOLE_URL=https://console.${DOMAIN}"
+            echo "APP_TIME_ZONE=${TIME_ZONE:-America/New_York}"
+          } >> "$GITHUB_ENV"
       # All six images in one bake, sharing the install and the builds (docker-bake.hcl).
       - uses: docker/bake-action@v6
         with:
           source: .
           files: docker-bake.hcl
+          push: ${{ env.PUBLISH == 'true' }}
           set: |
             *.cache-from=type=gha,scope=tempora
             *.cache-to=type=gha,mode=max,scope=tempora
+
+  deploy:
+    name: Deploy to the VPS
+    needs: [verify, database, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TEMPORA_DOMAIN != ''
+    runs-on: ubuntu-latest
+    # One deploy at a time; a newer one waits instead of cancelling a deploy halfway.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://${{ vars.TEMPORA_DOMAIN }}
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      # Only the server configuration, never the source: the code reaches the server as images.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            Backend/booking-api/deploy
+            Backend/booking-api/docker
+
+      # The server's host key comes from a secret, so CI never trusts an unknown server.
+      - name: SSH key and known host
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/deploy_key\n  BatchMode yes\n' \
+            "$VPS_HOST" "$VPS_USER" "$VPS_PORT" > ~/.ssh/config
+
+      # deploy/ and docker/ land in /opt/tempora; the server's own deploy/.env is left alone.
+      - name: Copy the Compose file, Caddyfile and scripts
+        run: tar -C Backend/booking-api -czf - deploy docker | ssh vps 'tar -xzf - -C /opt/tempora'
+
+      # deploy/deploy.sh: pull this commit's images, migrate, start.
+      - name: Start this commit's images on the server
+        run: ssh vps "sh /opt/tempora/deploy/deploy.sh $GITHUB_SHA"
+
+      - name: The new version is live
+        env:
+          DOMAIN: ${{ vars.TEMPORA_DOMAIN }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS "https://api.$DOMAIN/health/ready" > /dev/null \
+              && curl -fsS "https://api.$DOMAIN/health" | grep -q "$GITHUB_SHA"; then
+              echo "Live: $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The API never reported $GITHUB_SHA as ready" && exit 1
