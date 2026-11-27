@@ -1,0 +1,181 @@
+# Tempora in production: the whole stack on one VPS (FSD 0.2 Hosting, 10).
+# On the server it lives in /opt/tempora/deploy, copied there by CI with ../docker; the server
+# holds no source code. Images are built and pushed by CI (never on the server), and
+# `deploy.sh <sha>` pulls and starts them.
+# Settings and secrets come from `.env` next to this file (see .env.example).
+#
+# Only Caddy publishes ports (80, 443). PostgreSQL, storage and the apps are reachable only
+# inside the Docker network, and Mailpit's inbox only from the server itself (SSH tunnel).
+# Every service has a memory limit, so one of them cannot starve the others on 2 GB of RAM.
+
+name: tempora
+
+x-logging:
+  &logging # Docker keeps container logs forever by default; rotate them so they cannot fill the disk.
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  caddy:
+    <<: *defaults
+    image: caddy:2.10-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates: keep them, or Let's Encrypt rate limits apply
+      - caddy-config:/config
+    mem_limit: 128m
+    depends_on: [api, portal, console, platform-admin, storage]
+
+  postgres:
+    <<: *defaults
+    image: postgres:17-alpine
+    # Sized for a small server: a modest cache and few connections (the API, worker and
+    # migrations together use well under 40).
+    command: ['postgres', '-c', 'shared_buffers=128MB', '-c', 'max_connections=40']
+    environment:
+      POSTGRES_USER: tempora
+      POSTGRES_DB: tempora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TEMPORA_APP_PASSWORD: ${TEMPORA_APP_PASSWORD:?Set TEMPORA_APP_PASSWORD in .env}
+      TEMPORA_JOBS_PASSWORD: ${TEMPORA_JOBS_PASSWORD:?Set TEMPORA_JOBS_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tempora -d tempora']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+
+  storage:
+    <<: *defaults
+    image: chrislusf/seaweedfs:4.50
+    entrypoint: ['/bin/sh', '/docker/start.sh']
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in .env}
+      S3_BUCKET: tempora-files
+    volumes:
+      - storage-data:/data
+      - ../docker/storage/start.sh:/docker/start.sh:ro
+    mem_limit: 256m
+
+  # Keeps every email on the server until the demo inbox and an email provider exist
+  # (FSD 0.2 Email). Read it through an SSH tunnel: ssh -L 8025:localhost:8025 <server>
+  mailpit:
+    <<: *defaults
+    image: axllent/mailpit:v1.33
+    environment:
+      MP_MAX_MESSAGES: 2000
+    ports:
+      - '127.0.0.1:8025:8025'
+    mem_limit: 64m
+
+  migrate:
+    image: ghcr.io/${IMAGE_OWNER:?Set IMAGE_OWNER in .env}/tempora-migrate:${IMAGE_TAG:-latest}
+    logging: *logging
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tempora:${POSTGRES_PASSWORD}@postgres:5432/tempora
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 256m
+
+  api:
+    <<: *defaults
+    image: ghcr.io/${IMAGE_OWNER}/tempora-api:${IMAGE_TAG:-latest}
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      PORT: 4000
+      APP_VERSION: ${IMAGE_TAG:-latest}
+      DATABASE_URL: postgresql://tempora_app:${TEMPORA_APP_PASSWORD}@postgres:5432/tempora
+      PORTAL_URL: https://${DOMAIN}
+      CONSOLE_URL: https://console.${DOMAIN}
+      ADMIN_URL: https://admin.${DOMAIN}
+      COOKIE_DOMAIN: .${DOMAIN}
+      # Caddy is the only way in, so its X-Forwarded-For carries the real client IP.
+      TRUST_PROXY: 'true'
+      TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET:?Set TOKEN_HASH_SECRET in .env}
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-America/New_York}
+      # The API reaches storage inside Docker; browsers reach it at files.<domain>.
+      S3_ENDPOINT: http://storage:8333
+      S3_UPLOAD_ENDPOINT: https://files.${DOMAIN}
+      S3_REGION: us-east-1
+      S3_BUCKET: tempora-files
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_PUBLIC_BASE_URL: https://files.${DOMAIN}/tempora-files
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage:
+        condition: service_started
+    mem_limit: 320m
+
+  worker:
+    <<: *defaults
+    image: ghcr.io/${IMAGE_OWNER}/tempora-worker:${IMAGE_TAG:-latest}
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      JOBS_DATABASE_URL: postgresql://tempora_jobs:${TEMPORA_JOBS_PASSWORD}@postgres:5432/tempora
+      SMTP_URL: smtp://mailpit:1025
+      EMAIL_FROM: Tempora <no-reply@${DOMAIN}>
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    mem_limit: 256m
+
+  # The apps take no runtime settings: their URLs were compiled in by CI (FSD 10.4).
+  portal:
+    <<: *defaults
+    image: ghcr.io/${IMAGE_OWNER}/tempora-portal:${IMAGE_TAG:-latest}
+    mem_limit: 256m
+
+  console:
+    <<: *defaults
+    image: ghcr.io/${IMAGE_OWNER}/tempora-console:${IMAGE_TAG:-latest}
+    mem_limit: 256m
+
+  platform-admin:
+    <<: *defaults
+    image: ghcr.io/${IMAGE_OWNER}/tempora-platform-admin:${IMAGE_TAG:-latest}
+    mem_limit: 256m
+
+  # One-off commands, not started by `up` (profile "tools"):
+  #   docker compose run --rm seed                      demo data, only when missing
+  #   docker compose run --rm seed --reset              start the demo again
+  seed:
+    image: ghcr.io/${IMAGE_OWNER}/tempora-api:${IMAGE_TAG:-latest}
+    profiles: [tools]
+    entrypoint: ['node', 'dist/scripts/seed-demo.js']
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tempora:${POSTGRES_PASSWORD}@postgres:5432/tempora
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-America/New_York}
+      PORTAL_URL: https://${DOMAIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  storage-data:
+  caddy-data:
+  caddy-config:

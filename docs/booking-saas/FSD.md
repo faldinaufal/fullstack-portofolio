@@ -7,22 +7,22 @@
 ### 0.1 System overview
 ```mermaid
 flowchart LR
-    subgraph Vercel
+    B([Browser])
+    subgraph VPS["VPS · Docker Compose"]
+        X[Caddy<br/>HTTPS reverse proxy]
         P[Portal<br/>Next.js]
         C[Console<br/>Next.js]
         A[Platform Admin<br/>Next.js]
-    end
-    subgraph Railway
         API[Tempora API<br/>Fastify container]
         W[Worker<br/>pg-boss container]
         DB[(PostgreSQL)]
+        R[(SeaweedFS<br/>object storage, S3 API)]
     end
     S[Stripe<br/>test mode]
-    E[Email provider]
-    R[(Cloudflare R2<br/>object storage)]
+    E[Email]
 
-    P & C & A -->|HTTPS, session cookie| API
-    C -->|upload via presigned URL| R
+    B -->|HTTPS| X
+    X --> P & C & A & API & R
     API -->|presign, read| R
     API --> DB
     W --> DB
@@ -33,12 +33,13 @@ flowchart LR
 
 | Domain | Serves |
 |---|---|
-| `portal.<domain>` | Tempora Portal |
+| `<domain>` | Tempora Portal |
 | `console.<domain>` | Tempora Console |
 | `admin.<domain>` | Tempora Platform Admin |
 | `api.<domain>` | Tempora API (`/v1/...`) and Stripe webhooks |
+| `files.<domain>` | Uploaded images (object storage, read-only for browsers) |
 
-All apps live under one purchased domain, so session cookies are first-party and work without proxies.
+`<domain>` is the project's own host under the portfolio domain (for example `tempora.<portfolio-domain>`), so every portfolio project gets its own namespace. All apps live under it, so session cookies are first-party and work without proxies.
 
 ### 0.2 Decisions
 | Area | Decision | Why |
@@ -56,17 +57,17 @@ All apps live under one purchased domain, so session cookies are first-party and
 | Double-booking prevention | Layer 1: API checks opening hours, working hours, time off and overlaps and returns specific errors. Layer 2: a PostgreSQL `EXCLUSION` constraint (with `btree_gist`) on the therapist and the time range including the buffer, for active bookings only (`pending_payment`, `confirmed`) | The database rejects the second of two overlapping bookings atomically, so two simultaneous requests can never both succeed, even if both passed the API checks. The API translates the rejection into a "slot no longer available" error. |
 | Background jobs | pg-boss (job queue stored in PostgreSQL, in its own `pgboss` schema), run by a separate worker process, for delayed and scheduled jobs (hold expiry, reminders, cron). Emails use a **transactional outbox**: the API inserts a row into `email_messages` in the same transaction as the change that caused it, and the worker polls the table (`FOR UPDATE SKIP LOCKED`), sends and records the result | Jobs and emails are created in the same transaction as the booking or payment that caused them: if the booking is not saved, no email is queued, and if it is saved, the email is guaranteed to be sent (with retries). The outbox table doubles as the email delivery log, and the worker's role needs no rights outside it. No extra infrastructure. |
 | Payments | Stripe Checkout (hosted payment page) in test mode, one platform account; `tenant_id` and `booking_id` in payment metadata; webhooks verified by signature and processed idempotently. Behind a small `PaymentProvider` interface: without `STRIPE_SECRET_KEY` the API uses a **demo provider** whose checkout page is part of the Portal and whose "Pay" button emits a webhook signed in Stripe's format (HMAC-SHA256, `t=…,v1=…`) | Hosted Checkout keeps card data out of Tempora entirely. The Checkout session expires together with the 30-minute hold. The demo provider lets local development, CI and the public demo run the full flow (including signature checks, duplicates and late payments) without Stripe keys; both providers go through the same webhook handler. |
-| File storage | S3-compatible object storage: Cloudflare R2 in production and SeaweedFS (S3 API) in Docker Compose locally. Uploads use short-lived presigned `PUT` URLs signed for the declared type and size; after the upload the API checks the stored object (size, and the file's first bytes for its real type) and stores only the object key (6.15) | Files never pass through the API process, storage scales independently of the database, and the same code works against R2 and SeaweedFS because both speak the S3 API. R2 has no presigned `POST` (which could enforce a size range), so the size is signed into the URL and checked again afterwards. |
+| File storage | S3-compatible object storage: SeaweedFS (S3 API) in Docker Compose, locally and on the VPS, served to browsers at `files.<domain>`; Cloudflare R2 works with the same settings if storage moves off the server. Uploads use short-lived presigned `PUT` URLs signed for the declared type and size; after the upload the API checks the stored object (size, and the file's first bytes for its real type) and stores only the object key (6.15) | Files never pass through the API process, storage can move independently of the database, and the same code works against R2 and SeaweedFS because both speak the S3 API. R2 has no presigned `POST` (which could enforce a size range), so the size is signed into the URL and checked again afterwards. |
 | Database roles | Three roles with least privilege: the **owner** runs migrations; **`tempora_app`** (API) reads and writes data only, cannot change the schema or the migration history and does not bypass RLS; **`tempora_jobs`** (worker) owns only the `pgboss` schema, delivers the email outbox and, for hold expiry, may update `bookings`, `invoices` and `payments` and append to `audit_logs` (no read access to the audit log). Roles are created by an init script, not by migrations | A bug or injection in the API cannot alter the schema. pg-boss creates a table per queue, so it needs DDL rights, which are confined to its own schema. Roles hold passwords, which must never be stored in migration files. |
-| Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the purchased domain in production (chosen during implementation) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. |
+| Email | Sent over SMTP by the worker: Mailpit (local fake inbox) in development; a transactional email provider's SMTP endpoint on the portfolio domain in production (chosen during implementation). Until the demo inbox (10.3) and the provider are in place, the VPS runs a private Mailpit that keeps every email on the server (reachable only through an SSH tunnel) | Emails can be tested end to end locally without sending anything real, and the same code runs in every environment. The private Mailpit lets the live site run before email delivery is set up, without ever mailing a real address. |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS; shared UI package with the design system (light/dark) | One framework for all three apps; server rendering for the public Portal pages, rich client interactions for the Console. |
 | Frontend code organization | Each app separates `core` from `ui`. `core/<feature>/` has three layers: **domain** (entities, pure rules, repository interfaces, use cases; plain TypeScript), **data** (repository implementations calling the API, DTOs from `contracts`, DTO ⇄ entity mappers), **presentation** (hooks and view-models, no JSX). `ui` holds routes and components and only talks to `presentation`. Each app has its own `core`; shared code lives in packages (`ui`, `api-client`, `contracts`) | Business rules on the client can be unit-tested without rendering, the UI can change (e.g. after the Figma designs) without touching logic, and each app only contains the use cases it actually needs. |
 | Backend code organization | Feature modules: `modules/<feature>/{routes, service, repository}` plus shared plugins (auth, tenancy, errors). Routes validate and map HTTP, services hold business rules and transactions, repositories hold Prisma queries | A simple, common Node.js layout; business rules stay in services so they can be tested without HTTP. |
 | Testing | Vitest (unit and API integration), real PostgreSQL in containers for integration tests, Playwright (end to end) | Isolation, RLS and exclusion constraints only behave correctly against a real PostgreSQL, never a mock. |
 | Observability | Structured JSON logs (pino) with request IDs, error tracking (Sentry), `/health` and a protected `/metrics` endpoint | Lets you follow one request across the API and worker logs and see errors with context. |
 | Containers | One multi-stage Dockerfile at the repository root with six targets: `api`, `worker`, `migrate` and the three Next.js apps (`standalone` output). The targets share one dependency install (cached until a manifest or the lockfile changes) and two builds, backend and frontend, so a change on one side never rebuilds the other; pnpm, turbo and Next.js caches are BuildKit cache mounts. Compose and CI (`docker buildx bake`) build all six together. Images run as a non-root user. `docker compose up` runs the whole stack locally: migrations, API, worker, PostgreSQL, Mailpit and the 3 apps | The full product runs with one command on any machine. CI builds every image to prove they stay valid. |
-| Hosting | Frontends on Vercel; API and worker as containers on Railway, with Railway PostgreSQL; one purchased domain | Containers where long-running processes matter (API, worker); global CDN and per-PR preview deployments for the frontends. |
-| CI/CD | GitHub Actions: lint, type check, unit, integration and E2E tests, Docker image builds on every pull request; automatic deploy from `main` | Every change is verified the same way before it reaches the live demo. |
+| Hosting | One VPS (2 vCPU, 2 GB RAM, 40 GB NVMe, Ubuntu 24.04) running the whole stack with Docker Compose (`Backend/booking-api/deploy`): Caddy in front (automatic Let's Encrypt HTTPS), the three apps, API, worker, PostgreSQL and SeaweedFS. Only ports 22, 80 and 443 are open; PostgreSQL and storage are reachable only inside the Docker network. Every container has a memory limit, and the server has 2 GB swap | One machine with a fixed monthly price runs every part of the product, and the same images and Compose file run locally and in production. Caddy renews certificates by itself. Memory limits stop one service from starving the others on a small server. |
+| CI/CD | GitHub Actions: lint, type check, unit, integration and E2E tests, Docker image builds on every pull request. On `main`, the images are pushed to GitHub Container Registry (tagged with the commit SHA and `latest`) and the VPS is updated over SSH; images are never built on the server | Every change is verified the same way before it reaches the live demo. Building the three Next.js apps needs more memory than the server has, and pulling ready-made images makes a deploy take seconds. |
 
 ## 1. Roles & permissions
 
@@ -139,7 +140,7 @@ Legend: ✅ allowed · 🏢 own branch only · 👤 own records only · 👁 rea
 ## 2. Screens
 Every screen supports light/dark mode and works from 360 px wide. List screens have loading, empty and error states; destructive actions ask for confirmation. The visual design follows the Figma file as described in [DESIGN.md](DESIGN.md); where Figma and this FSD disagree, this FSD wins.
 
-### 2.1 Tempora Portal (`portal.<domain>`)
+### 2.1 Tempora Portal (`<domain>`)
 | Screen | Route | Purpose | Roles |
 |---|---|---|---|
 | Home / directory | `/` | Search and browse active businesses by name or type | Everyone |
@@ -914,7 +915,7 @@ Database: every foreign key and every filter column used by list endpoints is in
 - **Authentication and sessions:** see 0.2 and 6.11 (Argon2id, httpOnly cookies, CSRF token, email 2FA for team and platform accounts, immediate revocation).
 - **Authorization:** checked in the API on every request (1.3); RLS in the database as the second layer (4.4).
 - **Payments:** card data never touches Tempora (Stripe Checkout); webhooks verified by signature.
-- **Secrets:** only in environment variables of each platform (Railway, Vercel, GitHub Actions); `.env.example` files list every variable without values; no secret is ever committed.
+- **Secrets:** only in the VPS's `.env` file (readable by the deploy user only) and GitHub Actions secrets; `.env.example` files list every variable without values; no secret is ever committed.
 - **Dependencies:** Dependabot updates and `pnpm audit` in CI; container images built from slim base images and run as a non-root user.
 - **Personal data:** logs never contain passwords, tokens, OTP codes, full emails or phone numbers (masked); staff see only what 1.2 allows.
 - **Uploads:** raster images only (PNG, JPEG, WebP; no SVG, which can carry scripts). Type and size are signed into the upload URL and checked again on the stored object, including its first bytes (6.15). Images are served from the separate `files.<domain>` origin, never from an app origin, and never executed.
@@ -932,7 +933,7 @@ Database: every foreign key and every filter column used by list endpoints is in
 - Network failures on booking and payment requests are retried by the app with the **same** `Idempotency-Key`, so retries never duplicate bookings.
 - Jobs retry with exponential back-off (emails: up to 5 attempts); failed jobs are visible in the email log and Platform Admin overview.
 - Graceful shutdown: API and worker finish in-flight requests and jobs before a deploy stops them.
-- Database backups: daily automatic backups on Railway, restore procedure documented in the README.
+- Database backups: a nightly `pg_dump` on the VPS keeps the last 7 days (`deploy/backup.sh`); copying them off the server is a Should. The restore procedure is documented in `Backend/booking-api/deploy/README.md`.
 
 ### 8.6 Data retention
 | Data | Kept |
@@ -956,10 +957,10 @@ Latest two versions of Chrome, Edge, Firefox and Safari (desktop and mobile). La
 | Worker | Vitest + PostgreSQL | Jobs: hold expiry, reminders, auto-complete, support expiry, email retries | Every PR |
 | Frontend components | Vitest + Testing Library | Shared UI components, forms, error mapping | Every PR |
 | End to end | Playwright against the full stack (docker compose) | Main flow of every role in a real browser, plus axe accessibility checks | Every PR |
-| Preview smoke | Playwright against the PR preview deployment | Log in per app, real Stripe test Checkout once | Every PR (after deploy) |
+| Production smoke | `curl` after every deploy; Playwright later | The API answers `/health/ready` with the new version; later: log in per app, real Stripe test Checkout once | Every deploy |
 | Load (Should) | k6 | Availability and booking endpoints under concurrent load; verifies 8.1 | Manually / before releases |
 
-Stripe in automated tests: integration tests use the demo payment provider (0.2) and send **signed** webhook events through the real HTTP endpoint, so signature checks, duplicates and late payments are tested without calling Stripe; one smoke test per PR goes through the real Stripe test-mode Checkout page once the deployment has Stripe keys.
+Stripe in automated tests: integration tests use the demo payment provider (0.2) and send **signed** webhook events through the real HTTP endpoint, so signature checks, duplicates and late payments are tested without calling Stripe; one smoke test after deploy goes through the real Stripe test-mode Checkout page once the deployment has Stripe keys.
 
 ### 9.2 Critical test suites
 These prove the PRD's core promises and are required to pass before merge.
@@ -992,18 +993,19 @@ These prove the PRD's core promises and are required to pass before merge.
 | Environment | Frontends | API, worker, database, storage | Stripe | Email | Purpose |
 |---|---|---|---|---|---|
 | **Local** | `docker compose up` (or `pnpm dev`) | Docker Compose: API, worker, PostgreSQL, Mailpit, SeaweedFS (object storage, S3 API) | Test mode + Stripe CLI webhook forwarding | Mailpit | Development |
-| **Preview** | Vercel preview per pull request | Railway PR environment with its own temporary database, seeded | Test mode | Captured (demo inbox only) | Review a change before merge |
-| **Production** | Vercel, custom subdomains | Railway (API and worker containers, PostgreSQL), Cloudflare R2 | Test mode | Email provider on the purchased domain | Public live demo |
+| **Production** | VPS, Docker Compose behind Caddy (`Backend/booking-api/deploy`) | Same VPS: API, worker, PostgreSQL, SeaweedFS | Demo provider until Stripe test keys are added | Private Mailpit on the VPS until the demo inbox and the email provider (0.2 Email) | Public live demo |
+
+There is no per-pull-request preview environment: a pull request is verified by CI, including the images and the composed stack, before it can reach `main`.
 
 ### 10.2 CI/CD pipeline (GitHub Actions)
 1. **On every pull request:** install (pnpm, cached) → lint → type check → unit tests → integration tests (PostgreSQL service container) → build all apps → build all Docker images → end-to-end tests on the composed stack → OpenAPI check.
-2. **Preview deploy:** Vercel and Railway create the PR environments; the preview smoke tests run against them.
-3. **On merge to `main`:** the same checks, then deploy to production:
-   1. Run database migrations with the migration role (`prisma migrate deploy`) as a release step.
-   2. Deploy the new API and worker containers (Railway waits for `/health/ready` before switching traffic).
-   3. Vercel deploys the three apps.
-4. **Migrations are backward compatible** (expand → migrate → contract): a column is added before code uses it and removed only after no deployed code reads it, so the previous version keeps working during a deploy.
-5. **Rollback:** redeploy the previous container image and Vercel deployment; because migrations are backward compatible, the database does not need to be rolled back.
+2. **On a push to `main`:** the same checks, then deploy to production (one deploy at a time; a newer push waits instead of cancelling a running deploy):
+   1. Push the six images to GitHub Container Registry, tagged with the commit SHA and `latest`. The apps' `NEXT_PUBLIC_*` values are build-time, so they are built with the production URLs (repository variables).
+   2. Over SSH, CI copies `Backend/booking-api/deploy` and `Backend/booking-api/docker` (Compose file, Caddyfile, scripts) to `/opt/tempora` and runs `deploy/deploy.sh <sha>`: pull the images, then `docker compose up -d`. The server never holds the source code or builds anything; its secrets stay in `deploy/.env`, which CI never touches. Compose runs the `migrate` container (`prisma migrate deploy` with the owner role) first and starts the API and worker only after it succeeded.
+   3. CI waits until `https://api.<domain>/health/ready` answers with the new version.
+3. **Migrations are backward compatible** (expand → migrate → contract): a column is added before code uses it and removed only after no deployed code reads it, so the previous version keeps working during a deploy.
+4. **Rollback:** re-run an earlier `main` run's deploy job in GitHub Actions (or run `deploy/deploy.sh <previous sha>` on the VPS), which starts that commit's images again; because migrations are backward compatible, the database does not need to be rolled back.
+5. Deploys are skipped until the repository variable `TEMPORA_DOMAIN` is set, so `main` stays green before the server exists.
 
 ### 10.3 Demo data and safeguards
 - Seed script creates the demo tenants (Lumen Wellness Studio, Harbor Physio Clinic), branches, services, therapists, working hours, 90 days of past bookings with invoices and payments, and upcoming bookings (14 days).
@@ -1011,7 +1013,7 @@ These prove the PRD's core promises and are required to pass before merge.
   - It runs with the owner role (it writes across tenants, so it bypasses RLS), in one transaction. Seeding removes the demo tenants with everything in them and creates them again, so **seeding is also the reset**; other tenants are not touched. Demo accounts are matched by email: one still used elsewhere (a visitor invited it to their own business) is kept and gets the demo password again. Everyone signed in with a demo account is logged out.
   - It refuses to run when another tenant holds a demo slug or invoice prefix.
   - `pnpm --filter @tempora/api demo:seed` seeds only when the demo is missing; `--reset` starts again. `docker compose up` runs it once after the migrations, so local changes survive a restart.
-- **Demo accounts**, one per role (owner, manager, staff, customer, platform admin), share one password (`DEMO_PASSWORD`). Locally they use `@veloria.test` addresses (a reserved `.test` domain) and the codes arrive in Mailpit. On the live site they use addresses at `@demo.<domain>`. Emails to these addresses are **not sent out**: they are stored and shown in a **public demo inbox** (`portal.<domain>/demo-inbox`, linked from every login page), so visitors can complete the email 2FA and see booking emails.
+- **Demo accounts**, one per role (owner, manager, staff, customer, platform admin), share one password (`DEMO_PASSWORD`). Locally they use `@veloria.test` addresses (a reserved `.test` domain) and the codes arrive in Mailpit. On the live site they use addresses at `@demo.<domain>`. Emails to these addresses are **not sent out**: they are stored and shown in a **public demo inbox** (`<domain>/demo-inbox`, linked from every login page), so visitors can complete the email 2FA and see booking emails.
 - Emails to any other address are sent normally through the email provider.
 - **Demo platform admin** can only act on the demo tenants; tenants created by visitors through sign-up are hidden from it.
 - A nightly job resets the demo tenants to the seed state (`demo:seed --reset`), so visitors can try destructive actions freely.
@@ -1048,13 +1050,38 @@ Every service has a `.env.example` with these names and no values.
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_API_URL` | API base URL |
+| `NEXT_PUBLIC_APP_TIME_ZONE` | Console and Platform Admin: the platform time zone, the same as the API's `APP_TIME_ZONE` |
+| `NEXT_PUBLIC_CONSOLE_URL` | Portal: Console origin for the "List your business" link |
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser error tracking |
 | `NEXT_PUBLIC_DEMO_MODE` | Show demo account hints and the demo inbox link |
 
-### 10.5 Domains
-| Host | Points to |
+`NEXT_PUBLIC_*` values are compiled into the browser bundles, so they are Docker build arguments, not runtime settings.
+
+**Server (`Backend/booking-api/deploy/.env` on the VPS)**
+| Variable | Purpose |
 |---|---|
-| `portal.<domain>`, `console.<domain>`, `admin.<domain>` | Vercel projects |
-| `api.<domain>` | Railway API service |
-| `files.<domain>` | Cloudflare R2 public bucket (logos, cover photos and therapist photos) |
+| `DOMAIN` | The project's host (`<domain>`); every other URL is derived from it |
+| `ACME_EMAIL` | Contact address for Let's Encrypt certificate notices |
+| `IMAGE_OWNER`, `IMAGE_TAG` | Which images to run: `ghcr.io/<owner>/tempora-<service>:<tag>` (the deploy script passes the commit SHA) |
+| `POSTGRES_PASSWORD`, `TEMPORA_APP_PASSWORD`, `TEMPORA_JOBS_PASSWORD` | Database roles |
+| `TOKEN_HASH_SECRET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | As above |
+| `APP_TIME_ZONE` | As above |
+
+**GitHub Actions**
+| Name | Kind | Purpose |
+|---|---|---|
+| `TEMPORA_DOMAIN` | Variable | Production `<domain>`; builds the apps' URLs and turns deploys on |
+| `TEMPORA_APP_TIME_ZONE` | Variable | Build-time time zone for the apps (default `America/New_York`) |
+| `VPS_HOST`, `VPS_USER`, `VPS_PORT` | Secrets | Where to SSH for the deploy |
+| `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` | Secrets | A deploy-only SSH key and the server's host key (no trust on first use) |
+
+### 10.5 Domains
+All hosts point to the VPS (DNS `A` records for `<domain>` and `*.<domain>`); Caddy routes by host name and obtains a certificate for each.
+
+| Host | Served by |
+|---|---|
+| `<domain>` | Portal container |
+| `console.<domain>`, `admin.<domain>` | Console and Platform Admin containers |
+| `api.<domain>` | API container |
+| `files.<domain>` | SeaweedFS (anonymous read of the image bucket; uploads only with a presigned URL) |
 | `demo.<domain>` | Email address domain only for demo accounts (no website) |

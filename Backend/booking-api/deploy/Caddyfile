@@ -1,0 +1,46 @@
+# Tempora's front door (FSD 0.1, 10.5). Caddy gets and renews a Let's Encrypt certificate for
+# every host below by itself, redirects HTTP to HTTPS, and passes each host to its container.
+# DOMAIN and ACME_EMAIL come from the environment (compose.yml).
+
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+{$DOMAIN} {
+	import common
+	reverse_proxy portal:3000
+}
+
+console.{$DOMAIN} {
+	import common
+	header X-Frame-Options DENY
+	reverse_proxy console:3000
+}
+
+admin.{$DOMAIN} {
+	import common
+	header X-Frame-Options DENY
+	reverse_proxy platform-admin:3000
+}
+
+api.{$DOMAIN} {
+	import common
+	reverse_proxy api:4000
+}
+
+# Uploaded images. Browsers may read the bucket and upload with a presigned URL; the
+# signature covers this host name, which Caddy passes through unchanged.
+files.{$DOMAIN} {
+	import common
+	reverse_proxy storage:8333
+}

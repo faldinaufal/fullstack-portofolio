@@ -16,8 +16,10 @@ x-build: &build
   context: .
   dockerfile: Dockerfile
   args:
-    # The browser calls the API directly, so this is the host-facing URL.
+    # The browser calls the API directly, so these are host-facing URLs.
     NEXT_PUBLIC_API_URL: http://localhost:4000
+    NEXT_PUBLIC_CONSOLE_URL: http://localhost:3001
+    NEXT_PUBLIC_APP_TIME_ZONE: America/New_York
 
 services:
   postgres:
