@@ -6,6 +6,7 @@ import {
   ConsoleInvoiceDetailSchema,
   CustomerListQuerySchema,
   CustomerListSchema,
+  CustomerSummarySchema,
   InvoiceListQuerySchema,
   InvoiceListSchema,
 } from '@tempora/contracts';
@@ -53,6 +54,19 @@ export const consoleRecordRoutes: FastifyPluginAsyncZod<{
       }
       return service.customers(actor, request.query);
     },
+  );
+
+  app.get(
+    '/customers/summary',
+    {
+      preHandler: leads,
+      schema: {
+        tags: ['console-customers'],
+        summary: 'Figures for the Customers page, in the same scope as the list',
+        response: { 200: CustomerSummarySchema, ...problems(401, 403) },
+      },
+    },
+    async (request) => service.customerSummary(guard.actor(request)),
   );
 
   app.get(

@@ -6,6 +6,7 @@ import {
   ConsoleCustomerDetailSchema,
   ConsoleInvoiceDetailSchema,
   CustomerListSchema,
+  CustomerSummarySchema,
   InvoiceListSchema,
   type ConsoleCustomer,
   type ConsoleInvoice,
@@ -68,6 +69,8 @@ export function createHttpRecordsRepository(client: ApiClient, apiUrl: string): 
         });
         return { ...dto, items: dto.items.map(toCustomer) };
       }),
+    customerSummary: () =>
+      request(() => client.get(`${C}/customers/summary`, { schema: CustomerSummarySchema })),
 
     customer: (id) =>
       request(async () => {

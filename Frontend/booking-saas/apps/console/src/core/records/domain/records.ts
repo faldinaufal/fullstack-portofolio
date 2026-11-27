@@ -16,6 +16,20 @@ export interface Customer {
   nextBookingAt: Date | null;
 }
 
+/** Figures for the cards above the customer list (FSD 5.4 `GET /customers/summary`). */
+export interface CustomerSummary {
+  total: number;
+  newThisMonth: number;
+  returning: number;
+  bookedAhead: number;
+  upcomingSessions: number;
+  noShows: number;
+}
+
+/** Share of customers who came back, as a whole percentage; 0 without customers. */
+export const returningShare = (summary: Pick<CustomerSummary, 'total' | 'returning'>) =>
+  summary.total === 0 ? 0 : Math.round((summary.returning / summary.total) * 100);
+
 export interface CustomerFilters {
   q?: string | undefined;
   sort: 'name' | '-lastVisit';
@@ -78,6 +92,7 @@ export interface InvoiceDetail extends Omit<Invoice, 'customer'> {
 /** Implemented by the data layer; failures are `RequestError`s. */
 export interface RecordsRepository {
   customers(filters: CustomerFilters): Promise<Page<Customer>>;
+  customerSummary(): Promise<CustomerSummary>;
   customer(id: string): Promise<CustomerDetail>;
   /** CSV download links with the same filters (FSD 5.1). */
   customersExportUrl(filters: CustomerFilters): string;

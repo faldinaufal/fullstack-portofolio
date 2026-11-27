@@ -5,6 +5,8 @@ import type { ApiClient } from '@tempora/api-client';
 import { describe, expect, it } from 'vitest';
 import { createHttpBookingRepository } from '../bookings/data/http-booking-repository';
 import { createHttpRecordsRepository, toCustomer, toInvoice } from './data/http-records-repository';
+import { returningShare } from './domain/records';
+import { formatPhone } from './presentation/use-records';
 
 const API = 'http://localhost:4000';
 const client = {} as ApiClient;
@@ -22,6 +24,21 @@ describe('CSV export links (FSD 5.1)', () => {
     expect(
       bookings.exportUrl({ sort: 'startsAt', page: 2, from: '2026-11-23', to: '2026-11-23' }),
     ).toBe(`${API}/v1/console/bookings?sort=startsAt&from=2026-11-23&to=2026-11-23&format=csv`);
+  });
+});
+
+describe('returningShare', () => {
+  it('rounds to a whole percentage and is 0 without customers', () => {
+    expect(returningShare({ total: 3, returning: 2 })).toBe(67);
+    expect(returningShare({ total: 0, returning: 0 })).toBe(0);
+  });
+});
+
+describe('formatPhone', () => {
+  it('groups North American numbers and leaves the rest in E.164', () => {
+    expect(formatPhone('+15550147122')).toBe('+1 (555) 014-7122');
+    expect(formatPhone('+442071838750')).toBe('+442071838750');
+    expect(formatPhone(null)).toBeNull();
   });
 });
 

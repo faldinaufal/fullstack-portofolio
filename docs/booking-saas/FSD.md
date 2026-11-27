@@ -176,7 +176,7 @@ The sidebar shows only what the active role may use. A tenant switcher appears w
 | Calendar | `/calendar` | Day/week view per branch and therapist; open a booking; staff see only their own column | Owner, manager, staff |
 | Bookings | `/bookings` | Table with filter, sort, pagination, CSV export | Owner, manager |
 | Booking detail | `/bookings/[id]` | Timeline (audit), reschedule, reassign, cancel (with reason), mark status, invoice link | Owner, manager; staff (own, limited) |
-| Customers | `/customers` | Tenant customers with booking count and last visit; detail page with their bookings at this tenant | Owner, manager (customers who booked at their branch) |
+| Customers | `/customers` | Four figure cards (customers and new this month, returning customers with their share, booked ahead with sessions in the next 7 days, no-shows in the last 90 days), then tenant customers with booking count and last visit; detail page with their bookings at this tenant | Owner, manager (customers who booked at their branch) |
 | Invoices | `/invoices` | Table with status, filters, CSV export; detail page | Owner, manager |
 | Branches | `/branches` | List; create/archive (owner); detail with opening hours and closures | Owner, manager (own branch) |
 | Services | `/services` | Catalogue: create, edit, archive, price | Owner (edit), manager (read) |
@@ -573,6 +573,7 @@ Invitation links use `/invitation-links/:token` so they never collide with `/inv
 | POST | `/bookings/:id/complete` | Mark completed (6.7) | owner, manager (own branch), staff (own) |
 | POST | `/bookings/:id/no-show` | Mark no-show (6.7) | owner, manager (own branch), staff (own) |
 | GET | `/customers` | Tenant customers with booking count, last visit and next booking; `q` (name or email), `sort` (`name`, `-lastVisit`), pagination, `format=csv`. A manager sees the customers who booked at their branch, with counts for that branch only | owner, manager |
+| GET | `/customers/summary` | Figures for the Customers page, in the same scope as the list: `total` customers, `newThisMonth` (first booking created this calendar month in the platform time zone), `returning` (2 or more bookings), `bookedAhead` (with a next booking), `upcomingSessions` (confirmed sessions starting in the next 7 days), `noShows` (customers with a no-show in the last 90 days). "Booking" means confirmed, completed or no-show, as in the list | owner, manager |
 | GET | `/customers/:id` | Customer detail (contact, whether they have a Portal account) with their bookings at this tenant (manager: at their branch) | owner, manager |
 | GET | `/invoices` | Table: `status`, `branchId`, `from`/`to` (issue date), `q` (invoice number or customer), pagination, `format=csv` | owner, manager (own branch) |
 | GET | `/invoices/:id` | Invoice detail with the booking, the customer and every payment attempt (provider, status, time) | owner, manager (own branch) |
