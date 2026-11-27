@@ -8,11 +8,13 @@ import type {
   ConsoleInvoiceDetail,
   CustomerList,
   CustomerListQuery,
+  CustomerSummary,
   InvoiceList,
   InvoiceListQuery,
 } from '@tempora/contracts';
 import { Prisma, withDbContext, type PrismaClient, type Tx } from '@tempora/db';
 import { csvAmount, csvDateTime, csvStream } from '../../lib/csv.js';
+import { todayIn } from '../availability/engine.js';
 import { notFound, viewerContext, type Viewer } from '../console-auth/access.js';
 import type { ConsoleActor } from '../console-auth/guard.js';
 import {
@@ -47,6 +49,8 @@ const INVOICE_INCLUDE = {
 } as const;
 
 type InvoiceRow = Prisma.InvoiceGetPayload<{ include: typeof INVOICE_INCLUDE }>;
+
+const DAY = 24 * 60 * 60 * 1000;
 
 export interface ConsoleRecordsDeps {
   prisma: PrismaClient;
@@ -129,6 +133,61 @@ export function createConsoleRecordsService({
     return row?.total ?? 0;
   }
 
+  /**
+   * The Customers page's figure cards in one aggregate query: per customer in scope (same join
+   * as the list, so a manager counts only their branch), then counted with `FILTER`s. The
+   * database does the counting; nothing per customer reaches the API.
+   */
+  async function customerSummary(tx: Tx, actor: Viewer): Promise<CustomerSummary> {
+    const branch = branchOf(actor);
+    const at = now();
+    const today = todayIn(timeZone, at);
+    const monthStart = dateRange(timeZone, `${today.slice(0, 8)}01`, undefined)!.gte!;
+    const weekAhead = new Date(at.getTime() + 7 * DAY);
+    const ninetyDaysAgo = new Date(at.getTime() - 90 * DAY);
+    const [row] = await tx.$queryRaw<
+      {
+        total: number;
+        new_this_month: number;
+        returning: number;
+        booked_ahead: number;
+        no_shows: number;
+        upcoming_sessions: number;
+      }[]
+    >`
+      WITH scoped AS (
+        SELECT c.id,
+          count(b.id) FILTER (WHERE b.status IN ('confirmed', 'completed', 'no_show')) AS booked,
+          min(b.created_at) FILTER (WHERE b.status IN ('confirmed', 'completed', 'no_show')) AS first_booked_at,
+          bool_or(b.starts_at > ${at} AND (
+            b.status = 'confirmed' OR (b.status = 'pending_payment' AND b.hold_expires_at > ${at})
+          )) AS ahead,
+          bool_or(b.status = 'no_show' AND b.starts_at >= ${ninetyDaysAgo}) AS no_show,
+          count(b.id) FILTER (
+            WHERE b.status = 'confirmed' AND b.starts_at > ${at} AND b.starts_at <= ${weekAhead}
+          ) AS upcoming
+        FROM tenant_customers c
+        JOIN bookings b ON b.tenant_customer_id = c.id
+          ${branch ? Prisma.sql`AND b.branch_id = ${branch}::uuid` : Prisma.empty}
+        GROUP BY c.id
+      )
+      SELECT count(*)::int AS total,
+        count(*) FILTER (WHERE first_booked_at >= ${monthStart})::int AS new_this_month,
+        count(*) FILTER (WHERE booked >= 2)::int AS returning,
+        count(*) FILTER (WHERE ahead)::int AS booked_ahead,
+        count(*) FILTER (WHERE no_show)::int AS no_shows,
+        coalesce(sum(upcoming), 0)::int AS upcoming_sessions
+      FROM scoped`;
+    return {
+      total: row?.total ?? 0,
+      newThisMonth: row?.new_this_month ?? 0,
+      returning: row?.returning ?? 0,
+      bookedAhead: row?.booked_ahead ?? 0,
+      upcomingSessions: row?.upcoming_sessions ?? 0,
+      noShows: row?.no_shows ?? 0,
+    };
+  }
+
   const customerPage = (
     tx: Tx,
     actor: Viewer,
@@ -201,6 +260,9 @@ export function createConsoleRecordsService({
         total: await countCustomers(tx, actor, query),
         timeZone,
       })),
+
+    customerSummary: (actor: Viewer): Promise<CustomerSummary> =>
+      inTenant(actor, (tx) => customerSummary(tx, actor)),
 
     async exportCustomers(actor: ConsoleActor, query: CustomerListQuery) {
       await inTenant(actor, async (tx) =>

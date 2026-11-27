@@ -48,6 +48,28 @@ export const CustomerListSchema = z
   .meta({ id: 'CustomerList' });
 export type CustomerList = z.infer<typeof CustomerListSchema>;
 
+/**
+ * Figures for the top of the Customers page, in the same scope as the list (manager: their
+ * branch). A "booking" is confirmed, completed or no-show, as in `bookingCount`.
+ */
+export const CustomerSummarySchema = z
+  .object({
+    /** Every customer the list shows without a search. */
+    total: z.number().int(),
+    /** Customers whose first booking was made this calendar month (platform time zone). */
+    newThisMonth: z.number().int(),
+    /** Customers with two or more bookings. */
+    returning: z.number().int(),
+    /** Customers with a booking still to come. */
+    bookedAhead: z.number().int(),
+    /** Confirmed sessions starting in the next 7 days. */
+    upcomingSessions: z.number().int(),
+    /** Customers with a no-show in the last 90 days. */
+    noShows: z.number().int(),
+  })
+  .meta({ id: 'CustomerSummary' });
+export type CustomerSummary = z.infer<typeof CustomerSummarySchema>;
+
 export const ConsoleCustomerDetailSchema = ConsoleCustomerSchema.extend({
   bookings: z.array(ConsoleBookingSchema),
   timeZone: z.string(),

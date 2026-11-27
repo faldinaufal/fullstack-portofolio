@@ -13,7 +13,7 @@ import {
   portalBrowser,
   type BookableBusiness,
 } from '../../test/booking-flows.js';
-import { C, consoleFlows, PEOPLE } from '../../test/console-flows.js';
+import { C, consoleFlows, OWNER, PEOPLE } from '../../test/console-flows.js';
 import { createHarness, type Harness, type TestBrowser } from '../../test/harness.js';
 
 let h: Harness;
@@ -33,6 +33,7 @@ beforeEach(async () => {
 });
 
 const at = (time: string) => nyTime(monday, time);
+const HOUR = 60 * 60 * 1000;
 const LENA = { name: 'Lena Fischer', email: 'lena@veloria.test', phone: '+15550147003' };
 
 /** A manager at another branch, Harbor (no bookings there). */
@@ -71,6 +72,39 @@ describe('customers (FSD 2.2, 5.4)', () => {
     expect((await manager.get(`${C}/customers`)).json()).toMatchObject({ total: 0 });
     expect((await manager.get(`${C}/customers/${list.items[1]!.id}`)).statusCode).toBe(404);
     expect((await b.staff.get(`${C}/customers`)).statusCode).toBe(403);
+  });
+
+  it('summarises customers for the page cards, in the list’s scope', async () => {
+    const first = await paidBooking(h, b, at('10:00'));
+    await paidBooking(h, b, at('14:00')); // Omar again: returning
+    await expectBooked(portalBrowser(h), bookingBody(b, at('16:00'), { guest: LENA })); // a hold
+
+    const summary = async (browser: TestBrowser) =>
+      (await browser.get(`${C}/customers/summary`)).json<Record<string, number>>();
+    // Monday is 2 to 8 days away, so "the next 7 days" is checked after moving the clock.
+    expect(await summary(b.owner)).toMatchObject({
+      total: 2, // the same customers the list shows
+      newThisMonth: 1, // Omar booked for the first time just now; Lena has only a hold
+      returning: 1,
+      bookedAhead: 2, // Lena's hold still holds a time
+      noShows: 0,
+    });
+    const manager = await harborManager();
+    expect(await summary(manager)).toMatchObject({ total: 0, returning: 0, bookedAhead: 0 });
+    expect((await b.staff.get(`${C}/customers/summary`)).statusCode).toBe(403);
+
+    // Sunday evening before the sessions: both are within the next 7 days, the hold expired.
+    h.clock.advance(new Date(at('10:00')).getTime() - 15 * HOUR - Date.now());
+    const flows = consoleFlows(h);
+    const owner = await flows.login(OWNER.email, OWNER.password);
+    expect(await summary(owner)).toMatchObject({ bookedAhead: 1, upcomingSessions: 2 });
+
+    // Omar did not come to the first session.
+    h.clock.advance(16 * HOUR); // 11:00 on Monday
+    const later = await flows.login(OWNER.email, OWNER.password);
+    const marked = await later.post(`${C}/bookings/${first.booking.id}/no-show`, {});
+    expect(marked.statusCode, marked.body).toBe(200);
+    expect(await summary(later)).toMatchObject({ noShows: 1, returning: 1, upcomingSessions: 1 });
   });
 
   it('a customer’s detail lists their bookings at this business', async () => {
