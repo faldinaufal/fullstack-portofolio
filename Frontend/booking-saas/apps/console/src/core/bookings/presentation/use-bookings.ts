@@ -12,9 +12,10 @@ export type {
   BookingFilters,
   BookingRow,
   BookingStatus,
+  CalendarBooking,
   CalendarData,
 } from '../domain/booking';
-export { addDays, dateIn, placeBlock } from '../domain/booking';
+export { addDays, dateIn, minutesInDay, placeBlock } from '../domain/booking';
 
 type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
