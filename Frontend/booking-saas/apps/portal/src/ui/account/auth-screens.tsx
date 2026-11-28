@@ -8,6 +8,7 @@ import {
   Button,
   buttonVariants,
   DemoAccounts,
+  DemoSignupHint,
   fillLoginForm,
   Icon,
   PasswordField,
@@ -29,7 +30,12 @@ import {
   useVerifyEmail,
   type PasswordStrength,
 } from '@/core/account/presentation/use-account';
-import { DEMO_ACCOUNTS, DEMO_MODE, DEMO_PASSWORD } from '@/core/shared/presentation/demo';
+import {
+  DEMO_ACCOUNTS,
+  DEMO_EMAIL_DOMAIN,
+  DEMO_MODE,
+  DEMO_PASSWORD,
+} from '@/core/shared/presentation/demo';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { formText } from '@/ui/common/form-values';
 import { RequestErrorAlert } from '@/ui/common/request-error';
@@ -165,6 +171,7 @@ export function SignupScreen() {
       }
     >
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+        {DEMO_MODE && <DemoSignupHint domain={DEMO_EMAIL_DOMAIN} inboxUrl="/demo-inbox" />}
         <RequestErrorAlert error={error} />
         <TextField
           label="Full name"
@@ -179,7 +186,7 @@ export function SignupScreen() {
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder={DEMO_MODE ? `yourname@${DEMO_EMAIL_DOMAIN}` : 'you@example.com'}
           leading={<Icon name="emails" size={20} />}
           onChange={(event) => setEmail(event.target.value)}
           error={field('email')}

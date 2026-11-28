@@ -14,7 +14,7 @@ const plan = buildDemoPlan({ now, timeZone: TZ, passwordHash: 'hash', portalUrl:
 const ACTIVE = new Set(['pending_payment', 'confirmed']);
 
 describe('demo plan (FSD 10.3)', () => {
-  it('moves every address to the demo email domain on request (live: demo.<domain>)', () => {
+  it('moves every address to the demo email domain on request (live: demo.test)', () => {
     const live = buildDemoPlan({
       now,
       timeZone: TZ,

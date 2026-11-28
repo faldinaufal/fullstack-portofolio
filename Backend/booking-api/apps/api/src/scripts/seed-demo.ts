@@ -10,7 +10,7 @@
  *
  * DATABASE_MIGRATION_URL (owner) is required. DEMO_PASSWORD sets the demo accounts' password
  * (default below, as listed in the README); APP_TIME_ZONE and PORTAL_URL as for the API.
- * DEMO_EMAIL_DOMAIN moves every demo address to that domain (FSD 10.3; `demo.<domain>` live).
+ * DEMO_EMAIL_DOMAIN moves every demo address to that domain (FSD 10.3; `demo.test` live).
  */
 import { parseArgs } from 'node:util';
 import { createPrismaClient } from '@tempora/db';

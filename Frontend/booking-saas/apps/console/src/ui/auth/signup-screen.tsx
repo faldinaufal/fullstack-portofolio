@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Button, TextField } from '@tempora/ui';
+import { Button, DemoSignupHint, TextField } from '@tempora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type SubmitEvent } from 'react';
@@ -15,6 +15,7 @@ import {
   type FieldErrors,
 } from '@/core/auth/presentation/password-forms';
 import { useSignup } from '@/core/auth/presentation/use-auth';
+import { DEMO_EMAIL_DOMAIN, DEMO_INBOX_URL, DEMO_MODE } from '@/core/shared/presentation/demo';
 import { AuthLayout } from './auth-layout';
 import { FormError } from './form-error';
 import { formText } from '@/ui/common/form-values';
@@ -60,6 +61,7 @@ export function SignupScreen() {
       }
     >
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        {DEMO_MODE && <DemoSignupHint domain={DEMO_EMAIL_DOMAIN} inboxUrl={DEMO_INBOX_URL} />}
         <FormError error={apiError} />
         <TextField
           label="Your name"
@@ -73,6 +75,7 @@ export function SignupScreen() {
           name="email"
           type="email"
           autoComplete="email"
+          {...(DEMO_MODE && { placeholder: `yourname@${DEMO_EMAIL_DOMAIN}` })}
           required
           error={fieldError('email')}
         />

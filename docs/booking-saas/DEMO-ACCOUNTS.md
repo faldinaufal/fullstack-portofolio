@@ -4,16 +4,16 @@ Every login created by the demo seed (`Backend/booking-api/apps/api/src/modules/
 
 ## Live demo
 
-The live site uses the same accounts. Only the domain is different: `owner@veloria.test` is `owner@demo.tempora.faldinaufal.web.id` there, and so on for every address on this page.
+The live site uses the same accounts. Only the domain is different: `owner@veloria.test` is `owner@demo.test` there, and so on for every address on this page.
 
 | App | Live URL |
 |---|---|
 | Portal (customers) | https://tempora.faldinaufal.web.id/login |
-| Console (owner, manager, staff) | https://console.tempora.faldinaufal.web.id/login |
-| Platform Admin | https://admin.tempora.faldinaufal.web.id/login |
+| Console (owner, manager, staff) | https://console-tempora.faldinaufal.web.id/login |
+| Platform Admin | https://admin-tempora.faldinaufal.web.id/login |
 | Demo inbox (codes, reset links, booking emails) | https://tempora.faldinaufal.web.id/demo-inbox |
 
-Every login page lists its demo accounts with a **Use** button that fills in the form. Emails to demo addresses are not sent. They appear in the public demo inbox, newest first, and stay there for 24 hours. The inbox refreshes on its own and has a copy button for login codes. Everything you do on the live demo is visible to other visitors, so do not enter real personal data.
+Every login page lists its demo accounts with a **Use** button that fills in the form. Emails to demo addresses are not sent. They appear in the public demo inbox, newest first, and stay there for 24 hours. The inbox refreshes on its own and has a copy button for login codes. To sign up a new customer or business on the live demo, use any address ending in `@demo.test`, such as `yourname@demo.test`. Its emails arrive in the inbox too: type the address in its search field. Everything you do on the live demo is visible to other visitors, so do not enter real personal data.
 
 ## Locally
 

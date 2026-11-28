@@ -119,6 +119,35 @@ export function DemoInboxNotice({ href }: Readonly<{ href: string }>) {
   );
 }
 
+/**
+ * On sign-up in the public demo (FSD 10.3): any address at the demo domain works and its
+ * emails show up in the demo inbox; a real address would never receive anything.
+ */
+export function DemoSignupHint({
+  domain,
+  inboxUrl,
+  className,
+}: Readonly<{ domain: string; inboxUrl: string; className?: string }>) {
+  return (
+    <Alert tone="info" title="This is a demo" {...(className && { className })}>
+      Sign up with any address ending in{' '}
+      <code className="font-mono font-semibold text-foreground">@{domain}</code>, for example{' '}
+      <code className="font-mono font-semibold text-foreground">yourname@{domain}</code>. No mailbox
+      needed: its emails appear in the public{' '}
+      <a
+        href={inboxUrl}
+        target="_blank"
+        rel="noopener"
+        className="font-semibold text-primary-text underline underline-offset-2"
+      >
+        demo inbox
+        <span className="sr-only"> (opens in a new tab)</span>
+      </a>
+      . A real address receives no email here.
+    </Alert>
+  );
+}
+
 /** Puts an account into a login form's `email` and `password` fields (uncontrolled inputs). */
 export function fillLoginForm(form: HTMLFormElement | null, email: string, password: string) {
   if (!form) return;

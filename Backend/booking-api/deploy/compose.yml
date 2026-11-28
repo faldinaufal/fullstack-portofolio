@@ -105,24 +105,27 @@ services:
       APP_VERSION: ${IMAGE_TAG:-latest}
       DATABASE_URL: postgresql://tempora_app:${TEMPORA_APP_PASSWORD}@postgres:5432/tempora
       PORTAL_URL: https://${DOMAIN}
-      CONSOLE_URL: https://console.${DOMAIN}
-      ADMIN_URL: https://admin.${DOMAIN}
-      COOKIE_DOMAIN: .${DOMAIN}
+      CONSOLE_URL: https://console-${DOMAIN}
+      ADMIN_URL: https://admin-${DOMAIN}
+      # No COOKIE_DOMAIN: cookies stay on the API host, the only one that reads them, so no
+      # other site under the portfolio domain ever receives them (FSD 10.4).
       # Caddy is the only way in, so its X-Forwarded-For carries the real client IP.
       TRUST_PROXY: 'true'
       TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET:?Set TOKEN_HASH_SECRET in .env}
       APP_TIME_ZONE: ${APP_TIME_ZONE:-America/New_York}
-      # The API reaches storage inside Docker; browsers reach it at files.<domain>.
+      # The API reaches storage inside Docker; browsers reach it at files-<domain>.
       S3_ENDPOINT: http://storage:8333
-      S3_UPLOAD_ENDPOINT: https://files.${DOMAIN}
+      S3_UPLOAD_ENDPOINT: https://files-${DOMAIN}
       S3_REGION: us-east-1
       S3_BUCKET: tempora-files
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
-      S3_PUBLIC_BASE_URL: https://files.${DOMAIN}/tempora-files
+      S3_PUBLIC_BASE_URL: https://files-${DOMAIN}/tempora-files
       # The public demo (FSD 10.3): GET /v1/public/demo-inbox shows the demo accounts' emails.
+      # demo.test is reserved (RFC 2606), so a demo address can never reach a real mailbox.
+      # The same domain is in the apps' build (ci.yml) and below for the worker and the seed.
       DEMO_MODE: 'true'
-      DEMO_EMAIL_DOMAIN: demo.${DOMAIN}
+      DEMO_EMAIL_DOMAIN: demo.test
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -139,9 +142,9 @@ services:
       JOBS_DATABASE_URL: postgresql://tempora_jobs:${TEMPORA_JOBS_PASSWORD}@postgres:5432/tempora
       SMTP_URL: smtp://mailpit:1025
       EMAIL_FROM: Tempora <no-reply@${DOMAIN}>
-      # Emails to demo.<domain> go to the public demo inbox; the rest stay in Mailpit.
+      # Emails to @demo.test go to the public demo inbox; the rest stay in Mailpit.
       DEMO_MODE: 'true'
-      DEMO_EMAIL_DOMAIN: demo.${DOMAIN}
+      DEMO_EMAIL_DOMAIN: demo.test
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -177,7 +180,7 @@ services:
       APP_TIME_ZONE: ${APP_TIME_ZONE:-America/New_York}
       PORTAL_URL: https://${DOMAIN}
       # Every demo account gets an address the demo inbox shows (FSD 10.3).
-      DEMO_EMAIL_DOMAIN: demo.${DOMAIN}
+      DEMO_EMAIL_DOMAIN: demo.test
     depends_on:
       postgres:
         condition: service_healthy

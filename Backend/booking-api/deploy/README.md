@@ -56,14 +56,17 @@ Typical use is about 1 GB, which leaves room for the operating system and Docker
 
 ## 1. DNS
 
-Two `A` records point to the server's IPv4 address (`<domain>` is the project host, e.g. `tempora.example.com`):
+Five `A` records point to the server's IPv4 address (`<domain>` is the project host, e.g. `tempora.example.com`; the others are its siblings, e.g. `console-tempora.example.com`):
 
 | Name | Type | Value |
 |---|---|---|
 | `<domain>` | A | server IP |
-| `*.<domain>` | A | server IP |
+| `console-<domain>` | A | server IP |
+| `admin-<domain>` | A | server IP |
+| `api-<domain>` | A | server IP |
+| `files-<domain>` | A | server IP |
 
-The wildcard covers `console.`, `admin.`, `api.` and `files.`; without wildcard support, add those four as separate records. Check with `nslookup api.<domain>` before going on: Caddy can only get certificates once the names resolve.
+A wildcard cannot express `*-<domain>`, so these are five separate records; the names stay one level below the portfolio domain. Check with `nslookup api-<domain>` before going on: Caddy can only get certificates once the names resolve. If the provider forwards ports 80/443 by host name (shared IP), register the same five names in its panel too.
 
 ## 2. Server, once (as root)
 
@@ -153,7 +156,7 @@ CI logs in to the server with a key used for nothing else, and checks the server
 | `verify` | format, headers, lint, build, type check, unit tests | — |
 | `database` | migrations and integration tests against PostgreSQL | — |
 | `docker` | builds the six images with the production URLs (`TEMPORA_DOMAIN`) and pushes them as `:<sha>` and `:latest` | images on GHCR |
-| `deploy` | copies `deploy/` and `docker/`, runs `deploy.sh <sha>`, waits until `https://api.<domain>/health` reports that SHA | site updated |
+| `deploy` | copies `deploy/` and `docker/`, runs `deploy.sh <sha>`, waits until `https://api-<domain>/health` reports that SHA | site updated |
 
 `deploy` only starts when the three jobs before it passed, so a failing test never reaches the server. Pull requests run the same checks and build the images without pushing them.
 
@@ -182,7 +185,7 @@ Commands like these use the images of the last deploy: `deploy.sh` writes its co
 
 **Roll back:** in GitHub Actions, open an earlier successful run on `main` and re-run its `deploy` job, or on the server run `sh /opt/tempora/deploy/deploy.sh <older sha>`. Migrations are backward compatible, so the database stays as it is.
 
-**Emails** to demo addresses (`@demo.<domain>`) appear in the public demo inbox at `https://<domain>/demo-inbox`. Every other email stays on the server in Mailpit until an email provider is chosen. Read them from your computer through a tunnel: `ssh -L 8025:localhost:8025 deploy@<server>`, then open `http://localhost:8025`.
+**Emails** to demo addresses (`@demo.test`) appear in the public demo inbox at `https://<domain>/demo-inbox`. Every other email stays on the server in Mailpit until an email provider is chosen. Read them from your computer through a tunnel: `ssh -L 8025:localhost:8025 deploy@<server>`, then open `http://localhost:8025`.
 
 **Restore a backup:**
 

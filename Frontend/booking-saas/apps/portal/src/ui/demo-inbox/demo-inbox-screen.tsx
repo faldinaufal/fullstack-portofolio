@@ -3,23 +3,29 @@
 
 'use client';
 
-import { Alert, Button, Card, cn, Icon } from '@tempora/ui';
+import { Alert, Badge, Button, cn, Icon, Select, TemporaLogo } from '@tempora/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   type DemoEmail,
+  EMAIL_KINDS,
+  emailLabel,
   loginCode,
+  matchesSearch,
+  paragraphs,
   receivedLabel,
   textParts,
   useDemoInbox,
 } from '@/core/demo-inbox/presentation/use-demo-inbox';
-import { DEMO_INBOX_SHORTCUTS } from '@/core/shared/presentation/demo';
+import { DEMO_EMAIL_DOMAIN, DEMO_INBOX_SHORTCUTS } from '@/core/shared/presentation/demo';
 import { toRequestErrorView } from '@/core/shared/presentation/error-view';
 import { RequestErrorAlert } from '@/ui/common/request-error';
 
+const ALL = 'all';
+
 /**
- * Public demo inbox (FSD 2.1, 10.3): every email sent to a demo account in the last day,
- * newest first, so visitors can read the login code without a real mailbox.
+ * Public demo mailbox (FSD 2.1, 10.3): every email sent to a demo address in the last day,
+ * newest first, so visitors can read login codes and booking emails without a real mailbox.
  */
 export function DemoInboxScreen() {
   const router = useRouter();
@@ -27,105 +33,177 @@ export function DemoInboxScreen() {
   const params = useSearchParams();
   const to = params.get('to')?.trim().toLowerCase() || undefined;
   const inbox = useDemoInbox(to);
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState(ALL);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const readerRef = useRef<HTMLDivElement>(null);
+  // On a phone the list and the reader take turns, like a mail app.
+  const [reading, setReading] = useState(false);
   const now = useNow();
 
-  const items = inbox.data?.items ?? [];
+  const all = inbox.data?.items ?? [];
+  const items = all.filter(
+    (email) =>
+      (kind === ALL || emailLabel(email.template).kind === kind) && matchesSearch(email, query),
+  );
   const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
 
-  const filter = (address: string | null) => {
+  const setAddress = (address: string) => {
     setSelectedId(null);
-    router.replace(address ? `${pathname}?${new URLSearchParams({ to: address })}` : pathname, {
-      scroll: false,
-    });
+    setReading(false);
+    router.replace(
+      address === ALL ? pathname : `${pathname}?${new URLSearchParams({ to: address })}`,
+      { scroll: false },
+    );
   };
-  const open = (email: DemoEmail) => {
-    setSelectedId(email.id);
-    // On a phone the reader sits under the list.
-    if (window.matchMedia('(max-width: 1023px)').matches) {
-      readerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
+  const addressOptions = [
+    { value: ALL, label: 'All addresses' },
+    ...DEMO_INBOX_SHORTCUTS.map((s) => ({ value: s.email, label: `${s.role} · ${s.email}` })),
+    ...(to && !DEMO_INBOX_SHORTCUTS.some((s) => s.email === to) ? [{ value: to, label: to }] : []),
+  ];
 
   return (
-    <main className="px-4 py-10 sm:px-6">
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-        <header className="flex flex-col gap-2">
-          <h1 className="m-0 text-[28px] font-extrabold sm:text-[32px]">Demo inbox</h1>
-          <p className="m-0 max-w-[640px] text-muted">
-            Emails to the demo accounts land here instead of a real mailbox: login codes, password
-            reset links and booking emails. Anyone can read them, so the inbox only keeps the last
-            24 hours and refreshes on its own.
+    <main className="relative px-4 pt-10 pb-16 sm:px-6">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-primary/10 to-transparent"
+      />
+      <div className="relative mx-auto flex max-w-[1240px] flex-col gap-6">
+        <header className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="m-0 text-[30px] font-extrabold tracking-tight sm:text-[40px]">
+              Demo mailbox
+            </h1>
+            <Badge dot className="font-mono font-semibold">
+              DEMO_MODE=true
+            </Badge>
+          </div>
+          <p className="m-0 max-w-[760px] text-[15px] text-muted sm:text-base">
+            Every email Tempora sends to an address ending in{' '}
+            <code className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-sm text-primary-text">
+              @{DEMO_EMAIL_DOMAIN}
+            </code>
+            : login codes, account emails, booking emails and team invites. Nothing goes to a real
+            mailbox. Anyone can read this page, so it keeps the last 24 hours and refreshes every 5
+            seconds.
           </p>
         </header>
 
-        <nav aria-label="Filter by address" className="flex flex-wrap gap-2">
-          <FilterChip active={!to} onClick={() => filter(null)}>
-            All addresses
-          </FilterChip>
-          {DEMO_INBOX_SHORTCUTS.map((shortcut) => (
-            <FilterChip
-              key={shortcut.email}
-              active={to === shortcut.email}
-              onClick={() => filter(shortcut.email)}
-              title={shortcut.email}
+        <section
+          aria-label="Search and filters"
+          className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm sm:p-4 lg:flex-row lg:items-end"
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="sr-only">Search emails</span>
+            <span className="relative flex items-center">
+              <Icon
+                name="search"
+                size={20}
+                className="pointer-events-none absolute left-3.5 text-muted"
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by recipient, subject or code…"
+                className="h-12 w-full rounded-lg border border-border bg-surface-muted pr-3.5 pl-11 text-[15px] text-foreground placeholder:text-muted"
+              />
+            </span>
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row lg:contents">
+            <Select
+              label="Type"
+              hideLabel
+              value={kind}
+              onValueChange={setKind}
+              options={[
+                { value: ALL, label: 'All types' },
+                ...EMAIL_KINDS.map((k) => ({ value: k.kind, label: k.label })),
+              ]}
+              className="sm:flex-1 lg:w-48 lg:flex-none"
+            />
+            <Select
+              label="Address"
+              hideLabel
+              value={to ?? ALL}
+              onValueChange={setAddress}
+              options={addressOptions}
+              className="sm:flex-1 lg:w-72 lg:flex-none"
+            />
+            <Button
+              variant="secondary"
+              size="icon"
+              className="hidden size-12 shrink-0 lg:inline-flex"
+              aria-label="Refresh now"
+              onClick={() => void inbox.refetch()}
             >
-              {shortcut.role}
-            </FilterChip>
-          ))}
-        </nav>
+              <Icon name="refresh" size={20} className={cn(inbox.isFetching && 'animate-spin')} />
+            </Button>
+          </div>
+        </section>
 
         <RequestErrorAlert error={inbox.isError ? toRequestErrorView(inbox.error) : null} />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-          <Card className="flex flex-col overflow-hidden p-0">
-            <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-              <h2 className="m-0 text-sm font-bold">
-                {to ? <span className="break-all">{to}</span> : 'All demo addresses'}
-              </h2>
-              <span className="flex items-center gap-1.5 text-xs text-muted" aria-live="polite">
-                <Icon name="pulse" size={14} />
-                {inbox.isFetching ? 'Checking…' : 'Live'}
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+          <section
+            aria-label="Emails"
+            className={cn('flex flex-col gap-3', reading && 'max-lg:hidden')}
+          >
+            <div className="flex items-center justify-between gap-3 px-1 text-[13px]">
+              <span className="font-semibold tracking-[0.08em] text-muted uppercase">Inbox</span>
+              <span className="flex items-center gap-1.5 text-muted" aria-live="polite">
+                <span
+                  className={cn(
+                    'size-2 rounded-full bg-success',
+                    inbox.isFetching && 'animate-pulse',
+                  )}
+                />
+                {inbox.isPending
+                  ? 'Loading…'
+                  : `Showing ${items.length} email${items.length === 1 ? '' : 's'}`}
               </span>
             </div>
             {inbox.isPending ? (
               <ListSkeleton />
             ) : items.length === 0 ? (
-              <p className="m-0 px-4 py-10 text-center text-sm text-muted">
-                {to
-                  ? `No emails to ${to} in the last 24 hours.`
-                  : 'No emails in the last 24 hours. Log in to a demo account and the code shows up here.'}
-              </p>
+              <EmptyList filtered={all.length > 0} to={to} />
             ) : (
-              <ul className="m-0 flex list-none flex-col p-0">
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {items.map((email) => (
-                  <li key={email.id} className="border-t border-border-subtle first:border-t-0">
-                    <button
-                      type="button"
-                      onClick={() => open(email)}
-                      aria-current={selected?.id === email.id ? 'true' : undefined}
-                      className={cn(
-                        'flex w-full flex-col gap-0.5 px-4 py-3 text-left hover:bg-surface-muted',
-                        selected?.id === email.id && 'bg-surface-muted',
-                      )}
-                    >
-                      <span className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[13px] text-muted">{email.to}</span>
-                        <span className="shrink-0 text-xs text-muted">
-                          {receivedLabel(email.receivedAt, now)}
-                        </span>
-                      </span>
-                      <span className="line-clamp-2 text-sm font-semibold">{email.subject}</span>
-                    </button>
+                  <li key={email.id}>
+                    <EmailCard
+                      email={email}
+                      now={now}
+                      selected={selected?.id === email.id}
+                      onOpen={() => {
+                        setSelectedId(email.id);
+                        setReading(true);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                    />
                   </li>
                 ))}
               </ul>
             )}
-          </Card>
+          </section>
 
-          <div ref={readerRef} className="scroll-mt-6">
-            {selected ? <EmailReader email={selected} /> : !inbox.isPending && <ReaderEmpty />}
+          <div className={cn('lg:sticky lg:top-6', !reading && 'max-lg:hidden')}>
+            <Button
+              variant="ghost"
+              className="mb-3 -ml-2 lg:hidden"
+              onClick={() => setReading(false)}
+            >
+              <Icon name="arrow-left" size={18} />
+              Back to inbox
+            </Button>
+            {selected ? (
+              <EmailReader key={selected.id} email={selected} />
+            ) : (
+              !inbox.isPending && (
+                <Alert tone="info" title="Nothing selected">
+                  Pick an email from the list to read it.
+                </Alert>
+              )
+            )}
           </div>
         </div>
       </div>
@@ -133,65 +211,169 @@ export function DemoInboxScreen() {
   );
 }
 
-function FilterChip({
-  active,
-  className,
-  ...props
-}: Readonly<React.ButtonHTMLAttributes<HTMLButtonElement> & { active: boolean }>) {
+function EmailCard({
+  email,
+  now,
+  selected,
+  onOpen,
+}: Readonly<{ email: DemoEmail; now: Date; selected: boolean; onOpen: () => void }>) {
+  const label = emailLabel(email.template);
+  const preview = paragraphs(email.text)
+    .slice(1)
+    .map((lines) => lines.join(' '))
+    .join(' ');
   return (
     <button
       type="button"
-      aria-pressed={active}
+      onClick={onOpen}
+      aria-current={selected ? 'true' : undefined}
       className={cn(
-        'h-11 rounded-full border px-4 text-sm font-semibold transition-colors',
-        active
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border bg-surface text-foreground hover:bg-surface-muted',
-        className,
+        'flex w-full flex-col gap-2 rounded-2xl border bg-surface p-4 text-left shadow-sm transition-colors hover:border-border-strong',
+        selected ? 'border-primary ring-1 ring-primary' : 'border-border',
       )}
-      {...props}
-    />
+    >
+      <span className="flex items-center justify-between gap-3">
+        <Badge tone={label.tone} dot={label.kind === 'code'}>
+          {label.label}
+        </Badge>
+        <span
+          className={cn(
+            'shrink-0 text-[13px]',
+            selected ? 'font-semibold text-primary-text' : 'text-muted',
+          )}
+        >
+          {receivedLabel(email.receivedAt, now)}
+        </span>
+      </span>
+      <span className="line-clamp-2 text-[17px] leading-snug font-bold">{email.subject}</span>
+      <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted">
+        <Icon name="send" size={14} className="shrink-0" />
+        <span className="truncate">To: {email.to}</span>
+      </span>
+      {preview && <span className="line-clamp-2 text-sm text-muted">{preview}</span>}
+    </button>
   );
 }
 
 function EmailReader({ email }: Readonly<{ email: DemoEmail }>) {
+  const label = emailLabel(email.template);
   const code = loginCode(email);
   const host = useSyncExternalStore(noSubscription, browserHost, () => '');
+  const [greeting, ...rest] = paragraphs(email.text);
+  const hasGreeting = greeting?.length === 1 && /^(hi|hello)\b/i.test(greeting[0]!);
+  const body = hasGreeting ? rest : paragraphs(email.text);
+
+  const line = (text: string) =>
+    host
+      ? textParts(text, [host, CONSOLE_HOST]).map((part, index) =>
+          part.kind === 'link' ? (
+            <a
+              key={index}
+              href={part.href}
+              className="font-semibold break-all text-primary-text underline underline-offset-2"
+            >
+              {part.text}
+            </a>
+          ) : (
+            <span key={index}>{part.text}</span>
+          ),
+        )
+      : text;
 
   return (
-    <Card className="flex flex-col gap-4 p-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="m-0 text-xl font-extrabold">{email.subject}</h2>
-        <p className="m-0 text-sm text-muted">
-          To <span className="break-all">{email.to}</span> ·{' '}
-          {new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
-            email.receivedAt,
-          )}
-        </p>
+    <article
+      aria-labelledby="email-subject"
+      className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"
+    >
+      <header className="flex flex-col gap-4 border-b border-border-subtle bg-surface-muted p-5 sm:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge tone={label.tone} dot={label.kind === 'code'}>
+              {label.label}
+            </Badge>
+            <code className="truncate font-mono text-xs text-muted">{email.template}</code>
+          </div>
+          <time dateTime={email.receivedAt.toISOString()} className="text-[13px] text-muted">
+            {new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
+              email.receivedAt,
+            )}
+          </time>
+        </div>
+        <h2 id="email-subject" className="m-0 text-2xl leading-tight font-extrabold sm:text-[28px]">
+          {email.subject}
+        </h2>
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted">From</dt>
+          <dd className="m-0 font-semibold">Tempora</dd>
+          <dt className="text-muted">To</dt>
+          <dd className="m-0 font-semibold break-all">{email.to}</dd>
+        </dl>
+        {code && (
+          <div>
+            <CopyButton value={code} label={`Copy code ${code}`} variant="primary" />
+          </div>
+        )}
+      </header>
+
+      <div className="bg-background p-4 sm:p-8">
+        <div className="mx-auto flex max-w-[600px] flex-col gap-5 rounded-2xl border border-border-subtle bg-surface p-5 sm:p-8">
+          <TemporaLogo height={28} />
+          {hasGreeting && <p className="m-0 text-xl font-extrabold sm:text-2xl">{greeting![0]}</p>}
+          {code && <CodeTiles code={code} />}
+          {body.map((lines, index) => (
+            <p key={index} className="m-0 text-[15px] leading-relaxed break-words">
+              {lines.map((text, i) => (
+                <span key={i}>
+                  {i > 0 && <br />}
+                  {line(text)}
+                </span>
+              ))}
+            </p>
+          ))}
+          <p className="m-0 border-t border-border-subtle pt-4 text-[13px] text-muted">
+            Tempora · booking and invoicing for studios and clinics
+          </p>
+        </div>
       </div>
-      {code && <CodeBox code={code} />}
-      <div className="whitespace-pre-wrap break-words rounded-xl border border-border-subtle bg-surface-muted p-4 text-sm leading-relaxed">
-        {host
-          ? textParts(email.text, host).map((part, index) =>
-              part.kind === 'link' ? (
-                <a
-                  key={index}
-                  href={part.href}
-                  className="break-all font-semibold text-primary-text underline underline-offset-2"
-                >
-                  {part.text}
-                </a>
-              ) : (
-                <span key={index}>{part.text}</span>
-              ),
-            )
-          : email.text}
-      </div>
-    </Card>
+
+      <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border-subtle bg-surface-muted px-5 py-3 font-mono text-xs text-muted sm:px-7">
+        <Icon name="emails" size={14} />
+        <span>Stored by the Tempora worker instead of sent (DEMO_MODE)</span>
+        <span aria-hidden="true">·</span>
+        <span>Removed after 24 hours</span>
+      </footer>
+    </article>
   );
 }
 
-function CodeBox({ code }: Readonly<{ code: string }>) {
+function CodeTiles({ code }: Readonly<{ code: string }>) {
+  const digits = code.split('');
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-2xl bg-surface-muted px-4 py-6">
+      <span className="text-xs font-semibold tracking-[0.12em] text-muted uppercase">
+        One-time login code
+      </span>
+      <span className="sr-only">{code}</span>
+      <span aria-hidden="true" className="flex items-center gap-1.5 sm:gap-2.5">
+        {digits.map((digit, index) => (
+          <span key={index} className="flex items-center gap-1.5 sm:gap-2.5">
+            {index === 3 && <span className="font-mono text-xl font-bold text-muted">-</span>}
+            <span className="flex h-12 w-10 items-center justify-center rounded-xl border border-border bg-surface font-mono text-2xl font-bold text-primary-text shadow-sm sm:h-16 sm:w-14 sm:text-[32px]">
+              {digit}
+            </span>
+          </span>
+        ))}
+      </span>
+      <CopyButton value={code} label={`Copy code: ${code}`} variant="secondary" />
+    </div>
+  );
+}
+
+function CopyButton({
+  value,
+  label,
+  variant,
+}: Readonly<{ value: string; label: string; variant: 'primary' | 'secondary' }>) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -201,7 +383,7 @@ function CodeBox({ code }: Readonly<{ code: string }>) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
     } catch {
       // Clipboard blocked: the code is still on screen to type.
@@ -209,39 +391,40 @@ function CodeBox({ code }: Readonly<{ code: string }>) {
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4">
-      <div className="flex flex-col">
-        <span className="text-xs font-semibold text-muted">Login code</span>
-        <span className="font-mono text-[28px] font-bold tracking-[0.2em] tabular-nums">
-          {code}
-        </span>
-      </div>
-      <Button variant="secondary" onClick={copy} aria-live="polite">
-        <Icon name={copied ? 'check' : 'receipt'} size={16} />
-        {copied ? 'Copied' : 'Copy code'}
-      </Button>
-    </div>
+    <Button variant={variant} onClick={copy} aria-live="polite">
+      <Icon name={copied ? 'check' : 'copy'} size={18} />
+      {copied ? 'Copied' : label}
+    </Button>
   );
 }
 
-function ReaderEmpty() {
+function EmptyList({ filtered, to }: Readonly<{ filtered: boolean; to: string | undefined }>) {
   return (
-    <Alert tone="info" title="Nothing selected">
-      Pick an email from the list to read it.
-    </Alert>
+    <div className="rounded-2xl border border-dashed border-border bg-surface px-5 py-10 text-center text-sm text-muted">
+      {filtered
+        ? 'No email matches this search or type.'
+        : to
+          ? `No emails to ${to} in the last 24 hours.`
+          : 'No emails in the last 24 hours. Log in with a demo account and its code shows up here.'}
+    </div>
   );
 }
 
 function ListSkeleton() {
   return (
-    <ul className="m-0 flex list-none flex-col p-0" aria-busy="true" aria-label="Loading emails">
+    <ul
+      className="m-0 flex list-none flex-col gap-3 p-0"
+      aria-busy="true"
+      aria-label="Loading emails"
+    >
       {[0, 1, 2].map((row) => (
         <li
           key={row}
-          className="flex flex-col gap-2 border-t border-border-subtle px-4 py-3 first:border-t-0"
+          className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
         >
-          <span className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
+          <span className="h-5 w-24 animate-pulse rounded-full bg-surface-muted" />
           <span className="h-4 w-56 animate-pulse rounded bg-surface-muted" />
+          <span className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
         </li>
       ))}
     </ul>
@@ -257,6 +440,10 @@ function useNow() {
   }, []);
   return now;
 }
+
+/** Links into the Console (invitations, its password reset) are Tempora's own too. */
+const CONSOLE_HOST = new URL(process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'http://localhost:3001')
+  .hostname;
 
 // The page's host name never changes, so there is nothing to subscribe to.
 const noSubscription = () => () => {};

@@ -123,6 +123,8 @@ export const DemoEmailSchema = z
   .object({
     id: z.uuid(),
     to: z.string(),
+    /** Which email it is, e.g. `console.login_code` (the worker's template names). */
+    template: z.string(),
     subject: z.string(),
     /** The plain-text version of the email, as the worker rendered it. */
     text: z.string(),

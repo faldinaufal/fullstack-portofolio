@@ -25,6 +25,7 @@ export {
   DemoAccounts,
   type DemoAccount,
   DemoInboxNotice,
+  DemoSignupHint,
   fillLoginForm,
   type DemoAccountsProps,
 } from './components/demo-accounts.js';

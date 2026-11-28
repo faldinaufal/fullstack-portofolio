@@ -49,6 +49,7 @@ export function createDemoInboxService({
         items: rows.map((row) => ({
           id: row.id,
           to: row.toEmail,
+          template: row.template,
           subject: row.subject,
           text: row.textBody,
           receivedAt: row.createdAt.toISOString(),

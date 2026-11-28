@@ -149,13 +149,13 @@ jobs:
           {
             echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/"
             echo "TAGS=${GITHUB_SHA},latest"
-            echo "API_URL=https://api.${DOMAIN}"
-            echo "CONSOLE_URL=https://console.${DOMAIN}"
+            echo "API_URL=https://api-${DOMAIN}"
+            echo "CONSOLE_URL=https://console-${DOMAIN}"
             echo "APP_TIME_ZONE=${TIME_ZONE:-America/New_York}"
             echo "PORTAL_URL=https://${DOMAIN}"
             # The live site is the public demo (FSD 10.3), as in deploy/compose.yml.
             echo "DEMO_MODE=true"
-            echo "DEMO_EMAIL_DOMAIN=demo.${DOMAIN}"
+            echo "DEMO_EMAIL_DOMAIN=demo.test"
           } >> "$GITHUB_ENV"
       # All six images in one bake, sharing the install and the builds (docker-bake.hcl).
       - uses: docker/bake-action@v6
@@ -217,8 +217,8 @@ jobs:
           DOMAIN: ${{ vars.TEMPORA_DOMAIN }}
         run: |
           for _ in $(seq 1 30); do
-            if curl -fsS "https://api.$DOMAIN/health/ready" > /dev/null \
-              && curl -fsS "https://api.$DOMAIN/health" | grep -q "$GITHUB_SHA"; then
+            if curl -fsS "https://api-$DOMAIN/health/ready" > /dev/null \
+              && curl -fsS "https://api-$DOMAIN/health" | grep -q "$GITHUB_SHA"; then
               echo "Live: $GITHUB_SHA"
               exit 0
             fi
