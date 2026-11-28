@@ -1,0 +1,128 @@
+name: Deploy
+
+# Merging to main does not touch the live site; a deploy starts in one of two ways:
+# - Publishing a GitHub Release with a `v*` tag (Code → Releases → Draft a new release) deploys
+#   the tagged commit. This is the normal way to release.
+# - Actions → Deploy → Run workflow deploys a tag or commit by hand, e.g. to roll back.
+# CI (ci.yml) has already built and pushed every main commit's images, so a deploy only copies
+# the server configuration and starts those images.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag (e.g. v1.2.0) or full commit SHA on main. Empty: the newest commit on main. An older one rolls back.'
+        required: false
+        type: string
+
+# One deploy at a time; a newer one waits instead of cancelling a deploy halfway.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to the VPS
+    # A release deploys only for a `v*` tag and never as a pre-release; by hand, only from main.
+    if: >-
+      vars.TEMPORA_DOMAIN != '' && (
+        (github.event_name == 'release'
+          && startsWith(github.event.release.tag_name, 'v')
+          && !github.event.release.prerelease)
+        || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      )
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.TEMPORA_DOMAIN }}
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      # The full history, to resolve a tag and to refuse a commit that never landed on main.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            Backend/booking-api/deploy
+            Backend/booking-api/docker
+
+      - name: Which commit
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          # A release deploys its tag; by hand, the given tag or SHA, else the newest main commit.
+          ref="${RELEASE_TAG:-${INPUT_REF:-$GITHUB_SHA}}"
+          ref="$(printf '%s' "$ref" | tr -d '[:space:]')"
+          case "$ref" in
+            ''|-*|*[!A-Za-z0-9._/-]*) echo "Not a tag or commit: $ref" && exit 1 ;;
+          esac
+          sha="$(git rev-parse --verify --quiet "$ref^{commit}")" \
+            || { echo "No tag or commit $ref in the repository" && exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "$ref ($sha) is not a commit on main" && exit 1; }
+          echo "Deploying $ref ($sha)"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          # The server configuration of that commit, matching its images (also for a rollback).
+          git checkout --quiet "$sha"
+
+      # CI pushes images only for a commit that passed every check (ci.yml `docker`). A release
+      # published right after a merge may arrive before CI finished, so wait for them a while.
+      - name: The commit's images exist
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          # Prints the first image that is not on GHCR yet; fails when all six are there.
+          first_missing() {
+            for image in api worker migrate portal console platform-admin; do
+              docker buildx imagetools inspect "ghcr.io/$owner/tempora-$image:$SHA" > /dev/null 2>&1 \
+                || { echo "tempora-$image"; return 0; }
+            done
+            return 1
+          }
+          for _ in $(seq 1 40); do
+            image="$(first_missing)" || { echo "All six images exist for $SHA"; exit 0; }
+            echo "Waiting for $image:$SHA (CI may still be running)…"
+            sleep 30
+          done
+          echo "No $image:$SHA after 20 minutes: did CI pass on that commit?" && exit 1
+
+      # The server's host key comes from a secret, so CI never trusts an unknown server.
+      - name: SSH key and known host
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/deploy_key\n  BatchMode yes\n' \
+            "$VPS_HOST" "$VPS_USER" "$VPS_PORT" > ~/.ssh/config
+
+      # deploy/ and docker/ land in /opt/tempora; the server's own deploy/.env is left alone.
+      - name: Copy the Compose file, Caddyfile and scripts
+        run: tar -C Backend/booking-api -czf - deploy docker | ssh vps 'tar -xzf - -C /opt/tempora'
+
+      # deploy/deploy.sh: pull this commit's images, migrate, start.
+      - name: Start the commit's images on the server
+        run: ssh vps "sh /opt/tempora/deploy/deploy.sh $SHA"
+
+      - name: The new version is live
+        env:
+          DOMAIN: ${{ vars.TEMPORA_DOMAIN }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS "https://api-$DOMAIN/health/ready" > /dev/null \
+              && curl -fsS "https://api-$DOMAIN/health" | grep -q "$SHA"; then
+              echo "Live: $SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The API never reported $SHA as ready" && exit 1
