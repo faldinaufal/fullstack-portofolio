@@ -20,6 +20,15 @@ cd "$(dirname "$0")"
 export IMAGE_TAG="$sha"
 docker compose pull --quiet
 docker compose up -d --remove-orphans
+# Caddy reads its config only when its container starts, and `up` keeps the container when
+# only the Caddyfile changed (a bind-mounted file even keeps pointing at the replaced copy).
+# So recreate Caddy when the Caddyfile differs from the last deploy; certificates are kept in
+# the caddy-data volume. The first run after this was added recreates it once.
+caddyfile_sum=$(sha256sum Caddyfile | cut -d ' ' -f 1)
+if [ "$caddyfile_sum" != "$(cat .caddyfile.sha256 2>/dev/null || true)" ]; then
+  docker compose up -d --force-recreate --no-deps caddy
+  echo "$caddyfile_sum" > .caddyfile.sha256
+fi
 # Record the running version in .env, so commands run by hand (`docker compose run --rm seed`)
 # use these images too instead of an old `latest` left on the server.
 if grep -q '^IMAGE_TAG=' .env; then
