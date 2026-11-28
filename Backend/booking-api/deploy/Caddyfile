@@ -21,26 +21,26 @@
 	reverse_proxy portal:3000
 }
 
-console.{$DOMAIN} {
+console-{$DOMAIN} {
 	import common
 	header X-Frame-Options DENY
 	reverse_proxy console:3000
 }
 
-admin.{$DOMAIN} {
+admin-{$DOMAIN} {
 	import common
 	header X-Frame-Options DENY
 	reverse_proxy platform-admin:3000
 }
 
-api.{$DOMAIN} {
+api-{$DOMAIN} {
 	import common
 	reverse_proxy api:4000
 }
 
 # Uploaded images. Browsers may read the bucket and upload with a presigned URL; the
 # signature covers this host name, which Caddy passes through unchanged.
-files.{$DOMAIN} {
+files-{$DOMAIN} {
 	import common
 	reverse_proxy storage:8333
 }

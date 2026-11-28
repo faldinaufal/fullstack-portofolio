@@ -6,8 +6,15 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useDependencies } from '../../shared/presentation/dependencies';
 
-export type { DemoEmail, DemoInbox, TextPart } from '../domain/demo-inbox';
-export { loginCode, textParts } from '../domain/demo-inbox';
+export type { DemoEmail, DemoInbox, EmailKind, EmailLabel, TextPart } from '../domain/demo-inbox';
+export {
+  EMAIL_KINDS,
+  emailLabel,
+  loginCode,
+  matchesSearch,
+  paragraphs,
+  textParts,
+} from '../domain/demo-inbox';
 
 /** New codes show up without a reload: the list is fetched again every 5 seconds. */
 export const DEMO_INBOX_REFRESH_MS = 5_000;

@@ -17,6 +17,7 @@ function setup() {
         {
           id: 'fa1d0000-0000-4000-8000-000000004217',
           toEmail: 'owner@demo.example.com',
+          template: 'console.login_code',
           subject: '421700 is your Tempora Console code',
           textBody: 'Your login code is 421700.',
           createdAt: new Date('2026-11-28T09:59:00Z'),
@@ -42,6 +43,7 @@ describe('demo inbox service (FSD 10.3)', () => {
         {
           id: 'fa1d0000-0000-4000-8000-000000004217',
           to: 'owner@demo.example.com',
+          template: 'console.login_code',
           subject: '421700 is your Tempora Console code',
           text: 'Your login code is 421700.',
           receivedAt: '2026-11-28T09:59:00.000Z',

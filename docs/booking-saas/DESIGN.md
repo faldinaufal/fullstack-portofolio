@@ -191,7 +191,7 @@ Every FSD screen with its visual reference. "Compose" means there is no frame: b
 | Invoice | `/bookings/[id]/invoice` | Compose: printable invoice from the receipt part of `1:2052` |
 | Profile and security | `/account/profile` | Compose: name, phone, password, active sessions, "Log out everywhere" |
 | Guest booking | `/manage/[token]` | Same as Booking detail, without the account menu |
-| Demo inbox | `/demo-inbox` | Compose: simple email list + reader. Only when `DEMO_MODE` is on |
+| Demo inbox | `/demo-inbox` | Compose (no Figma frame): mailbox layout from the user's reference (header with `DEMO_MODE=true` badge, search + type + address toolbar, email cards with type labels, reader styled as a Tempora email with code tiles). Only when `DEMO_MODE` is on |
 | Tenant suspended | all tenant pages | Compose: "This business is not taking bookings right now" (FSD 6.9) |
 
 ### 5.2 Console

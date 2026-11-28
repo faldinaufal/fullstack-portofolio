@@ -5,7 +5,7 @@
 # share the dependency install and the builds of the root Dockerfile. Used by CI:
 #   docker buildx bake
 # Every variable below can be overridden from the environment. CI's production build sets
-#   REGISTRY=ghcr.io/<owner>/  TAGS=<sha>,latest  API_URL=https://api.<domain>  ...
+#   REGISTRY=ghcr.io/<owner>/  TAGS=<sha>,latest  API_URL=https://api-<domain>  ...
 
 variable "REGISTRY" {
   default = ""

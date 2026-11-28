@@ -6,6 +6,7 @@ import type { PrismaClient } from '@tempora/db';
 export interface StoredDemoEmail {
   id: string;
   toEmail: string;
+  template: string;
   subject: string;
   textBody: string;
   createdAt: Date;
@@ -27,7 +28,14 @@ export function createPrismaDemoInboxRepository(prisma: PrismaClient): DemoInbox
         where: { createdAt: { gte: since }, ...(to !== undefined && { toEmail: to }) },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit,
-        select: { id: true, toEmail: true, subject: true, textBody: true, createdAt: true },
+        select: {
+          id: true,
+          toEmail: true,
+          template: true,
+          subject: true,
+          textBody: true,
+          createdAt: true,
+        },
       }),
   };
 }

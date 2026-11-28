@@ -14,11 +14,11 @@ Everything in the demo is fictional, and the data is shared by every visitor.
 
 | App | URL | Demo login |
 |---|---|---|
-| Portal (customers) | https://tempora.faldinaufal.web.id | `customer@demo.tempora.faldinaufal.web.id` |
-| Console (business team) | https://console.tempora.faldinaufal.web.id | `owner@…`, `manager@…` or `therapist@demo.tempora.faldinaufal.web.id` |
-| Platform Admin | https://admin.tempora.faldinaufal.web.id | `admin@demo.tempora.faldinaufal.web.id` |
+| Portal (customers) | https://tempora.faldinaufal.web.id | `customer@demo.test` |
+| Console (business team) | https://console-tempora.faldinaufal.web.id | `owner@demo.test`, `manager@demo.test` or `therapist@demo.test` |
+| Platform Admin | https://admin-tempora.faldinaufal.web.id | `admin@demo.test` |
 
-The password for every account is `tempora-demo-2026`. Each login page lists its demo accounts with a **Use** button that fills in the form. The Console and Platform Admin then ask for a 6-digit code sent by email. Demo addresses have no real mailbox, so their emails go to the public [demo inbox](https://tempora.faldinaufal.web.id/demo-inbox). Open it, take the newest code and copy it with one click. Every demo account is listed in [DEMO-ACCOUNTS.md](docs/booking-saas/DEMO-ACCOUNTS.md).
+The password for every account is `tempora-demo-2026`. Each login page lists its demo accounts with a **Use** button that fills in the form. The Console and Platform Admin then ask for a 6-digit code sent by email. Demo addresses have no real mailbox, so their emails go to the public [demo inbox](https://tempora.faldinaufal.web.id/demo-inbox). Open it, take the newest code and copy it with one click. To sign up yourself, use any address ending in `@demo.test` (for example `yourname@demo.test`); its emails arrive in the same inbox. Every demo account is listed in [DEMO-ACCOUNTS.md](docs/booking-saas/DEMO-ACCOUNTS.md).
 
 ## Repository layout
 

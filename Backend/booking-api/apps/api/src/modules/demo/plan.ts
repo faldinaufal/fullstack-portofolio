@@ -146,7 +146,7 @@ export interface DemoPlanInput {
   invoicePrefixes?: Partial<Record<string, string>>;
   /**
    * Domain of every demo address (FSD 10.3 `DEMO_EMAIL_DOMAIN`): the reserved `veloria.test`
-   * by default, `demo.<domain>` on the live site, where the demo inbox shows their emails.
+   * by default, the reserved `demo.test` on the live site, where the demo inbox shows their emails.
    */
   emailDomain?: string;
 }
