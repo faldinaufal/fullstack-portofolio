@@ -9,10 +9,13 @@ The live demo runs on one small VPS (2 vCPU, 2 GB RAM, 40 GB NVMe, Ubuntu 24.04)
 
 ```mermaid
 flowchart LR
-    subgraph GH[GitHub Actions, on a push to main]
-        T[Lint, type check, tests] --> B[Build 6 images] --> P[Push to GHCR]
-        P --> D[SSH: copy deploy/ + docker/, run deploy.sh sha]
-        D --> H[Wait for /health = sha]
+    subgraph GH[GitHub Actions]
+        subgraph CI[CI, on every push to main]
+            T[Lint, type check, tests] --> B[Build 6 images] --> P[Push to GHCR]
+        end
+        subgraph DEP[Deploy, on a published release or by hand]
+            D[SSH: copy deploy/ + docker/, run deploy.sh sha] --> H[Wait for /health = sha]
+        end
     end
     P --> R[(ghcr.io/owner/tempora-*)]
     D --> V
@@ -149,27 +152,36 @@ CI logs in to the server with a key used for nothing else, and checks the server
 
 5. Delete `tempora-deploy` and `known_host.txt` from your computer; GitHub keeps the only copy the pipeline needs. Pushing images needs no secret: the workflow's own `GITHUB_TOKEN` may write packages.
 
-## 5. What CI does on every push to `main`
+## 5. What CI does, and how to deploy
+
+**CI** (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
 
 | Job | Runs | Result |
 |---|---|---|
 | `verify` | format, headers, lint, build, type check, unit tests | — |
 | `database` | migrations and integration tests against PostgreSQL | — |
-| `docker` | builds the six images with the production URLs (`TEMPORA_DOMAIN`) and pushes them as `:<sha>` and `:latest` | images on GHCR |
-| `deploy` | copies `deploy/` and `docker/`, runs `deploy.sh <sha>`, waits until `https://api-<domain>/health` reports that SHA | site updated |
+| `docker` | on `main`, after both jobs above passed: builds the six images with the production URLs (`TEMPORA_DOMAIN`) and pushes them as `:<sha>` and `:latest` | images on GHCR |
 
-`deploy` only starts when the three jobs before it passed, so a failing test never reaches the server. Pull requests run the same checks and build the images without pushing them.
+Pull requests run the same checks and build the images without pushing them. A merge never touches the server.
+
+**Deploy** (`.github/workflows/deploy.yml`) starts in one of two ways:
+
+- **Release (the normal way):** **Code → Releases → Draft a new release**, create a tag such as `v1.3.0` on `main`, write what changed, **Publish release**. Only `v*` tags deploy; a release marked as pre-release does not.
+- **By hand (e.g. a rollback):** **Actions → Deploy → Run workflow**, branch `main`, with a tag (`v1.2.0`) or a full commit SHA. Empty means the newest commit on `main`.
+
+Either way it checks that the commit is on `main`, waits until CI pushed its six images (up to 20 minutes, for a release published right after a merge; images exist only for commits that passed every check), copies that commit's `deploy/` and `docker/`, runs `deploy.sh <sha>` and waits until `https://api-<domain>/health` reports that SHA. Deploys run one at a time, and **Deployments** on the repository page lists each one.
 
 ## 6. First deploy
 
-1. Merge to `main` (or open **Actions → CI → Run workflow** on `main`). The `docker` job pushes six images to `ghcr.io/<owner>/tempora-*`.
-2. New GHCR packages are private, so this first `deploy` fails at `docker compose pull`. On GitHub, open **your profile → Packages**, and for each of the six `tempora-*` packages: **Package settings → Change visibility → Public**. Then **Re-run failed jobs** on that workflow run.
-3. Load the demo data once, on the server:
+1. Merge to `main`. The CI `docker` job pushes six images to `ghcr.io/<owner>/tempora-*`.
+2. New GHCR packages are private, and the deploy needs to read them. On GitHub, open **your profile → Packages**, and for each of the six `tempora-*` packages: **Package settings → Change visibility → Public**.
+3. Publish a release (e.g. `v1.0.0`) on `main`, or start **Actions → Deploy → Run workflow**.
+4. Load the demo data once, on the server:
    ```sh
    cd /opt/tempora/deploy && docker compose run --rm seed
    ```
-4. Open `https://<domain>`.
-5. Install the nightly backup: `mkdir -p ~/backups`, then `crontab -e` with the line from `backup.sh`.
+5. Open `https://<domain>`.
+6. Install the nightly backup: `mkdir -p ~/backups`, then `crontab -e` with the line from `backup.sh`.
 
 ## Day to day
 
@@ -183,7 +195,7 @@ docker compose run --rm seed --reset    # put the demo back to its seed state
 
 Commands like these use the images of the last deploy: `deploy.sh` writes its commit SHA to `IMAGE_TAG` in `.env`.
 
-**Roll back:** in GitHub Actions, open an earlier successful run on `main` and re-run its `deploy` job, or on the server run `sh /opt/tempora/deploy/deploy.sh <older sha>`. Migrations are backward compatible, so the database stays as it is.
+**Roll back:** run **Actions → Deploy → Run workflow** with an earlier tag (`v1.2.0`) or commit SHA, or on the server run `sh /opt/tempora/deploy/deploy.sh <older sha>`. Migrations are backward compatible, so the database stays as it is.
 
 **Emails** to demo addresses (`@demo.test`) appear in the public demo inbox at `https://<domain>/demo-inbox`. Every other email stays on the server in Mailpit until an email provider is chosen. Read them from your computer through a tunnel: `ssh -L 8025:localhost:8025 deploy@<server>`, then open `http://localhost:8025`.
 
